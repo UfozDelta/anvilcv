@@ -10,12 +10,13 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Install tectonic
+# Install tectonic from GitHub releases (pinned, no install script)
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -fsSL https://drop.tectonic.ws/install.sh | sh && \
+    curl -fsSL https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz \
+      | tar -xz -C /usr/local/bin && \
     apt-get remove -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
-ENV TECTONIC_BIN=/root/.local/bin/tectonic
+ENV TECTONIC_BIN=/usr/local/bin/tectonic
 
 # Pre-warm tectonic so first PDF compile doesn't download packages at runtime
 RUN echo '\documentclass{article}\usepackage[empty]{fullpage}\usepackage{titlesec}\usepackage{marvosym}\usepackage[usenames,dvipsnames]{color}\usepackage{verbatim}\usepackage{enumitem}\usepackage[hidelinks]{hyperref}\usepackage{fancyhdr}\usepackage[english]{babel}\usepackage{tabularx}\usepackage{latexsym}\begin{document}warm\end{document}' \
