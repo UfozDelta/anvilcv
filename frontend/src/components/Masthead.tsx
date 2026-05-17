@@ -23,11 +23,11 @@ export function Masthead() {
         </div>
       </header>
       <nav className="nav shell">
-        <NavLink to="/profile"      className={({ isActive }) => isActive ? 'active' : ''}>§ 00 — PROFILE</NavLink>
-        <NavLink to="/projects"     className={({ isActive }) => isActive ? 'active' : ''}>§ 01 — PROJECTS</NavLink>
-        <NavLink to="/experiences"  className={({ isActive }) => isActive ? 'active' : ''}>§ 02 — EXPERIENCES</NavLink>
-        <NavLink to="/applications" className={({ isActive }) => isActive ? 'active' : ''}>§ 03 — APPLICATIONS</NavLink>
-        <NavLink to="/new"          className={({ isActive }) => isActive ? 'active' : ''}>§ 04 — NEW APPLICATION</NavLink>
+        <NavLink to="/profile"      className={({ isActive }) => isActive ? 'active' : ''}>00 — PROFILE</NavLink>
+        <NavLink to="/projects"     className={({ isActive }) => isActive ? 'active' : ''}>01 — PROJECTS</NavLink>
+        <NavLink to="/experiences"  className={({ isActive }) => isActive ? 'active' : ''}>02 — EXPERIENCES</NavLink>
+        <NavLink to="/applications" className={({ isActive }) => isActive ? 'active' : ''}>03 — APPLICATIONS</NavLink>
+        <NavLink to="/new"          className={({ isActive }) => isActive ? 'active' : ''}>04 — NEW APPLICATION</NavLink>
       </nav>
     </>
   );

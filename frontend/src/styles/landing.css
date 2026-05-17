@@ -27,8 +27,8 @@
 .lp-editorial {
   font-family: var(--serif);
   font-weight: 400;
-  font-style: italic;
-  line-height: 1.4;
+  font-style: normal;
+  line-height: 1.5;
 }
 .lp-tag {
   display: inline-block;
@@ -307,7 +307,7 @@
 
 .lp-step__body {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.65;
   color: var(--muted);
   margin: 0;
@@ -356,7 +356,7 @@
 
 .lp-feature__body {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   color: var(--muted);
   margin: 0;

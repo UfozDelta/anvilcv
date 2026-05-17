@@ -7,6 +7,7 @@ import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Schema;
 import com.google.genai.types.Type;
+import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class GeminiClient implements LlmClient {
+public class GoogleLlmClient implements LlmClient {
 
-    private static final Logger log = LoggerFactory.getLogger(GeminiClient.class);
+    private static final Logger log = LoggerFactory.getLogger(GoogleLlmClient.class);
 
     private final Client client;
     private final String generateModel;
@@ -26,7 +27,7 @@ public class GeminiClient implements LlmClient {
     private final String cleanJdModel;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public GeminiClient(
+    public GoogleLlmClient(
             @Value("${llm.api-key}") String apiKey,
             @Value("${llm.model.generate}") String generateModel,
             @Value("${llm.model.match}") String matchModel,
@@ -40,7 +41,7 @@ public class GeminiClient implements LlmClient {
     // -------- generateBullets --------
 
     @Override
-    public BulletGenerationResult generateBullets(GenerateBulletsRequest req) {
+    public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress) {
         boolean experience = req.kind() == SourceKind.EXPERIENCE;
 
         String contextBlock = experience
@@ -174,7 +175,9 @@ public class GeminiClient implements LlmClient {
                 .required(List.of("bullets"))
                 .build();
 
-        List<GeneratedBullet> kept = callAndFilter(prompt, schema, null);
+        // Emit before the blocking LLM call so the user sees something immediately.
+        progress.emit("Calling LLM for category: " + req.category() + "...");
+        List<GeneratedBullet> kept = callAndFilter(prompt, schema, null, progress);
 
         // If we lost a lot of bullets to the word-count filter, retry once with sharper instructions.
         int target = experience ? 8 : 4;
@@ -189,20 +192,25 @@ public class GeminiClient implements LlmClient {
                     Count words before emitting. Re-do the entire batch with this constraint enforced.
                     """;
             log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
-            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, kept);
+            // Tell the user why we're calling LLM again.
+            progress.emit("Only " + kept.size() + "/" + target + " bullets passed word-count filter — retrying with stricter prompt...");
+            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, kept, progress);
             if (retry.size() > kept.size()) kept = retry;
         }
 
+        progress.emit("Saved " + kept.size() + " bullets for category: " + req.category());
         return new BulletGenerationResult(kept);
     }
 
-    private List<GeneratedBullet> callAndFilter(String prompt, Schema schema, List<GeneratedBullet> previous) {
+    // progress param lets us emit per-bullet decisions as they happen.
+    private List<GeneratedBullet> callAndFilter(String prompt, Schema schema,
+                                                List<GeneratedBullet> previous, ProgressLog progress) {
         String json = call(generateModel, prompt, schema);
         BulletsEnvelope env;
         try {
             env = mapper.readValue(json, BulletsEnvelope.class);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse Gemini bullet response: " + json, e);
+            throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
         }
         List<GeneratedBullet> kept = new java.util.ArrayList<>();
         int dropped = 0;
@@ -211,14 +219,19 @@ public class GeminiClient implements LlmClient {
             int wc = wordCount(text);
             if (wc >= 27 && wc <= 40) {
                 log.info("Dropped bullet (word count {} in dead zone 27-40): {}", wc, abbreviate(text));
+                // Emit so the user sees exactly which bullet was cut and why.
+                progress.emit("Cut (" + wc + "w, dead zone 27-40): \"" + abbreviate(text) + "\"");
                 dropped++;
                 continue;
             }
             if (wc < 12) {
                 log.info("Dropped bullet (word count {} too short): {}", wc, abbreviate(text));
+                progress.emit("Cut (" + wc + "w, too short): \"" + abbreviate(text) + "\"");
                 dropped++;
                 continue;
             }
+            // Kept — show a short preview so the user can see what's passing the filter.
+            progress.emit("Kept (" + wc + "w): \"" + abbreviate(text) + "\"");
             kept.add(new GeneratedBullet(text, b.tags == null ? List.of() : b.tags));
         }
         log.info("Generation kept {} bullets, dropped {}.", kept.size(), dropped);
@@ -250,7 +263,8 @@ public class GeminiClient implements LlmClient {
     // -------- cleanJd --------
 
     @Override
-    public JdCleanResult cleanJd(String rawJd) {
+    public JdCleanResult cleanJd(String rawJd, ProgressLog progress) {
+        progress.emit("Calling LLM to clean JD and extract keywords...");
         String prompt = """
                 Clean this job description and extract structured fields.
                   - cleanJd: the JD text with navigation, marketing fluff, and "about us" boilerplate stripped. Keep responsibilities, requirements, and tech stack.
@@ -279,17 +293,21 @@ public class GeminiClient implements LlmClient {
         String json = call(cleanJdModel, prompt, schema);
         try {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
-            return new JdCleanResult(env.cleanJd, env.company, env.role,
-                    env.keywords == null ? List.of() : env.keywords);
+            List<String> kws = env.keywords == null ? List.of() : env.keywords;
+            // Emit what we extracted so the user can see the parsed role/company immediately.
+            progress.emit("Extracted: role=" + env.role + ", company=" + env.company
+                    + ", " + kws.size() + " keywords: " + String.join(", ", kws));
+            return new JdCleanResult(env.cleanJd, env.company, env.role, kws);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse Gemini cleanJd response: " + json, e);
+            throw new RuntimeException("Failed to parse LLM cleanJd response: " + json, e);
         }
     }
 
     // -------- match --------
 
     @Override
-    public MatchResult match(MatchRequest req) {
+    public MatchResult match(MatchRequest req, ProgressLog progress) {
+        progress.emit("Calling LLM to rank " + req.bullets().size() + " bullets against JD...");
         StringBuilder bulletsBlock = new StringBuilder();
         for (BulletForMatch b : req.bullets()) {
             bulletsBlock.append("  - id=").append(b.bulletId())
@@ -366,11 +384,27 @@ public class GeminiClient implements LlmClient {
             List<RankedBullet> ranked = env.rankedBullets.stream()
                     .map(r -> new RankedBullet(r.bulletId, r.rank, r.why))
                     .toList();
-            return new MatchResult(ranked, env.coverLetter,
-                    env.atsMatched == null ? List.of() : env.atsMatched,
-                    env.atsMissing == null ? List.of() : env.atsMissing);
+            // Emit top-10 rankings so the user can see which bullets scored best while the rest of the pipeline runs.
+            ranked.stream()
+                    .sorted(java.util.Comparator.comparingInt(RankedBullet::rank))
+                    .limit(10)
+                    .forEach(r -> {
+                        // Find matching bullet text for a readable preview.
+                        String preview = req.bullets().stream()
+                                .filter(b -> b.bulletId().equals(r.bulletId()))
+                                .map(b -> abbreviate(b.text()))
+                                .findFirst().orElse(r.bulletId());
+                        progress.emit("Rank #" + r.rank() + ": \"" + preview + "\" — " + r.why());
+                    });
+            List<String> atsMatched = env.atsMatched == null ? List.of() : env.atsMatched;
+            List<String> atsMissing = env.atsMissing == null ? List.of() : env.atsMissing;
+            progress.emit("ATS matched: " + String.join(", ", atsMatched));
+            if (!atsMissing.isEmpty()) {
+                progress.emit("ATS missing: " + String.join(", ", atsMissing));
+            }
+            return new MatchResult(ranked, env.coverLetter, atsMatched, atsMissing);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse Gemini match response: " + json, e);
+            throw new RuntimeException("Failed to parse LLM match response: " + json, e);
         }
     }
 
@@ -385,7 +419,7 @@ public class GeminiClient implements LlmClient {
                 .build();
         GenerateContentResponse resp = client.models.generateContent(model, prompt, config);
         String json = resp.text();
-        log.debug("Gemini {} raw: {}", model, json);
+        log.debug("LLM {} raw: {}", model, json);
         return json;
     }
 

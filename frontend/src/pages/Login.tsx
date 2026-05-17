@@ -28,12 +28,11 @@ export function Login() {
     <div className="center-page">
       <div style={{ width: 460, maxWidth: '100%' }}>
         <div style={{ marginBottom: 28, borderBottom: '3px solid var(--ink)', paddingBottom: 14 }}>
-          <div className="label muted">VOL.0 / ENTRY</div>
-          <h1 className="display" style={{ fontSize: 56, margin: '6px 0 0' }}>
+          <h1 className="display" style={{ fontSize: 56, margin: '0 0 6px' }}>
             Resume<span style={{ fontFamily: 'var(--mono)', fontStyle: 'normal', fontWeight: 700, fontSize: '0.5em' }}> // </span>Pipeline
           </h1>
           <div className="editorial muted" style={{ fontSize: 16, marginTop: 8 }}>
-            A single-user atelier for tailoring résumés.
+            Tailored résumés, powered by AI.
           </div>
         </div>
 
@@ -62,16 +61,13 @@ export function Login() {
           {err && <div className="err">{err}</div>}
 
           <div className="row row--between row--centered" style={{ marginTop: 12 }}>
-            <span className="label muted">SESSION COOKIE · LOCALHOST</span>
+            <span />
             <button className="btn btn--acid" type="submit" disabled={busy}>
               {busy ? <span className="spinner">SIGNING IN</span> : <>ENTER &nbsp;→</>}
             </button>
           </div>
         </form>
 
-        <div style={{ marginTop: 56, fontSize: 11, color: 'var(--muted)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          ────────  one user · one resume · one job at a time
-        </div>
       </div>
     </div>
   );

@@ -1,18 +1,21 @@
 package com.resumepipeline.llm;
 
+import com.resumepipeline.progress.ProgressLog;
+
 import java.util.List;
 
 /**
  * LLM abstraction. Three methods, one per pipeline LLM call.
- * Day 2 implements generateBullets; cleanJd/match come in Day 3.
+ * Each method accepts a ProgressLog so callers can stream real-time events to
+ * the browser via SSE. Pass ProgressLog.noOp() when streaming is not needed.
  */
 public interface LlmClient {
 
-    BulletGenerationResult generateBullets(GenerateBulletsRequest req);
+    BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress);
 
-    JdCleanResult cleanJd(String rawJd);
+    JdCleanResult cleanJd(String rawJd, ProgressLog progress);
 
-    MatchResult match(MatchRequest req);
+    MatchResult match(MatchRequest req, ProgressLog progress);
 
     // --- types ---
 

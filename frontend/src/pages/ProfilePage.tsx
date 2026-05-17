@@ -110,7 +110,7 @@ export function ProfilePage() {
         <div><button type="button" className="btn btn--sm" onClick={addEdu}>+ ADD EDUCATION</button></div>
 
         <div className="editorial muted" style={{ padding: '20px 0' }}>
-          Work experience now lives in <strong>§ 02 — EXPERIENCES</strong> with its own Gemini-seeded bullet bank per role.
+          Work experience now lives in <strong>02 — EXPERIENCES</strong> with its own AI-generated bullet bank per role.
         </div>
 
         {/* SKILLS */}

@@ -54,7 +54,7 @@ export function Applications() {
           ))}
           {apps.length === 0 && (
             <div style={{ padding: '40px 0', borderBottom: 'var(--rule-thin)' }} className="editorial muted">
-              {outcome ? `No applications with outcome "${outcome}".` : 'No applications yet. Start with § 03.'}
+              {outcome ? `No applications with outcome "${outcome}".` : 'No applications yet. Start with 04 — NEW APPLICATION.'}
             </div>
           )}
         </div>

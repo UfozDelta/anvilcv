@@ -10,7 +10,7 @@
   --rule: #0A0A0A;
   --acid: #E8FE03;
   --rust: #D63A2F;
-  --muted: #6B6660;
+  --muted: #4A4540;
   --soft: #BDB7AC;
 
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -36,8 +36,8 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.6;
   font-feature-settings: "ss01", "ss02", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -67,11 +67,12 @@ body::before {
   line-height: 0.95;
 }
 
+/* editorial: upright serif for body-level serif use — italic only for display */
 .editorial {
   font-family: var(--serif);
   font-weight: 400;
-  font-style: italic;
-  line-height: 1.35;
+  font-style: normal;
+  line-height: 1.5;
 }
 
 .label {
@@ -166,21 +167,22 @@ body::before {
   margin: -28px 0 var(--pad-lg);
   padding-bottom: 10px;
   border-bottom: var(--rule-thin);
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  font-size: 12px;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
   font-weight: 700;
 }
 .nav a {
-  color: var(--muted);
+  color: var(--ink);
   text-decoration: none;
   padding-bottom: 2px;
   border-bottom: 2px solid transparent;
+  opacity: 0.5;
 }
-.nav a:hover { color: var(--ink); }
+.nav a:hover { opacity: 0.85; }
 .nav a.active {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
+  opacity: 1;
+  border-bottom: 2px solid var(--acid);
 }
 
 /* -------- Section markers -------- */
@@ -297,7 +299,8 @@ body::before {
 .field__textarea:focus,
 .field__select:focus {
   background: var(--paper-2);
-  box-shadow: inset 4px 0 0 0 var(--acid);
+  border-color: var(--ink);
+  box-shadow: inset 4px 0 0 0 var(--acid), 0 0 0 3px rgba(232, 254, 3, 0.35);
 }
 
 .field__textarea { resize: vertical; min-height: 160px; }
@@ -312,13 +315,15 @@ body::before {
 
 .tag {
   display: inline-block;
-  padding: 3px 7px;
+  padding: 3px 8px;
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  border: 1px solid var(--ink);
+  border: 1.5px solid var(--ink);
+  background: var(--paper-2);
+  color: var(--ink);
   margin-right: 6px;
   margin-bottom: 4px;
 }
@@ -356,9 +361,9 @@ body::before {
 
 .list__title {
   font-family: var(--serif);
-  font-style: italic;
+  font-style: normal;
   font-weight: 700;
-  font-size: 22px;
+  font-size: 20px;
   letter-spacing: -0.01em;
   margin: 0 0 4px;
 }
@@ -413,11 +418,10 @@ body::before {
 
 .bullet__why {
   margin-top: 6px;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 13px;
+  font-family: var(--mono);
+  font-size: 12px;
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.6;
 }
 
 .bullet__tags { margin-top: 8px; }

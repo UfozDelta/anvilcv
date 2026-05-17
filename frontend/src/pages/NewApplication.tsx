@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type ApplicationResponse } from '../lib/api';
 import { Section } from '../components/Section';
+import { useEventLog } from '../lib/useEventLog';
+import { EventLog } from '../components/EventLog';
 
 const EMPHASES = [
   { value: 'backend',    label: 'Backend' },
@@ -17,17 +19,21 @@ export function NewApplication() {
   const [roleEmphasis, setRoleEmphasis] = useState('backend');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { stream, state: logState, reset: resetLog } = useEventLog();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setErr(null); setBusy(true);
+    setErr(null);
+    resetLog();
+    setBusy(true);
     try {
-      const r = await api.post<ApplicationResponse>('/api/applications', {
+      // SSE endpoint streams real pipeline events; resolves with application ID when done.
+      const appId = await stream('/api/applications/stream', {
         jdText: jdText.trim() || undefined,
         jdUrl: jdUrl.trim() || undefined,
         roleEmphasis,
       });
-      nav(`/applications/${r.id}`);
+      nav(`/applications/${appId}`);
     } catch (e: any) {
       setErr(e?.message || 'Failed to create application');
       setBusy(false);
@@ -43,7 +49,7 @@ export function NewApplication() {
           <div className="display" style={{ fontSize: 40, lineHeight: 1, marginBottom: 12 }}>
             Paste the job. <br />
             <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: '0.6em', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
-              Gemini cleans · ranks · drafts · render
+              AI cleans · ranks · drafts · renders
             </span>
           </div>
         </div>
@@ -92,6 +98,9 @@ export function NewApplication() {
             ))}
           </div>
         </div>
+
+        {/* Live log panel — shows real pipeline events as they happen */}
+        <EventLog state={logState} />
 
         {err && <div className="err">{err}</div>}
 

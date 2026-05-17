@@ -3,6 +3,7 @@ package com.resumepipeline.bullet;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.RepoContextReader;
+import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
 import org.slf4j.Logger;
@@ -54,11 +55,11 @@ public class BulletService {
 
     /** Single un-categorized generation. Persists bullets with category="general". */
     public List<Bullet> generateForProject(UUID projectId) {
-        return generateForProjectAndCategory(projectId, "general");
+        return generateForProjectAndCategory(projectId, "general", ProgressLog.noOp());
     }
 
     /** Generate bullets for one project and one category lens. */
-    public List<Bullet> generateForProjectAndCategory(UUID projectId, String category) {
+    public List<Bullet> generateForProjectAndCategory(UUID projectId, String category, ProgressLog progress) {
         Project p = projectService.get(projectId);
         String repoContext = repoContextReader.read(p.getSourcePath());
 
@@ -72,19 +73,22 @@ public class BulletService {
                 new LlmClient.GenerateBulletsRequest(
                         sk, cat,
                         p.getName(), p.getDescription(), repoContext,
-                        p.getTitle(), p.getCompany(), p.getLocation(), p.getDates()));
+                        p.getTitle(), p.getCompany(), p.getLocation(), p.getDates()),
+                progress);
 
-        return result.bullets().stream()
+        List<Bullet> saved = result.bullets().stream()
                 .map(g -> repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), cat)))
                 .toList();
+        return saved;
     }
 
     /**
-     * Run one LLM call per requested category, sequentially (respects Gemini Flash
-     * free-tier RPM caps), and persist each result with its category tag.
+     * Run one LLM call per requested category, sequentially (respects free-tier RPM caps),
+     * and persist each result with its category tag.
      * Returns the combined list in the order the categories were requested.
+     * progress receives real events at each category boundary and per-bullet decision.
      */
-    public List<Bullet> generateBank(UUID projectId, List<String> categories) {
+    public List<Bullet> generateBank(UUID projectId, List<String> categories, ProgressLog progress) {
         if (categories == null || categories.isEmpty()) {
             throw new IllegalArgumentException("categories cannot be empty");
         }
@@ -94,10 +98,15 @@ public class BulletService {
             }
         }
         List<Bullet> combined = new ArrayList<>();
-        for (String c : categories) {
+        int total = categories.size();
+        for (int i = 0; i < total; i++) {
+            String c = categories.get(i);
+            // Emit before each category so user knows which lens we're on and how many remain.
+            progress.emit("[" + (i + 1) + "/" + total + "] Starting category: " + c);
             log.info("Generating bank for project {} category {}", projectId, c);
-            combined.addAll(generateForProjectAndCategory(projectId, c));
+            combined.addAll(generateForProjectAndCategory(projectId, c, progress));
         }
+        progress.emit("Done — generated " + combined.size() + " bullets across " + total + " categories.");
         return combined;
     }
 }

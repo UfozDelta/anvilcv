@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import java.util.Map;
 
 /**
- * Surfaces upstream errors (Gemini, validation, etc.) as structured JSON so the
- * frontend can show a real message instead of a generic 500.
+ * Surfaces upstream LLM errors, validation failures, etc. as structured JSON so
+ * the frontend can show a real message instead of a generic 500.
  */
 @ControllerAdvice
 public class ApiExceptionHandler {
@@ -22,35 +22,35 @@ public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(ClientException.class)
-    public ResponseEntity<Map<String, Object>> handleGeminiClient(ClientException e) {
-        log.warn("Gemini client error: {}", e.getMessage());
-        HttpStatus status = mapGeminiStatus(e);
+    public ResponseEntity<Map<String, Object>> handleLlmClient(ClientException e) {
+        log.warn("LLM client error: {}", e.getMessage());
+        HttpStatus status = mapLlmStatus(e);
         return ResponseEntity.status(status).body(Map.of(
-                "source", "gemini",
+                "source", "llm",
                 "status", status.value(),
-                "message", trimGeminiMessage(e.getMessage()),
+                "message", trimLlmMessage(e.getMessage()),
                 "hint", hintForStatus(status)
         ));
     }
 
     @ExceptionHandler(ServerException.class)
-    public ResponseEntity<Map<String, Object>> handleGeminiServer(ServerException e) {
-        log.warn("Gemini server error: {}", e.getMessage());
+    public ResponseEntity<Map<String, Object>> handleLlmServer(ServerException e) {
+        log.warn("LLM server error: {}", e.getMessage());
         return ResponseEntity.status(502).body(Map.of(
-                "source", "gemini",
+                "source", "llm",
                 "status", 502,
-                "message", trimGeminiMessage(e.getMessage()),
-                "hint", "Gemini is having a bad time. Try again in a moment."
+                "message", trimLlmMessage(e.getMessage()),
+                "hint", "LLM is having a bad time. Try again in a moment."
         ));
     }
 
     @ExceptionHandler(ApiException.class)
-    public ResponseEntity<Map<String, Object>> handleGeminiOther(ApiException e) {
-        log.warn("Gemini API error: {}", e.getMessage());
+    public ResponseEntity<Map<String, Object>> handleLlmOther(ApiException e) {
+        log.warn("LLM API error: {}", e.getMessage());
         return ResponseEntity.status(502).body(Map.of(
-                "source", "gemini",
+                "source", "llm",
                 "status", 502,
-                "message", trimGeminiMessage(e.getMessage())
+                "message", trimLlmMessage(e.getMessage())
         ));
     }
 
@@ -74,11 +74,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException e) {
-        // Unwrap wrapped Gemini errors that escaped via parsing failures.
+        // Unwrap LLM errors that escaped via parsing failures.
         Throwable cause = e.getCause();
-        if (cause instanceof ClientException ce)  return handleGeminiClient(ce);
-        if (cause instanceof ServerException se)  return handleGeminiServer(se);
-        if (cause instanceof ApiException ae)     return handleGeminiOther(ae);
+        if (cause instanceof ClientException ce)  return handleLlmClient(ce);
+        if (cause instanceof ServerException se)  return handleLlmServer(se);
+        if (cause instanceof ApiException ae)     return handleLlmOther(ae);
 
         log.error("Unhandled runtime error", e);
         return ResponseEntity.status(500).body(Map.of(
@@ -88,8 +88,8 @@ public class ApiExceptionHandler {
         ));
     }
 
-    private static HttpStatus mapGeminiStatus(ClientException e) {
-        // Gemini SDK exception messages start with the status code, e.g. "429 ..."
+    private static HttpStatus mapLlmStatus(ClientException e) {
+        // SDK exception messages start with the HTTP status code, e.g. "429 ..."
         String msg = e.getMessage() == null ? "" : e.getMessage();
         if (msg.startsWith("429")) return HttpStatus.TOO_MANY_REQUESTS;
         if (msg.startsWith("401") || msg.startsWith("403")) return HttpStatus.UNAUTHORIZED;
@@ -98,9 +98,9 @@ public class ApiExceptionHandler {
         return HttpStatus.BAD_GATEWAY;
     }
 
-    /** Gemini error messages are giant URL-laden walls of text — keep the useful bit. */
-    private static String trimGeminiMessage(String raw) {
-        if (raw == null) return "Gemini error";
+    /** LLM error messages are giant URL-laden walls of text — keep the useful bit. */
+    private static String trimLlmMessage(String raw) {
+        if (raw == null) return "LLM error";
         String s = raw.replaceAll("\\s+", " ").trim();
         int firstLink = s.indexOf("https://");
         if (firstLink > 60) s = s.substring(0, firstLink).trim();
@@ -115,9 +115,9 @@ public class ApiExceptionHandler {
 
     private static String hintForStatus(HttpStatus s) {
         return switch (s) {
-            case TOO_MANY_REQUESTS -> "Gemini free-tier rate limit hit. Wait ~30s and retry, or enable billing in AI Studio.";
-            case UNAUTHORIZED -> "Check GEMINI_API_KEY in application-local.yml.";
-            case BAD_REQUEST -> "Gemini rejected the request payload.";
+            case TOO_MANY_REQUESTS -> "LLM free-tier rate limit hit. Wait ~30s and retry, or enable billing.";
+            case UNAUTHORIZED -> "Check LLM_API_KEY in application-local.yml.";
+            case BAD_REQUEST -> "LLM rejected the request payload.";
             default -> "";
         };
     }

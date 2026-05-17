@@ -5,54 +5,27 @@ const STEPS = [
   {
     num: '01',
     title: 'Build your\nbullet bank',
-    body: 'Add projects and experiences. Paste a description or point at a local repo. Gemini Pro writes 6–12 bullets per entry — edit freely.',
-    tag: 'GEMINI PRO',
+    body: 'Add projects and experiences. Paste a description — AI writes 6–12 bullets per entry. Edit freely.',
+    tag: 'AI GENERATION',
   },
   {
     num: '02',
     title: 'Paste the\njob posting',
-    body: 'Drop in raw JD text or a URL. Flash cleans it, extracts company, role, and keywords. Takes two seconds.',
-    tag: 'GEMINI FLASH',
+    body: 'Drop in raw JD text or a URL. AI cleans it, extracts company, role, and keywords. Takes two seconds.',
+    tag: 'JD PARSING',
   },
   {
     num: '03',
     title: 'AI ranks\nevery bullet',
-    body: 'Pro scores every bullet against the JD. Top 8 auto-selected (max 3 per project). Override anything. See exactly why each bullet ranked.',
+    body: 'Every bullet scored against the JD. Top 8 auto-selected (max 3 per project). Override anything. See exactly why each bullet ranked.',
     tag: 'RANKED MATCHING',
   },
   {
     num: '04',
     title: 'One-click\nPDF output',
-    body: 'LaTeX template → tectonic compiler → production-ready PDF stored in the database. Cover letter included.',
-    tag: 'LATEX + TECTONIC',
+    body: 'LaTeX template → compiler → production-ready PDF. Cover letter included.',
+    tag: 'LATEX + PDF',
   },
-];
-
-const FEATURES = [
-  {
-    icon: '⬡',
-    title: 'Structured output',
-    body: 'Every LLM call uses enforced JSON schemas. No hallucinated shapes, no string parsing. Swap the client for Claude or OpenAI by changing one class.',
-  },
-  {
-    icon: '◈',
-    title: 'Application history',
-    body: 'Track every application from sent to offer or rejection. Filter by outcome. Store the full ranked bullet list and PDF alongside each application.',
-  },
-  {
-    icon: '◻',
-    title: 'ATS gap analysis',
-    body: 'See matched and missing keywords for each application before you submit. Cover letter tailored to the same JD.',
-  },
-];
-
-const STACK = [
-  ['Backend',    'Java 21 · Spring Boot 3 · Maven'],
-  ['Database',   'Neon Postgres · Flyway migrations'],
-  ['LLM',        'Gemini 2.5 Pro + Flash · AI Studio'],
-  ['PDF',        'LaTeX template · tectonic compiler'],
-  ['Frontend',   'Vite · React · TypeScript'],
-  ['Deploy',     'Render (Docker) · Vercel · Neon'],
 ];
 
 export function Landing() {
@@ -62,9 +35,9 @@ export function Landing() {
       {/* ── HERO ── */}
       <section className="lp-hero shell">
         <div className="lp-hero__eyebrow">
-          <span className="lp-label">VOL.0 / ISSUE.1</span>
+          <span className="lp-label">RESUME // PIPELINE</span>
           <div className="lp-hero__rule" />
-          <span className="lp-label lp-muted">RESUME TAILORING ATELIER</span>
+          <span className="lp-label lp-muted">AI RESUME TAILORING</span>
         </div>
 
         <div className="lp-hero__grid">
@@ -81,11 +54,8 @@ export function Landing() {
             </p>
             <div className="lp-hero__cta-row">
               <Link to="/login" className="lp-btn lp-btn--acid">
-                ENTER THE ATELIER &nbsp;→
+                GET STARTED &nbsp;→
               </Link>
-              <span className="lp-label lp-muted lp-hero__cta-note">
-                SINGLE-USER · SESSION AUTH
-              </span>
             </div>
           </div>
 
@@ -112,29 +82,13 @@ export function Landing() {
             </div>
           </div>
         </div>
-
-        <div className="lp-hero__ticker">
-          <span>AI BULLET GENERATION</span>
-          <span className="lp-ticker-sep">——</span>
-          <span>JD KEYWORD MATCHING</span>
-          <span className="lp-ticker-sep">——</span>
-          <span>LATEX PDF RENDERING</span>
-          <span className="lp-ticker-sep">——</span>
-          <span>APPLICATION HISTORY</span>
-          <span className="lp-ticker-sep">——</span>
-          <span>ATS GAP ANALYSIS</span>
-          <span className="lp-ticker-sep">——</span>
-          <span>COVER LETTER</span>
-          <span className="lp-ticker-sep">——</span>
-        </div>
       </section>
 
       {/* ── HOW IT WORKS ── */}
       <section className="lp-steps shell">
         <div className="lp-section-mark">
-          <span className="lp-label lp-muted">§ A</span>
-          <div className="lp-section-rule" />
           <span className="lp-section-title">HOW IT WORKS</span>
+          <div className="lp-section-rule" />
         </div>
 
         <div className="lp-steps__grid">
@@ -149,49 +103,11 @@ export function Landing() {
         </div>
       </section>
 
-      {/* ── FEATURES ── */}
-      <section className="lp-features shell">
-        <div className="lp-section-mark">
-          <span className="lp-label lp-muted">§ B</span>
-          <div className="lp-section-rule" />
-          <span className="lp-section-title">BUILT TO LAST</span>
-        </div>
-
-        <div className="lp-features__grid">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="lp-feature">
-              <div className="lp-feature__icon">{f.icon}</div>
-              <h4 className="lp-feature__title">{f.title}</h4>
-              <p className="lp-feature__body">{f.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── STACK ── */}
-      <section className="lp-stack shell">
-        <div className="lp-section-mark">
-          <span className="lp-label lp-muted">§ C</span>
-          <div className="lp-section-rule" />
-          <span className="lp-section-title">STACK</span>
-        </div>
-
-        <div className="lp-stack__table">
-          {STACK.map(([layer, detail]) => (
-            <div key={layer} className="lp-stack__row">
-              <span className="lp-stack__layer">{layer}</span>
-              <div className="lp-stack__dots" />
-              <span className="lp-stack__detail">{detail}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ── CTA BAND ── */}
       <section className="lp-cta-band">
         <div className="shell lp-cta-band__inner">
           <p className="lp-display lp-cta-band__heading">
-            One user.<br />One résumé.<br />One job at a time.
+            Your résumé.<br />Every job.<br />In seconds.
           </p>
           <Link to="/login" className="lp-btn lp-btn--ink">
             OPEN PIPELINE &nbsp;→
@@ -202,7 +118,7 @@ export function Landing() {
       {/* ── FOOTER ── */}
       <footer className="lp-footer shell">
         <span className="lp-label lp-muted">RESUME // PIPELINE</span>
-        <span className="lp-label lp-muted">SPRING BOOT · REACT · NEON · GEMINI · TECTONIC</span>
+        <span className="lp-label lp-muted">SPRING BOOT · REACT · NEON · TECTONIC</span>
       </footer>
 
     </div>

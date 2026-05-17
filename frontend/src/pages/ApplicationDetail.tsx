@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, type ApplicationResponse, type Bullet, type RankedBullet } from '../lib/api';
 import { Section } from '../components/Section';
+import { useEventLog } from '../lib/useEventLog';
+import { EventLog } from '../components/EventLog';
 
 export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -11,6 +13,7 @@ export function ApplicationDetail() {
   const [busy, setBusy] = useState(false);
   const [rerendering, setRerendering] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { stream, state: logState, reset: resetLog } = useEventLog();
 
   async function load() {
     if (!id) return;
@@ -60,14 +63,17 @@ export function ApplicationDetail() {
 
   async function rerender() {
     if (!app) return;
-    setErr(null); setRerendering(true);
+    setErr(null);
+    resetLog();
+    setRerendering(true);
     try {
-      const updated = await api.post<ApplicationResponse>(
-        `/api/applications/${app.id}/rerender`,
+      // SSE endpoint streams LaTeX render + tectonic compile progress in real time.
+      await stream(
+        `/api/applications/${app.id}/rerender/stream`,
         { selectedBulletIds: Array.from(selectedIds) }
       );
-      setApp(updated);
-      setSelectedIds(new Set(updated.selectedBulletIds));
+      // Reload app state after pipeline completes so PDF link is fresh.
+      await load();
     } catch (e: any) {
       setErr(e?.message || 'Re-render failed');
     } finally {
@@ -152,6 +158,8 @@ export function ApplicationDetail() {
             <button className="btn btn--acid" disabled={!dirty || rerendering} onClick={rerender}>
               {rerendering ? <span className="spinner">RENDERING</span> : <>RE-RENDER PDF &nbsp;→</>}
             </button>
+          {/* Live log panel — shows render + compile events in real time */}
+          <EventLog state={logState} />
           </div>
         </div>
 
