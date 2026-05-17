@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, type Project, type Bullet, CATEGORIES } from '../lib/api';
+import { api, API_BASE, type Project, type Bullet, CATEGORIES } from '../lib/api';
 import { Section } from '../components/Section';
 import { useEventLog } from '../lib/useEventLog';
 import { EventLog } from '../components/EventLog';
@@ -40,7 +40,7 @@ export function ProjectDetail() {
     try {
       // SSE endpoint streams real per-bullet events; "done" resolves with total count.
       await stream(
-        `/api/projects/${id}/bullets/generate-bank/stream`,
+        `${API_BASE}/api/projects/${id}/bullets/generate-bank/stream`,
         { categories: cats }
       );
       await load();

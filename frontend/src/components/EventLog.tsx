@@ -8,12 +8,12 @@ interface Props {
 /**
  * Scrollable log panel shown while an SSE pipeline is running.
  * Auto-scrolls to the latest line. Hides when there are no lines.
+ * Colors: green = good, red = bad, yellow = info/in-progress.
  */
 export function EventLog({ state }: Props) {
   const { lines, running, error } = state;
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to newest line as events arrive.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [lines]);
@@ -24,49 +24,50 @@ export function EventLog({ state }: Props) {
     <div style={{
       fontFamily: 'var(--mono)',
       fontSize: 11,
-      lineHeight: 1.6,
+      lineHeight: 1.7,
       background: 'var(--paper)',
       border: 'var(--rule)',
-      borderRadius: 0,
       padding: '12px 16px',
-      maxHeight: 260,
+      maxHeight: 280,
       overflowY: 'auto',
       marginTop: 16,
       marginBottom: 8,
     }}>
       {lines.map((line, i) => (
         <div key={i} style={{ color: lineColor(line) }}>
-          {linePrefix(line)}{line}
+          {line}
         </div>
       ))}
       {error && (
-        <div style={{ color: 'var(--err, #c00)', marginTop: 4 }}>
-          ERROR: {error}
+        <div style={{ color: '#c00', marginTop: 4 }}>
+          {error}
         </div>
       )}
       {running && (
-        <div style={{ color: 'var(--muted)', marginTop: 4 }}>▌</div>
+        <div style={{ color: '#888', marginTop: 2 }}>...</div>
       )}
       <div ref={bottomRef} />
     </div>
   );
 }
 
-// Color-code lines by their content so cuts/keeps are visually distinct.
 function lineColor(line: string): string {
-  if (line.startsWith('Cut')) return '#c05000';
-  if (line.startsWith('Kept')) return '#2a7a2a';
-  if (line.startsWith('Rank #1:') || line.startsWith('Selected')) return 'var(--ink)';
-  if (line.startsWith('Skipped')) return '#888';
-  if (line.startsWith('Done') || line.startsWith('Saved')) return 'var(--ink)';
-  return 'var(--muted, #666)';
-}
+  const l = line.toLowerCase();
 
-function linePrefix(line: string): string {
-  if (line.startsWith('Cut')) return '✗ ';
-  if (line.startsWith('Kept')) return '✓ ';
-  if (line.startsWith('Rank #')) return '→ ';
-  if (line.startsWith('Done') || line.startsWith('Saved')) return '✓ ';
-  if (line.startsWith('Skipped')) return '– ';
-  return '  ';
+  // Red — cuts, failures, errors, missing ATS
+  if (l.startsWith('cut:')) return '#c05000';
+  if (l.startsWith('pdf compile failed') || l.startsWith('tectonic:')) return '#c00';
+
+  // Green — kept, saved, done, selected, matched ATS
+  if (l.startsWith('kept:')) return '#2a7a2a';
+  if (l.startsWith('saved ') || l.startsWith('done -')) return '#2a7a2a';
+  if (l.startsWith('selection complete') || l.startsWith('  ')) return '#2a7a2a';
+  if (l.startsWith('ats matched')) return '#2a7a2a';
+  if (l.startsWith('retry result:') && l.includes('passed')) return '#2a7a2a';
+
+  // Red-ish for ATS missing (not green)
+  if (l.startsWith('ats missing')) return '#c05000';
+
+  // Yellow/amber — everything else: info, calling LLM, filtering, retrying, ranking
+  return '#8a6800';
 }

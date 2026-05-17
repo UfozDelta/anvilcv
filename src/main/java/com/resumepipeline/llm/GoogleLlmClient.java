@@ -15,6 +15,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Component
 public class GoogleLlmClient implements LlmClient {
@@ -175,13 +178,22 @@ public class GoogleLlmClient implements LlmClient {
                 .required(List.of("bullets"))
                 .build();
 
-        // Emit before the blocking LLM call so the user sees something immediately.
-        progress.emit("Calling LLM for category: " + req.category() + "...");
-        List<GeneratedBullet> kept = callAndFilter(prompt, schema, null, progress);
+        // Show first meaningful line of the lens so user knows what angle the LLM is targeting.
+        if (lens != null) {
+            String lensFirstLine = lens.lines()
+                    .map(String::strip)
+                    .filter(l -> !l.isBlank() && !l.startsWith("LENS:"))
+                    .findFirst().orElse("");
+            if (!lensFirstLine.isBlank()) progress.emit("Lens: " + lensFirstLine);
+        }
 
-        // If we lost a lot of bullets to the word-count filter, retry once with sharper instructions.
+        progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
+        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, progress);
+
+        // If we lost too many bullets to the word-count filter, retry once with sharper instructions.
         if (kept.size() < target) {
+            int firstPassCount = kept.size();
             String retryPrompt = prompt + """
 
                     ─────────────────────────────────────────────────────────────
@@ -192,19 +204,23 @@ public class GoogleLlmClient implements LlmClient {
                     Count words before emitting. Re-do the entire batch with this constraint enforced.
                     """;
             log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
-            // Tell the user why we're calling LLM again.
-            progress.emit("Only " + kept.size() + "/" + target + " bullets passed word-count filter — retrying with stricter prompt...");
-            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, kept, progress);
-            if (retry.size() > kept.size()) kept = retry;
+            progress.emit("Retry: only " + firstPassCount + "/" + target + " passed filter, calling LLM again with stricter length rules...");
+            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, progress);
+            if (retry.size() > kept.size()) {
+                progress.emit("Retry result: " + retry.size() + "/" + target + " passed (was " + firstPassCount + "/" + target + ")");
+                kept = retry;
+            } else {
+                progress.emit("Retry result: no improvement (" + retry.size() + "/" + target + "), keeping first-pass output");
+            }
         }
 
         progress.emit("Saved " + kept.size() + " bullets for category: " + req.category());
         return new BulletGenerationResult(kept);
     }
 
-    // progress param lets us emit per-bullet decisions as they happen.
+    // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private List<GeneratedBullet> callAndFilter(String prompt, Schema schema,
-                                                List<GeneratedBullet> previous, ProgressLog progress) {
+                                                int target, ProgressLog progress) {
         String json = call(generateModel, prompt, schema);
         BulletsEnvelope env;
         try {
@@ -212,6 +228,9 @@ public class GoogleLlmClient implements LlmClient {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
         }
+        int total = env.bullets == null ? 0 : env.bullets.size();
+        progress.emit("LLM returned " + total + " bullets, filtering by word count (target: " + target + ")...");
+
         List<GeneratedBullet> kept = new java.util.ArrayList<>();
         int dropped = 0;
         for (BulletJson b : env.bullets) {
@@ -219,20 +238,21 @@ public class GoogleLlmClient implements LlmClient {
             int wc = wordCount(text);
             if (wc >= 27 && wc <= 40) {
                 log.info("Dropped bullet (word count {} in dead zone 27-40): {}", wc, abbreviate(text));
-                // Emit so the user sees exactly which bullet was cut and why.
-                progress.emit("Cut (" + wc + "w, dead zone 27-40): \"" + abbreviate(text) + "\"");
+                // No bullet text in log — just reason and word count.
+                progress.emit("Cut: " + wc + "w - dead zone (27-40), needs 22-26 or 42-50");
                 dropped++;
                 continue;
             }
             if (wc < 12) {
                 log.info("Dropped bullet (word count {} too short): {}", wc, abbreviate(text));
-                progress.emit("Cut (" + wc + "w, too short): \"" + abbreviate(text) + "\"");
+                progress.emit("Cut: " + wc + "w - too short (min 12)");
                 dropped++;
                 continue;
             }
-            // Kept — show a short preview so the user can see what's passing the filter.
-            progress.emit("Kept (" + wc + "w): \"" + abbreviate(text) + "\"");
-            kept.add(new GeneratedBullet(text, b.tags == null ? List.of() : b.tags));
+            List<String> tags = b.tags == null ? List.of() : b.tags;
+            // No bullet text in log — word count and tags are the useful signal.
+            progress.emit("Kept: " + wc + "w [" + String.join(", ", tags) + "]");
+            kept.add(new GeneratedBullet(text, tags));
         }
         log.info("Generation kept {} bullets, dropped {}.", kept.size(), dropped);
         return kept;
@@ -384,23 +404,24 @@ public class GoogleLlmClient implements LlmClient {
             List<RankedBullet> ranked = env.rankedBullets.stream()
                     .map(r -> new RankedBullet(r.bulletId, r.rank, r.why))
                     .toList();
-            // Emit top-10 rankings so the user can see which bullets scored best while the rest of the pipeline runs.
+            // Show top 4 only with tags and reason — enough to understand what the LLM valued.
+            progress.emit("Top 4 ranked bullets:");
             ranked.stream()
                     .sorted(java.util.Comparator.comparingInt(RankedBullet::rank))
-                    .limit(10)
+                    .limit(4)
                     .forEach(r -> {
-                        // Find matching bullet text for a readable preview.
-                        String preview = req.bullets().stream()
+                        String tags = req.bullets().stream()
                                 .filter(b -> b.bulletId().equals(r.bulletId()))
-                                .map(b -> abbreviate(b.text()))
-                                .findFirst().orElse(r.bulletId());
-                        progress.emit("Rank #" + r.rank() + ": \"" + preview + "\" — " + r.why());
+                                .map(b -> String.join(", ", b.tags()))
+                                .findFirst().orElse("");
+                        String tagsStr = tags.isBlank() ? "" : " [" + tags + "]";
+                        progress.emit("Rank #" + r.rank() + tagsStr + " - " + r.why());
                     });
             List<String> atsMatched = env.atsMatched == null ? List.of() : env.atsMatched;
             List<String> atsMissing = env.atsMissing == null ? List.of() : env.atsMissing;
-            progress.emit("ATS matched: " + String.join(", ", atsMatched));
+            progress.emit("ATS matched (" + atsMatched.size() + "): " + String.join(", ", atsMatched));
             if (!atsMissing.isEmpty()) {
-                progress.emit("ATS missing: " + String.join(", ", atsMissing));
+                progress.emit("ATS missing (" + atsMissing.size() + "): " + String.join(", ", atsMissing));
             }
             return new MatchResult(ranked, env.coverLetter, atsMatched, atsMissing);
         } catch (Exception e) {
@@ -417,10 +438,24 @@ public class GoogleLlmClient implements LlmClient {
                 .responseMimeType("application/json")
                 .responseSchema(schema)
                 .build();
-        GenerateContentResponse resp = client.models.generateContent(model, prompt, config);
-        String json = resp.text();
-        log.debug("LLM {} raw: {}", model, json);
-        return json;
+        // Run on a separate thread so we can enforce a hard 2-minute timeout.
+        // Without this, a stalled LLM response blocks the virtual thread forever.
+        try {
+            String json = CompletableFuture
+                    .supplyAsync(() -> {
+                        GenerateContentResponse resp = client.models.generateContent(model, prompt, config);
+                        return resp.text();
+                    })
+                    .get(120, TimeUnit.SECONDS);
+            log.debug("LLM {} raw: {}", model, json);
+            return json;
+        } catch (TimeoutException e) {
+            throw new RuntimeException("LLM call timed out after 2 minutes — Gemini may be overloaded, try again.", e);
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof RuntimeException re) throw re;
+            throw new RuntimeException("LLM call failed: " + cause.getMessage(), cause);
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

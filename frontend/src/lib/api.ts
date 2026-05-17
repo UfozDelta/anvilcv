@@ -1,5 +1,8 @@
 const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
+// Exported so SSE callers (useEventLog) can prepend the same base URL.
+export const API_BASE = BASE;
+
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
     super(message);

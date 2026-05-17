@@ -81,7 +81,9 @@ public class ApplicationService {
         if (allBullets.isEmpty()) {
             throw new IllegalStateException("No bullets in the bank — generate or add some first.");
         }
-        Map<UUID, Project> projectById = projectRepo.findAll().stream()
+        // Only fetch projects that actually appear in the bullet bank, not the entire table.
+        Set<UUID> projectIds = allBullets.stream().map(Bullet::getProjectId).collect(Collectors.toSet());
+        Map<UUID, Project> projectById = projectRepo.findByIdIn(projectIds).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
         progress.emit("Matching " + allBullets.size() + " bullets from bullet bank against JD...");
@@ -107,6 +109,8 @@ public class ApplicationService {
 
         progress.emit("Selecting top " + MAX_TOTAL + " bullets (max " + MAX_PER_PROJECT + " per project)...");
         LinkedHashMap<UUID, Integer> perProject = new LinkedHashMap<>();
+        // Track project names for summary at the end.
+        LinkedHashMap<String, Integer> perProjectName = new LinkedHashMap<>();
         List<Bullet> selected = new ArrayList<>();
         for (LlmClient.RankedBullet rb : rankedSorted) {
             if (selected.size() >= MAX_TOTAL) break;
@@ -118,17 +122,18 @@ public class ApplicationService {
             String proj = projectById.containsKey(b.getProjectId())
                     ? projectById.get(b.getProjectId()).getName() : "unknown";
             if (count >= MAX_PER_PROJECT) {
-                // Emit skipped bullets so user can see the per-project cap in action.
-                progress.emit("Skipped (cap reached for " + proj + "): \""
-                        + abbreviate(b.getText()) + "\"");
+                // Skipped by cap — no bullet text, just which project hit the limit.
+                progress.emit("Skipped: cap reached for " + proj + " (" + MAX_PER_PROJECT + "/" + MAX_PER_PROJECT + ")");
                 continue;
             }
             perProject.put(b.getProjectId(), count + 1);
+            perProjectName.merge(proj, 1, Integer::sum);
             selected.add(b);
-            progress.emit("Selected [" + selected.size() + "/" + MAX_TOTAL + "] from " + proj
-                    + ": \"" + abbreviate(b.getText()) + "\"");
         }
-        progress.emit("Selection complete — " + selected.size() + " bullets chosen.");
+        // Emit grouped summary so user sees distribution across projects at a glance.
+        progress.emit("Selection complete - " + selected.size() + " bullets:");
+        perProjectName.forEach((proj, cnt) ->
+                progress.emit("  " + proj + " - " + cnt + " bullet" + (cnt > 1 ? "s" : "")));
 
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
@@ -156,11 +161,20 @@ public class ApplicationService {
         if (r.success()) {
             a.setPdfBlob(r.pdf());
             a.setTectonicLog(r.log());
-            progress.emit("Done — PDF compiled (" + r.pdf().length / 1024 + " KB).");
+            progress.emit("Done - PDF compiled (" + r.pdf().length / 1024 + " KB).");
         } else {
             log.warn("tectonic failed: {}", r.error());
             a.setTectonicLog("FAILED: " + r.error() + "\n\n" + r.log());
             progress.emit("PDF compile failed: " + r.error());
+            // Emit last few non-blank tectonic log lines so the user can debug without opening backend logs.
+            if (r.log() != null && !r.log().isBlank()) {
+                String[] tecLines = r.log().split("\n");
+                int start = Math.max(0, tecLines.length - 6);
+                for (int i = start; i < tecLines.length; i++) {
+                    String l = tecLines[i].strip();
+                    if (!l.isBlank()) progress.emit("tectonic: " + l);
+                }
+            }
         }
         return repo.save(a);
     }
@@ -172,7 +186,9 @@ public class ApplicationService {
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
         List<Bullet> selected = selectedBulletIds.stream()
                 .map(bulletById::get).filter(Objects::nonNull).toList();
-        Map<UUID, Project> projectById = projectRepo.findAll().stream()
+        // Only fetch projects referenced by the selected bullets.
+        Set<UUID> projectIds = selected.stream().map(Bullet::getProjectId).collect(Collectors.toSet());
+        Map<UUID, Project> projectById = projectRepo.findByIdIn(projectIds).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
@@ -185,10 +201,18 @@ public class ApplicationService {
         if (r.success()) {
             a.setPdfBlob(r.pdf());
             a.setTectonicLog(r.log());
-            progress.emit("Done — PDF compiled (" + r.pdf().length / 1024 + " KB).");
+            progress.emit("Done - PDF compiled (" + r.pdf().length / 1024 + " KB).");
         } else {
             a.setTectonicLog("FAILED: " + r.error() + "\n\n" + r.log());
             progress.emit("PDF compile failed: " + r.error());
+            if (r.log() != null && !r.log().isBlank()) {
+                String[] tecLines = r.log().split("\n");
+                int start = Math.max(0, tecLines.length - 6);
+                for (int i = start; i < tecLines.length; i++) {
+                    String l = tecLines[i].strip();
+                    if (!l.isBlank()) progress.emit("tectonic: " + l);
+                }
+            }
         }
         return repo.save(a);
     }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, type ApplicationResponse, type Bullet, type RankedBullet } from '../lib/api';
+import { api, API_BASE, type ApplicationResponse, type Bullet, type RankedBullet } from '../lib/api';
 import { Section } from '../components/Section';
 import { useEventLog } from '../lib/useEventLog';
 import { EventLog } from '../components/EventLog';
@@ -69,7 +69,7 @@ export function ApplicationDetail() {
     try {
       // SSE endpoint streams LaTeX render + tectonic compile progress in real time.
       await stream(
-        `/api/applications/${app.id}/rerender/stream`,
+        `${API_BASE}/api/applications/${app.id}/rerender/stream`,
         { selectedBulletIds: Array.from(selectedIds) }
       );
       // Reload app state after pipeline completes so PDF link is fresh.

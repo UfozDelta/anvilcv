@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, type ApplicationResponse } from '../lib/api';
+import { api, API_BASE, type ApplicationResponse } from '../lib/api';
 import { Section } from '../components/Section';
 import { useEventLog } from '../lib/useEventLog';
 import { EventLog } from '../components/EventLog';
@@ -28,7 +28,7 @@ export function NewApplication() {
     setBusy(true);
     try {
       // SSE endpoint streams real pipeline events; resolves with application ID when done.
-      const appId = await stream('/api/applications/stream', {
+      const appId = await stream(`${API_BASE}/api/applications/stream`, {
         jdText: jdText.trim() || undefined,
         jdUrl: jdUrl.trim() || undefined,
         roleEmphasis,

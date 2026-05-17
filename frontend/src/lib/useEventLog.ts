@@ -43,6 +43,8 @@ export function useEventLog() {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // credentials: 'include' sends session cookies, matching the main api client.
+      credentials: 'include',
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });

@@ -8,6 +8,11 @@ server:
         secure: ${COOKIE_SECURE:false}
 
 spring:
+  mvc:
+    async:
+      # SSE pipelines can take 3+ minutes (multiple LLM calls + tectonic compile).
+      # -1 disables the Tomcat async timeout so SseEmitter controls its own lifecycle.
+      request-timeout: -1
   datasource:
     url:      ${DB_URL:}
     username: ${DB_USER:}

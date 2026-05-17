@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
 
 @RestController
 @RequestMapping("/api/applications")
@@ -63,19 +64,17 @@ public class ApplicationController {
         SseEmitter emitter = new SseEmitter(120_000L);
 
         SSE_EXECUTOR.submit(() -> {
-            // Wire ProgressLog to the SSE emitter — each emit() sends one SSE event.
+            ScheduledFuture<?> keepalive = SseUtils.startKeepalive(emitter);
             ProgressLog progress = message -> {
                 try {
                     emitter.send(SseEmitter.event().name("log").data(message));
                 } catch (IOException e) {
-                    // Client disconnected — abort silently.
                     emitter.completeWithError(e);
                 }
             };
 
             try {
                 Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), progress);
-                // Send application ID so the frontend can navigate without a separate GET.
                 emitter.send(SseEmitter.event().name("done").data(a.getId().toString()));
                 emitter.complete();
             } catch (Exception e) {
@@ -83,6 +82,8 @@ public class ApplicationController {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
                 } catch (IOException ignored) {}
                 emitter.completeWithError(e);
+            } finally {
+                keepalive.cancel(false);
             }
         });
 
@@ -110,6 +111,7 @@ public class ApplicationController {
         SseEmitter emitter = new SseEmitter(60_000L);
 
         SSE_EXECUTOR.submit(() -> {
+            ScheduledFuture<?> keepalive = SseUtils.startKeepalive(emitter);
             ProgressLog progress = message -> {
                 try {
                     emitter.send(SseEmitter.event().name("log").data(message));
@@ -127,6 +129,8 @@ public class ApplicationController {
                     emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
                 } catch (IOException ignored) {}
                 emitter.completeWithError(e);
+            } finally {
+                keepalive.cancel(false);
             }
         });
 
@@ -142,7 +146,8 @@ public class ApplicationController {
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_PDF);
         String fname = "resume-" + (a.getCompany() == null ? "app" : a.getCompany().replaceAll("\\W+", "_")) + ".pdf";
-        h.setContentDispositionFormData("inline", fname);
+        // inline disposition tells the browser to render in iframe, not force-download.
+        h.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fname + "\"");
         return new ResponseEntity<>(a.getPdfBlob(), h, 200);
     }
 
