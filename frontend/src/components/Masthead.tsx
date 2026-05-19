@@ -28,6 +28,7 @@ export function Masthead() {
         <NavLink to="/experiences"  className={({ isActive }) => isActive ? 'active' : ''}>02 — EXPERIENCES</NavLink>
         <NavLink to="/applications" className={({ isActive }) => isActive ? 'active' : ''}>03 — APPLICATIONS</NavLink>
         <NavLink to="/new"          className={({ isActive }) => isActive ? 'active' : ''}>04 — NEW APPLICATION</NavLink>
+        <NavLink to="/settings"     className={({ isActive }) => isActive ? 'active' : ''}>05 — SETTINGS</NavLink>
       </nav>
     </>
   );

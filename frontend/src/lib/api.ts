@@ -102,6 +102,25 @@ export interface ApplicationSummary {
   createdAt: string;
 }
 
+export type BoldDensity = 'NONE' | 'LIGHT' | 'HEAVY';
+export type Tone = 'CONSERVATIVE' | 'NEUTRAL' | 'AGGRESSIVE';
+export type ActionVerbStyle = 'TECHNICAL' | 'LEADERSHIP' | 'IMPACT';
+
+export interface GenerationConfig {
+  wordFilterEnabled: boolean;
+  singleLineLow: number;
+  singleLineHigh: number;
+  doubleLineLow: number;
+  doubleLineHigh: number;
+  deadZoneLow: number;
+  deadZoneHigh: number;
+  minWordFloor: number;
+  temperature: number;
+  boldDensity: BoldDensity;
+  tone: Tone;
+  actionVerbStyle: ActionVerbStyle;
+}
+
 export interface ApplicationResponse {
   id: string;
   company: string | null;

@@ -10,6 +10,7 @@ import { NewApplication } from './pages/NewApplication';
 import { Applications } from './pages/Applications';
 import { ApplicationDetail } from './pages/ApplicationDetail';
 import { ProfilePage } from './pages/ProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
 
 function AuthedShell({ children }: { children: React.ReactNode }) {
   return (
@@ -34,6 +35,7 @@ export function App() {
         <Route path="/applications"         element={<AuthedShell><Applications /></AuthedShell>} />
         <Route path="/applications/:id"     element={<AuthedShell><ApplicationDetail /></AuthedShell>} />
         <Route path="/profile"              element={<AuthedShell><ProfilePage /></AuthedShell>} />
+        <Route path="/settings"             element={<AuthedShell><SettingsPage /></AuthedShell>} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

@@ -7,6 +7,8 @@ import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Schema;
 import com.google.genai.types.Type;
+import com.resumepipeline.config.GenerationConfig;
+import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,16 +31,19 @@ public class GoogleLlmClient implements LlmClient {
     private final String matchModel;
     private final String cleanJdModel;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final GenerationConfigService configService;
 
     public GoogleLlmClient(
             @Value("${llm.api-key}") String apiKey,
             @Value("${llm.model.generate}") String generateModel,
             @Value("${llm.model.match}") String matchModel,
-            @Value("${llm.model.clean-jd}") String cleanJdModel) {
+            @Value("${llm.model.clean-jd}") String cleanJdModel,
+            GenerationConfigService configService) {
         this.client = Client.builder().apiKey(apiKey).build();
         this.generateModel = generateModel;
         this.matchModel = matchModel;
         this.cleanJdModel = cleanJdModel;
+        this.configService = configService;
     }
 
     // -------- generateBullets --------
@@ -71,10 +76,33 @@ public class GoogleLlmClient implements LlmClient {
         String countTarget = experience ? "8 to 12" : "4 to 6";
         String sourceWord  = experience ? "ROLE" : "PROJECT";
 
+        GenerationConfig cfg = configService.get();
+
         String lens = CategoryLenses.lensFor(req.category());
         String lensBlock = lens == null ? "" : "\n─────────────────────────────────────────────────────────────\n## 0. CATEGORY LENS (read this FIRST)\n\n" + lens + "\n";
 
-        String prompt = lensBlock + """
+        String toneInstruction = switch (cfg.getTone()) {
+            case CONSERVATIVE -> "Write in a precise, understated tone. Avoid hyperbole. Let the metrics speak.";
+            case AGGRESSIVE   -> "Write with a confident, high-impact tone. Emphasise scale, speed, and results aggressively.";
+            default           -> "";
+        };
+        String boldInstruction = switch (cfg.getBoldDensity()) {
+            case NONE  -> "Do NOT use any **bold** markup in bullets.";
+            case HEAVY -> "Bold aggressively — every metric, every technology, every named system or technique.";
+            default    -> "";
+        };
+        String verbInstruction = switch (cfg.getActionVerbStyle()) {
+            case LEADERSHIP -> "Prefer leadership verbs: Led, Owned, Directed, Coordinated, Mentored, Drove, Championed.";
+            case IMPACT     -> "Prefer impact verbs: Accelerated, Reduced, Eliminated, Boosted, Saved, Cut, Scaled.";
+            default         -> "";
+        };
+        String tuningBlock = (toneInstruction + boldInstruction + verbInstruction).isBlank() ? "" :
+                "\n─────────────────────────────────────────────────────────────\n## STYLE OVERRIDES\n\n"
+                + (toneInstruction.isBlank() ? "" : toneInstruction + "\n")
+                + (boldInstruction.isBlank() ? "" : boldInstruction + "\n")
+                + (verbInstruction.isBlank() ? "" : verbInstruction + "\n");
+
+        String prompt = lensBlock + tuningBlock + """
                 You are writing resume bullet points for a %s.
                 Produce %s bullets in JSON. EVERY rule below is mandatory.
 
@@ -86,9 +114,9 @@ public class GoogleLlmClient implements LlmClient {
                 second line — that looks broken.
 
                 Targets (after \\textbf{} expansion):
-                  • 1-line bullet: roughly 22 to 26 words (≈ 130 chars including spaces).
-                  • 2-line bullet: roughly 42 to 50 words (≈ 250 chars including spaces).
-                  • NEVER produce a bullet of 27-40 words — that range half-fills line 2.
+                  • 1-line bullet: roughly %d to %d words (≈ 130 chars including spaces).
+                  • 2-line bullet: roughly %d to %d words (≈ 250 chars including spaces).
+                  • NEVER produce a bullet of %d-%d words — that range half-fills line 2.
 
                 Default to 2-line bullets where the substance warrants it; reserve 1-liners for crisp
                 accomplishments. Aim for a mix.
@@ -155,7 +183,11 @@ public class GoogleLlmClient implements LlmClient {
                 ## %s CONTEXT
 
                 %s%s
-                """.formatted(sourceWord, countTarget, sourceWord, contextBlock, repoBlock);
+                """.formatted(sourceWord, countTarget,
+                        cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
+                        cfg.getDoubleLineLow(), cfg.getDoubleLineHigh(),
+                        cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(),
+                        sourceWord, contextBlock, repoBlock);
 
         Schema schema = Schema.builder()
                 .type(Type.Known.OBJECT)
@@ -189,23 +221,22 @@ public class GoogleLlmClient implements LlmClient {
 
         progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
-        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, progress);
+        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress);
 
         // If we lost too many bullets to the word-count filter, retry once with sharper instructions.
-        if (kept.size() < target) {
+        if (cfg.isWordFilterEnabled() && kept.size() < target) {
             int firstPassCount = kept.size();
-            String retryPrompt = prompt + """
-
-                    ─────────────────────────────────────────────────────────────
-                    ## RETRY NOTE
-
-                    The previous attempt produced too many bullets in the FORBIDDEN 27-40 word range.
-                    Every bullet must be EITHER 22-26 words (fits 1 line) OR 42-50 words (fills 2 lines).
-                    Count words before emitting. Re-do the entire batch with this constraint enforced.
-                    """;
+            String retryPrompt = prompt + ("\n─────────────────────────────────────────────────────────────\n"
+                    + "## RETRY NOTE\n\n"
+                    + "The previous attempt produced too many bullets in the FORBIDDEN %d-%d word range.\n"
+                    + "Every bullet must be EITHER %d-%d words (fits 1 line) OR %d-%d words (fills 2 lines).\n"
+                    + "Count words before emitting. Re-do the entire batch with this constraint enforced.\n"
+            ).formatted(cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(),
+                    cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
+                    cfg.getDoubleLineLow(), cfg.getDoubleLineHigh());
             log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
             progress.emit("Retry: only " + firstPassCount + "/" + target + " passed filter, calling LLM again with stricter length rules...");
-            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, progress);
+            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress);
             if (retry.size() > kept.size()) {
                 progress.emit("Retry result: " + retry.size() + "/" + target + " passed (was " + firstPassCount + "/" + target + ")");
                 kept = retry;
@@ -220,8 +251,8 @@ public class GoogleLlmClient implements LlmClient {
 
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private List<GeneratedBullet> callAndFilter(String prompt, Schema schema,
-                                                int target, ProgressLog progress) {
-        String json = call(generateModel, prompt, schema);
+                                                int target, GenerationConfig cfg, ProgressLog progress) {
+        String json = call(generateModel, prompt, schema, cfg.getTemperature());
         BulletsEnvelope env;
         try {
             env = mapper.readValue(json, BulletsEnvelope.class);
@@ -229,28 +260,35 @@ public class GoogleLlmClient implements LlmClient {
             throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
         }
         int total = env.bullets == null ? 0 : env.bullets.size();
-        progress.emit("LLM returned " + total + " bullets, filtering by word count (target: " + target + ")...");
+        if (cfg.isWordFilterEnabled()) {
+            progress.emit("LLM returned " + total + " bullets, filtering by word count (target: " + target + ")...");
+        } else {
+            progress.emit("LLM returned " + total + " bullets (word filter disabled, keeping all)...");
+        }
 
         List<GeneratedBullet> kept = new java.util.ArrayList<>();
         int dropped = 0;
         for (BulletJson b : env.bullets) {
             String text = ensureTerminalPeriod(b.text);
             int wc = wordCount(text);
-            if (wc >= 27 && wc <= 40) {
-                log.info("Dropped bullet (word count {} in dead zone 27-40): {}", wc, abbreviate(text));
-                // No bullet text in log — just reason and word count.
-                progress.emit("Cut: " + wc + "w - dead zone (27-40), needs 22-26 or 42-50");
-                dropped++;
-                continue;
-            }
-            if (wc < 12) {
-                log.info("Dropped bullet (word count {} too short): {}", wc, abbreviate(text));
-                progress.emit("Cut: " + wc + "w - too short (min 12)");
-                dropped++;
-                continue;
+            if (cfg.isWordFilterEnabled()) {
+                if (wc >= cfg.getDeadZoneLow() && wc <= cfg.getDeadZoneHigh()) {
+                    log.info("Dropped bullet (word count {} in dead zone {}-{}): {}", wc,
+                            cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(), abbreviate(text));
+                    progress.emit("Cut: " + wc + "w - dead zone (" + cfg.getDeadZoneLow() + "-" + cfg.getDeadZoneHigh()
+                            + "), needs " + cfg.getSingleLineLow() + "-" + cfg.getSingleLineHigh()
+                            + " or " + cfg.getDoubleLineLow() + "-" + cfg.getDoubleLineHigh());
+                    dropped++;
+                    continue;
+                }
+                if (wc < cfg.getMinWordFloor()) {
+                    log.info("Dropped bullet (word count {} too short, floor {}): {}", wc, cfg.getMinWordFloor(), abbreviate(text));
+                    progress.emit("Cut: " + wc + "w - too short (min " + cfg.getMinWordFloor() + ")");
+                    dropped++;
+                    continue;
+                }
             }
             List<String> tags = b.tags == null ? List.of() : b.tags;
-            // No bullet text in log — word count and tags are the useful signal.
             progress.emit("Kept: " + wc + "w [" + String.join(", ", tags) + "]");
             kept.add(new GeneratedBullet(text, tags));
         }
@@ -434,9 +472,14 @@ public class GoogleLlmClient implements LlmClient {
     // -------- shared --------
 
     private String call(String model, String prompt, Schema schema) {
+        return call(model, prompt, schema, 1.0);
+    }
+
+    private String call(String model, String prompt, Schema schema, double temperature) {
         GenerateContentConfig config = GenerateContentConfig.builder()
                 .responseMimeType("application/json")
                 .responseSchema(schema)
+                .temperature((float) temperature)
                 .build();
         // Run on a separate thread so we can enforce a hard 2-minute timeout.
         // Without this, a stalled LLM response blocks the virtual thread forever.
