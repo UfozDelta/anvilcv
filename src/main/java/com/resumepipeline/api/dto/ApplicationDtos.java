@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,9 +34,17 @@ public class ApplicationDtos {
             UUID id, String company, String role, String jdText, String jdUrl, String roleEmphasis,
             String bulletRanking, List<UUID> selectedBulletIds,
             String coverLetter, List<String> atsMatched, List<String> atsMissing,
-            boolean pdfAvailable, String tectonicLog, String outcome, Instant createdAt
+            boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
         public static ApplicationResponse from(Application a) {
+            return from(a, false);
+        }
+
+        public static ApplicationResponse from(Application a, boolean includePdf) {
+            String b64 = null;
+            if (includePdf && a.getPdfBlob() != null && a.getPdfBlob().length > 0) {
+                b64 = Base64.getEncoder().encodeToString(a.getPdfBlob());
+            }
             return new ApplicationResponse(
                     a.getId(), a.getCompany(), a.getRole(), a.getJdText(), a.getJdUrl(),
                     a.getRoleEmphasis(), a.getBulletRanking(),
@@ -43,7 +52,7 @@ public class ApplicationDtos {
                     a.getCoverLetter(),
                     Arrays.asList(a.getAtsMatched()), Arrays.asList(a.getAtsMissing()),
                     a.getPdfBlob() != null && a.getPdfBlob().length > 0,
-                    a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
+                    b64, a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
         }
     }
 }

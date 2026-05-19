@@ -37,15 +37,17 @@ public class ApplicationController {
     }
 
     @GetMapping("/{id}")
-    public ApplicationResponse get(@PathVariable UUID id) {
-        return ApplicationResponse.from(service.get(id));
+    public ApplicationResponse get(@PathVariable UUID id,
+                                   @RequestParam(defaultValue = "false") boolean includePdf) {
+        return ApplicationResponse.from(service.get(id), includePdf);
     }
 
     /** Blocking endpoint kept for non-streaming callers. */
     @PostMapping
-    public ApplicationResponse create(@RequestBody @Valid CreateApplicationRequest req) {
+    public ApplicationResponse create(@RequestBody @Valid CreateApplicationRequest req,
+                                      @RequestParam(defaultValue = "false") boolean includePdf) {
         Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), ProgressLog.noOp());
-        return ApplicationResponse.from(a);
+        return ApplicationResponse.from(a, includePdf);
     }
 
     /**

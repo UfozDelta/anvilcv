@@ -67,18 +67,17 @@ export function Landing() {
                 <span />
                 <span className="lp-hero__terminal-title">resume-pipeline — tectonic</span>
               </div>
-              <pre className="lp-hero__terminal-body">{`$ POST /api/applications
-  jdUrl: "https://jobs.example.com/..."
+              <pre className="lp-hero__terminal-body">{`$ POST /api/applications?includePdf=true
+  jdText: "We're hiring a backend engineer..."
   roleEmphasis: "distributed systems"
 
-← 200 OK  (18.4s)
-  company:      "Acme Corp"
-  role:         "Senior Engineer"
-  bullets:      8 selected / 34 ranked
-  ats_matched:  ["Kubernetes","gRPC","Postgres"]
-  ats_missing:  ["Terraform"]
-  pdf_blob:     264 KB
-  cover_letter: ✓`}</pre>
+← 200 OK  (17.2s)
+  company:     "Acme Corp"
+  role:        "Senior Engineer"
+  bullets:     8 selected / 34 ranked
+  atsMatched:  ["Kubernetes","gRPC","Postgres"]
+  atsMissing:  ["Terraform"]
+  pdfBase64:   264 KB  ✓`}</pre>
             </div>
           </div>
         </div>

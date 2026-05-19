@@ -11,6 +11,7 @@ import { Applications } from './pages/Applications';
 import { ApplicationDetail } from './pages/ApplicationDetail';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { DocsPage } from './pages/DocsPage';
 
 function AuthedShell({ children }: { children: React.ReactNode }) {
   return (
@@ -36,6 +37,7 @@ export function App() {
         <Route path="/applications/:id"     element={<AuthedShell><ApplicationDetail /></AuthedShell>} />
         <Route path="/profile"              element={<AuthedShell><ProfilePage /></AuthedShell>} />
         <Route path="/settings"             element={<AuthedShell><SettingsPage /></AuthedShell>} />
+        <Route path="/docs"                 element={<AuthedShell><DocsPage /></AuthedShell>} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>
