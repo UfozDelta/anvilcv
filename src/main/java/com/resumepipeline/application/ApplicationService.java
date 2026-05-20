@@ -218,8 +218,8 @@ public class ApplicationService {
     }
 
     // Short text preview for log messages — keeps lines readable.
-    private static String abbreviate(String s) {
-        if (s == null) return "";
-        return s.length() <= 80 ? s : s.substring(0, 77) + "...";
-    }
+    // private static String abbreviate(String s) {
+    //     if (s == null) return "";
+    //     return s.length() <= 80 ? s : s.substring(0, 77) + "...";
+    // }
 }
