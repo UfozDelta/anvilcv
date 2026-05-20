@@ -433,6 +433,30 @@
   gap: 12px;
 }
 
+.lp-footer__links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lp-footer__link {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.lp-footer__link:hover { text-decoration: underline; }
+
+.lp-footer__sep {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--soft);
+}
+
 /* ── Entrance animation ── */
 @keyframes lp-fade-up {
   from {

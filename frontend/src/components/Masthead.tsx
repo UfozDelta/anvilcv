@@ -11,7 +11,7 @@ export function Masthead() {
     <>
       <header className="masthead shell">
         <Link to="/" className="masthead__brand" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
-          Resume<span style={{ fontStyle: 'normal', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: '0.55em' }}> // </span>Pipeline
+          Resu<span style={{ fontStyle: 'normal', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: '0.55em' }}> // </span>Forge
         </Link>
         <div className="masthead__rule" />
         <div className="masthead__meta">

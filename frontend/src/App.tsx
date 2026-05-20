@@ -37,7 +37,7 @@ export function App() {
         <Route path="/applications/:id"     element={<AuthedShell><ApplicationDetail /></AuthedShell>} />
         <Route path="/profile"              element={<AuthedShell><ProfilePage /></AuthedShell>} />
         <Route path="/settings"             element={<AuthedShell><SettingsPage /></AuthedShell>} />
-        <Route path="/docs"                 element={<AuthedShell><DocsPage /></AuthedShell>} />
+        <Route path="/docs"                 element={<DocsPage />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>
