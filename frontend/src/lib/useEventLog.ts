@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 
 export interface EventLogState {
   lines: string[];
@@ -92,7 +93,7 @@ export function useEventLog() {
                 const data = line.slice(5).trim();
                 if (currentEvent === 'log') {
                   console.log('[SSE] push log line', data);
-                  setLines(prev => [...prev, data]);
+                  flushSync(() => setLines(prev => [...prev, data]));
                 } else if (currentEvent === 'done') {
                   setRunning(false);
                   resolve(data);
