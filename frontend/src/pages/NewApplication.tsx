@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, API_BASE, type ApplicationResponse } from '../lib/api';
+
 import { Section } from '../components/Section';
-import { useEventLog } from '../lib/useEventLog';
-import { EventLog } from '../components/EventLog';
+import { EventStream } from '../components/EventStream';
 
 const EMPHASES = [
   { value: 'backend',    label: 'Backend' },
@@ -17,29 +16,11 @@ export function NewApplication() {
   const [jdText, setJdText] = useState('');
   const [jdUrl, setJdUrl] = useState('');
   const [roleEmphasis, setRoleEmphasis] = useState('backend');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const { stream, state: logState, reset: resetLog } = useEventLog();
+  const [streaming, setStreaming] = useState(false);
 
-  async function submit(e: FormEvent) {
+  function submit(e: FormEvent) {
     e.preventDefault();
-    setErr(null);
-    resetLog();
-    setBusy(true);
-    try {
-      // SSE endpoint streams real pipeline events; resolves with application ID when done.
-      const appId = await stream(`${API_BASE}/api/applications/stream`, {
-        jdText: jdText.trim() || undefined,
-        jdUrl: jdUrl.trim() || undefined,
-        roleEmphasis,
-      });
-      // Brief pause so user can read the final log line before navigating.
-      await new Promise(r => setTimeout(r, 400));
-      nav(`/applications/${appId}`);
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to create application');
-      setBusy(false);
-    }
+    setStreaming(true);
   }
 
   return (
@@ -101,18 +82,23 @@ export function NewApplication() {
           </div>
         </div>
 
-        {/* Live log panel — shows real pipeline events as they happen */}
-        <EventLog state={logState} />
-
-        {err && <div className="err">{err}</div>}
-
         <div className="row row--between row--centered" style={{ marginTop: 12 }}>
-          <span className="label muted">SYNC · ~15-25S · STAY ON THIS PAGE</span>
-          <button type="submit" className="btn btn--acid" disabled={busy}>
-            {busy ? <span className="spinner">TAILORING</span> : <>RUN PIPELINE &nbsp;→</>}
+          <span className="label muted">SYNC · ~15-25S · MODAL WILL OPEN</span>
+          <button type="submit" className="btn btn--acid" disabled={streaming}>
+            {streaming ? <span className="spinner">TAILORING</span> : <>RUN PIPELINE &nbsp;→</>}
           </button>
         </div>
       </form>
+
+      {streaming && (
+        <EventStream
+          jdText={jdText}
+          jdUrl={jdUrl}
+          roleEmphasis={roleEmphasis}
+          onDone={appId => nav(`/applications/${appId}`)}
+          onClose={() => setStreaming(false)}
+        />
+      )}
     </div>
   );
 }
