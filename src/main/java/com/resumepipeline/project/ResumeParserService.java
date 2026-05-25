@@ -23,19 +23,30 @@ public class ResumeParserService {
             Pattern.CASE_INSENSITIVE
     );
 
-    // Matches: Jan 2020, 2020-01, 2020, May 2021 – Present, 01/2020, etc.
-    private static final Pattern DATE_PATTERN = Pattern.compile(
-            "(?i)(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{4}" +
-            "|\\d{4}[\\s\\-–—/]+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|present|current|now)" +
-            "|\\d{1,2}/\\d{4}" +
-            "|\\d{4}\\s*[-–—]\\s*(\\d{4}|present|current|now)" +
-            "|\\b\\d{4}\\b"
+    // Bullet line prefixes produced by PDF text extraction
+    private static final Pattern BULLET_LINE = Pattern.compile(
+            "^[•\\-\\*◦▪▸►✦✓·]\\s*"
     );
+
+    // Date range pattern — month+year, year-year, year-present, bare year
+    private static final Pattern DATE_PATTERN = Pattern.compile(
+            "(?i)(?:" +
+            "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|" +
+            "jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)" +
+            "\\.?\\s+\\d{4}" +
+            "|\\d{1,2}/\\d{4}" +
+            "|\\d{4}\\s*[-–—]\\s*(?:\\d{4}|present|current|now)" +
+            "|\\d{4}" +
+            ")(?:\\s*[-–—]\\s*(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|" +
+            "jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?\\s+\\d{4}" +
+            "|present|current|now|\\d{4}))?"
+    );
+
+    // Project separator: "Name -- tech stack" or "Name – tech stack"
+    private static final Pattern PROJECT_SEPARATOR = Pattern.compile("\\s+[-–—]{1,2}\\s+");
 
     public ParseResumeResponse parse(String text) {
         String[] lines = text.split("\\r?\\n");
-
-        // Split into named sections
         Map<String, List<String>> sections = splitSections(lines);
 
         List<ParsedExperience> experiences = new ArrayList<>();
@@ -55,7 +66,6 @@ public class ResumeParserService {
     }
 
     private Map<String, List<String>> splitSections(String[] lines) {
-        // Preserves insertion order
         Map<String, List<String>> sections = new LinkedHashMap<>();
         String currentHeader = null;
         List<String> currentBody = new ArrayList<>();
@@ -83,52 +93,100 @@ public class ResumeParserService {
         return EXPERIENCE_HEADER.matcher(line).matches() || PROJECT_HEADER.matcher(line).matches();
     }
 
+    /**
+     * A header line is any non-blank line that does NOT start with a bullet character.
+     * This is the core insight: PDF text extraction preserves bullet chars but strips bold.
+     * Every non-bullet line is structural (title, company, project name, dates).
+     */
+    private boolean isHeaderLine(String line) {
+        return !line.isBlank() && !BULLET_LINE.matcher(line).find();
+    }
+
+    /**
+     * Split section body into entry blocks.
+     * A new entry starts at each header line that follows at least one bullet line
+     * (meaning we've seen content from a prior entry), OR at the very first header line.
+     *
+     * Structure detected:
+     *   header line(s)   ← entry metadata (title, company, dates)
+     *   bullet line(s)   ← entry description
+     *   header line(s)   ← next entry starts here
+     *   bullet line(s)
+     *   ...
+     */
+    private List<List<String>> splitIntoEntries(List<String> lines) {
+        List<List<String>> entries = new ArrayList<>();
+        List<String> current = new ArrayList<>();
+        boolean seenBullet = false;
+
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+
+            if (isHeaderLine(line) && seenBullet) {
+                // Bullet seen before this header → prior entry is complete
+                if (!current.isEmpty()) {
+                    entries.add(new ArrayList<>(current));
+                    current.clear();
+                }
+                seenBullet = false;
+            }
+
+            current.add(line);
+
+            if (BULLET_LINE.matcher(line).find()) {
+                seenBullet = true;
+            }
+        }
+        if (!current.isEmpty()) entries.add(current);
+        return entries;
+    }
+
     private List<ParsedExperience> parseExperiences(List<String> lines) {
         List<ParsedExperience> result = new ArrayList<>();
-        List<List<String>> blocks = splitIntoBlocks(lines);
 
-        for (List<String> block : blocks) {
-            if (block.isEmpty()) continue;
+        for (List<String> entry : splitIntoEntries(lines)) {
+            // Collect consecutive header lines at the top of the entry
+            List<String> headerLines = new ArrayList<>();
+            List<String> bulletLines = new ArrayList<>();
+            boolean inBullets = false;
 
-            String title = null, company = null, location = null, dates = null;
-            List<String> descLines = new ArrayList<>();
-
-            for (int i = 0; i < block.size(); i++) {
-                String line = block.get(i);
-                if (line.isBlank()) continue;
-
-                if (i == 0) {
-                    // First line: try to split "Title | Company" or "Title, Company" or "Title at Company"
-                    if (line.contains(" | ")) {
-                        String[] parts = line.split("\\s*\\|\\s*", 2);
-                        title = parts[0].trim();
-                        company = parts[1].trim();
-                    } else if (line.contains(" at ")) {
-                        String[] parts = line.split(" at ", 2);
-                        title = parts[0].trim();
-                        company = parts[1].trim();
-                    } else {
-                        title = line;
-                    }
-                } else if (i == 1 && company == null && !DATE_PATTERN.matcher(line).find()) {
-                    company = line;
-                } else if (DATE_PATTERN.matcher(line).find() && dates == null) {
-                    // Try to extract location from the same line (before/after the date)
-                    String datePart = extractDate(line);
-                    String rest = line.replace(datePart, "").trim().replaceAll("^[,·|\\-–—]+|[,·|\\-–—]+$", "").trim();
-                    dates = datePart;
-                    if (!rest.isBlank()) location = rest;
+            for (String line : entry) {
+                if (!inBullets && isHeaderLine(line)) {
+                    headerLines.add(line);
                 } else {
-                    descLines.add(line);
+                    inBullets = true;
+                    bulletLines.add(stripBulletPrefix(line));
                 }
+            }
+
+            if (headerLines.isEmpty()) continue;
+
+            // Line 0: "Job Title          Jan 2025 - Present"  (title + trailing date)
+            // Line 1: "Company Name       City, Province"      (company + location)
+            String title = null, company = null, location = null, dates = null;
+
+            String line0 = headerLines.get(0);
+            dates = extractTrailingDate(line0);
+            title = dates.isBlank() ? line0 : line0.substring(0, line0.lastIndexOf(dates)).trim();
+
+            if (headerLines.size() >= 2) {
+                String line1 = headerLines.get(1);
+                String line1Date = extractTrailingDate(line1);
+                // line1 may also have a trailing date (some formats); strip it
+                String line1Clean = line1Date.isBlank() ? line1 : line1.substring(0, line1.lastIndexOf(line1Date)).trim();
+                // Split "Company  City, ON" — look for 2+ spaces or a separator
+                String[] compLoc = line1Clean.split("\\s{2,}|\\t", 2);
+                company = compLoc[0].trim();
+                if (compLoc.length > 1) location = compLoc[1].trim();
+                // Fallback: if dates not found on line0, try line1
+                if (dates.isBlank() && !line1Date.isBlank()) dates = line1Date;
             }
 
             if (title == null || title.isBlank()) continue;
 
-            String name = slugify(company != null ? company + "-" + title : title);
-            String description = String.join("\n", descLines).strip();
-
-            result.add(new ParsedExperience(name, title, company, location, dates, description));
+            String name = slugify((company != null ? company + "-" : "") + title);
+            String description = String.join("\n", bulletLines).strip();
+            result.add(new ParsedExperience(name, title, company, location, dates.isBlank() ? null : dates, description));
         }
 
         return result;
@@ -136,70 +194,68 @@ public class ResumeParserService {
 
     private List<ParsedProject> parseProjects(List<String> lines) {
         List<ParsedProject> result = new ArrayList<>();
-        List<List<String>> blocks = splitIntoBlocks(lines);
 
-        for (List<String> block : blocks) {
-            if (block.isEmpty()) continue;
+        for (List<String> entry : splitIntoEntries(lines)) {
+            List<String> bulletLines = new ArrayList<>();
+            String headerLine = null;
 
-            String name = null, dates = null;
-            List<String> descLines = new ArrayList<>();
-
-            for (int i = 0; i < block.size(); i++) {
-                String line = block.get(i);
-                if (line.isBlank()) continue;
-
-                if (i == 0) {
-                    if (DATE_PATTERN.matcher(line).find()) {
-                        dates = extractDate(line);
-                        name = line.replace(dates, "").trim().replaceAll("[|\\-–—]+$", "").trim();
-                    } else {
-                        name = line;
-                    }
-                } else if (DATE_PATTERN.matcher(line).find() && dates == null) {
-                    dates = extractDate(line);
+            for (String line : entry) {
+                if (headerLine == null && isHeaderLine(line)) {
+                    headerLine = line;
                 } else {
-                    descLines.add(line);
+                    bulletLines.add(stripBulletPrefix(line));
                 }
             }
 
-            if (name == null || name.isBlank()) continue;
+            if (headerLine == null) continue;
 
-            String description = String.join("\n", descLines).strip();
-            result.add(new ParsedProject(name, description, dates));
+            // Format: "ProjectName -- tech, stack, here      2025 - Present"
+            // or just: "ProjectName      2025"
+            String dates = extractTrailingDate(headerLine);
+            String withoutDate = dates.isBlank() ? headerLine : headerLine.substring(0, headerLine.lastIndexOf(dates)).trim();
+
+            String name;
+            // Split on " -- " or " – " to get name vs tech stack
+            String[] parts = PROJECT_SEPARATOR.split(withoutDate, 2);
+            name = parts[0].trim();
+            // parts[1] is tech stack — we don't store it separately, append to description start
+            String techStack = parts.length > 1 ? parts[1].trim() : null;
+
+            if (name.isBlank()) continue;
+
+            String description = String.join("\n", bulletLines).strip();
+            if (techStack != null && !techStack.isBlank()) {
+                description = (description.isBlank() ? "" : description).strip();
+            }
+
+            result.add(new ParsedProject(name, description, dates.isBlank() ? null : dates));
         }
 
         return result;
     }
 
-    // Split body lines into entry blocks by blank lines
-    private List<List<String>> splitIntoBlocks(List<String> lines) {
-        List<List<String>> blocks = new ArrayList<>();
-        List<String> current = new ArrayList<>();
-
-        for (String line : lines) {
-            if (line.isBlank()) {
-                if (!current.isEmpty()) {
-                    blocks.add(new ArrayList<>(current));
-                    current.clear();
-                }
-            } else {
-                current.add(line);
-            }
+    /**
+     * Extracts a date range from the end of a line.
+     * Returns empty string if none found.
+     */
+    private String extractTrailingDate(String line) {
+        var matcher = DATE_PATTERN.matcher(line);
+        String lastMatch = "";
+        int lastStart = -1;
+        while (matcher.find()) {
+            lastMatch = matcher.group();
+            lastStart = matcher.start();
         }
-        if (!current.isEmpty()) blocks.add(current);
-        return blocks;
+        if (lastStart < 0) return "";
+        // Only treat as trailing if it's in the last ~40% of the line
+        if (lastStart < line.length() * 0.4) return "";
+        // Expand to include range separator + second date if adjacent
+        String tail = line.substring(lastStart).trim();
+        return tail;
     }
 
-    private String extractDate(String line) {
-        var matcher = DATE_PATTERN.matcher(line);
-        if (matcher.find()) {
-            // Try to grab full date range (e.g., "Jan 2020 – Mar 2022")
-            int start = matcher.start();
-            // extend to end of line or next non-date character after a dash/dash
-            String sub = line.substring(start);
-            return sub.replaceAll("^([\\w\\s/–—\\-]+?)\\s*[|,·].*$", "$1").trim();
-        }
-        return "";
+    private String stripBulletPrefix(String line) {
+        return BULLET_LINE.matcher(line).replaceFirst("").trim();
     }
 
     private String slugify(String s) {
