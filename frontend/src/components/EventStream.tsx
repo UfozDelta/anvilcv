@@ -1,4 +1,6 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { API_BASE } from '../lib/api';
 
 interface Props {
@@ -7,12 +9,6 @@ interface Props {
   roleEmphasis: string;
   onDone: (appId: string) => void;
   onClose: () => void;
-}
-
-interface StreamState {
-  lines: string[];
-  error: string | null;
-  done: boolean;
 }
 
 function lineColor(line: string): string {
@@ -30,109 +26,61 @@ function lineColor(line: string): string {
 /**
  * Modal popup that streams SSE pipeline events.
  *
- * Single useSyncExternalStore returning one snapshot object.
- * Two separate hooks sharing subsRef caused React to batch both
- * notifications into one render cycle, defeating synchronous rendering.
- * One store → one notify → one forced synchronous commit per SSE line.
+ * Uses @microsoft/fetch-event-source instead of a manual fetch+ReadableStream
+ * loop. The library fires onmessage synchronously per parsed SSE event rather
+ * than inside microtask continuations, so flushSync can force a paint before
+ * the next event arrives — fixing the React 18 batching problem.
  */
 export function EventStream({ jdText, jdUrl, roleEmphasis, onDone, onClose }: Props) {
-  const storeRef = useRef<StreamState>({ lines: [], error: null, done: false });
-  const subsRef = useRef(new Set<() => void>());
+  const [lines, setLines] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
-  function notify() {
-    subsRef.current.forEach(cb => cb());
-  }
-
-  const state = useSyncExternalStore(
-    cb => { subsRef.current.add(cb); return () => subsRef.current.delete(cb); },
-    () => storeRef.current,
-  );
-
   useEffect(() => {
     const ctrl = new AbortController();
 
-    async function run() {
-      try {
-        const res = await fetch(`${API_BASE}/api/applications/stream`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            jdText: jdText.trim() || undefined,
-            jdUrl: jdUrl.trim() || undefined,
-            roleEmphasis,
-          }),
-          signal: ctrl.signal,
-        });
-
-        if (!res.ok || !res.body) {
-          const text = await res.text();
-          storeRef.current = { ...storeRef.current, error: text || `HTTP ${res.status}` };
-          notify();
-          return;
+    fetchEventSource(`${API_BASE}/api/applications/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        jdText: jdText.trim() || undefined,
+        jdUrl: jdUrl.trim() || undefined,
+        roleEmphasis,
+      }),
+      signal: ctrl.signal,
+      // Disable automatic retry — let user close and resubmit on failure
+      openWhenHidden: true,
+      onmessage(ev) {
+        if (ev.event === 'log') {
+          // flushSync forces a synchronous DOM commit + paint before returning.
+          // fetchEventSource fires this callback outside the microtask chain so
+          // flushSync actually works here (unlike inside await reader.read()).
+          flushSync(() => setLines(prev => [...prev, ev.data]));
+        } else if (ev.event === 'done') {
+          setDone(true);
+          setTimeout(() => onDoneRef.current(ev.data), 600);
+        } else if (ev.event === 'error') {
+          setError(ev.data);
         }
+      },
+      onerror(err) {
+        setError(err?.message || 'Stream error');
+        // Throw to stop fetchEventSource from retrying
+        throw err;
+      },
+    });
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '';
-        let currentEvent = 'log';
-
-        while (true) {
-          const { done: streamDone, value } = await reader.read();
-          if (streamDone) break;
-
-          buf += decoder.decode(value, { stream: true });
-          const rawLines = buf.split('\n');
-          buf = rawLines.pop() ?? '';
-
-          for (const raw of rawLines) {
-            const line = raw.trimEnd();
-            if (line.startsWith('event:')) {
-              currentEvent = line.slice(6).trim();
-            } else if (line.startsWith('data:')) {
-              const data = line.slice(5).trim();
-              if (currentEvent === 'log') {
-                // New object reference required — useSyncExternalStore uses Object.is()
-                storeRef.current = { ...storeRef.current, lines: [...storeRef.current.lines, data] };
-                notify();
-              } else if (currentEvent === 'done') {
-                storeRef.current = { ...storeRef.current, done: true };
-                notify();
-                setTimeout(() => onDoneRef.current(data), 600);
-                return;
-              } else if (currentEvent === 'error') {
-                storeRef.current = { ...storeRef.current, error: data };
-                notify();
-                return;
-              }
-              currentEvent = 'log';
-            }
-          }
-        }
-
-        storeRef.current = { ...storeRef.current, error: 'Stream ended without done event' };
-        notify();
-      } catch (e: any) {
-        if (e?.name !== 'AbortError') {
-          storeRef.current = { ...storeRef.current, error: e?.message || 'Stream error' };
-          notify();
-        }
-      }
-    }
-
-    run();
     return () => ctrl.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [state.lines]);
-
-  const { lines, error, done } = state;
+  }, [lines]);
 
   return (
     <div
