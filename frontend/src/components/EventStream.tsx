@@ -5,6 +5,7 @@ interface Props {
   jdText: string;
   jdUrl: string;
   roleEmphasis: string;
+  includeCoverLetter: boolean;
   onDone: (appId: string) => void;
   onClose: () => void;
 }
@@ -32,7 +33,7 @@ function lineColor(line: string): string {
  * each poll response is a normal fetch that updates state in a standard
  * React event handler, so setState triggers immediate re-renders.
  */
-export function EventStream({ jdText, jdUrl, roleEmphasis, onDone, onClose }: Props) {
+export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, onDone, onClose }: Props) {
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -55,6 +56,7 @@ export function EventStream({ jdText, jdUrl, roleEmphasis, onDone, onClose }: Pr
             jdText: jdText.trim() || undefined,
             jdUrl: jdUrl.trim() || undefined,
             roleEmphasis,
+            includeCoverLetter,
           }),
         });
         if (!res.ok) {

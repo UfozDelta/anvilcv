@@ -15,7 +15,9 @@ public interface LlmClient {
 
     JdCleanResult cleanJd(String rawJd, ProgressLog progress);
 
-    MatchResult match(MatchRequest req, ProgressLog progress);
+    RankResult rankBullets(RankRequest req, ProgressLog progress);
+
+    String coverLetter(CoverLetterRequest req, ProgressLog progress);
 
     // --- types ---
 
@@ -33,8 +35,9 @@ public interface LlmClient {
 
     record JdCleanResult(String cleanJd, String company, String role, List<String> keywords) {}
 
-    record MatchRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis, List<BulletForMatch> bullets) {}
+    record RankRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis, List<BulletForMatch> bullets) {}
+    record CoverLetterRequest(String cleanJd, String company, String role, String roleEmphasis, List<String> topBulletTexts) {}
     record BulletForMatch(String bulletId, String text, List<String> tags, String projectName) {}
-    record MatchResult(List<RankedBullet> rankedBullets, String coverLetter, List<String> atsMatched, List<String> atsMissing) {}
+    record RankResult(List<RankedBullet> rankedBullets, List<String> atsMatched, List<String> atsMissing) {}
     record RankedBullet(String bulletId, int rank, String why) {}
 }

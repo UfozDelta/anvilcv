@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,6 +28,7 @@ public class ApplicationService {
     private static final Logger log = LoggerFactory.getLogger(ApplicationService.class);
     private static final int MAX_TOTAL = 8;
     private static final int MAX_PER_PROJECT = 3;
+    private static final ExecutorService PARALLEL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final ApplicationRepository repo;
     private final BulletRepository bulletRepo;
@@ -58,13 +62,17 @@ public class ApplicationService {
                 new IllegalArgumentException("Application not found: " + id));
     }
 
+    public void delete(UUID id) {
+        repo.deleteById(id);
+    }
+
     public Application updateOutcome(UUID id, String outcome) {
         Application a = get(id);
         a.setOutcome(outcome);
         return repo.save(a);
     }
 
-    public Application create(String jdText, String jdUrl, String roleEmphasis, ProgressLog progress) {
+    public Application create(String jdText, String jdUrl, String roleEmphasis, boolean includeCoverLetter, ProgressLog progress) {
         if ((jdText == null || jdText.isBlank()) && (jdUrl == null || jdUrl.isBlank())) {
             throw new IllegalArgumentException("Provide jdText or jdUrl");
         }
@@ -81,18 +89,36 @@ public class ApplicationService {
         LlmClient.JdCleanResult clean = llm.cleanJd(jdText, progress);
         tClean.stop();
 
-        // Stage: rank bullets — sends all bullets to LLM for scoring against the JD
+        // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
         List<Bullet> allBullets = bulletRepo.findAll();
         if (allBullets.isEmpty()) {
             throw new IllegalStateException("No bullets in the bank — generate or add some first.");
         }
-        // Only fetch projects that actually appear in the bullet bank, not the entire table.
-        Set<UUID> projectIds = allBullets.stream().map(Bullet::getProjectId).collect(Collectors.toSet());
+
+        // Pre-filter: score each bullet by how many of its tags overlap with JD keywords,
+        // then take the top 25. Keeps the match prompt focused and output size small —
+        // LLM ranking accuracy degrades significantly past ~25 items.
+        Set<String> kwLower = clean.keywords().stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+        List<Bullet> candidates = allBullets.stream()
+                .sorted(Comparator.comparingLong((Bullet b) ->
+                        Arrays.stream(b.getTags() == null ? new String[0] : b.getTags())
+                              .filter(t -> kwLower.contains(t.toLowerCase()))
+                              .count()
+                ).reversed())
+                .limit(25)
+                .toList();
+
+        progress.emit("Pre-filter: " + allBullets.size() + " total bullets → top " + candidates.size()
+                + " by tag overlap with JD keywords (" + clean.keywords().size() + " keywords)");
+
+        // Only fetch projects that actually appear in the candidate set.
+        Set<UUID> projectIds = candidates.stream().map(Bullet::getProjectId).collect(Collectors.toSet());
         Map<UUID, Project> projectById = projectRepo.findByIdIn(projectIds).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
-        progress.emit("Matching " + allBullets.size() + " bullets from bullet bank against JD...");
-        List<LlmClient.BulletForMatch> bulletsForMatch = allBullets.stream()
+        List<LlmClient.BulletForMatch> bulletsForMatch = candidates.stream()
                 .map(b -> new LlmClient.BulletForMatch(
                         b.getId().toString(),
                         b.getText(),
@@ -100,23 +126,26 @@ public class ApplicationService {
                         projectById.containsKey(b.getProjectId()) ? projectById.get(b.getProjectId()).getName() : ""))
                 .toList();
 
-        PipelineTimer tMatch = PipelineTimer.start("match (" + allBullets.size() + " bullets)");
-        LlmClient.MatchResult match = llm.match(new LlmClient.MatchRequest(
+        // Fire ranking (always) and cover letter (optional) in parallel.
+        progress.emit("Ranking " + candidates.size() + " candidates against JD...");
+
+        LlmClient.RankRequest rankReq = new LlmClient.RankRequest(
                 clean.cleanJd(), clean.company(), clean.role(),
-                clean.keywords(), roleEmphasis, bulletsForMatch), progress);
-        tMatch.stop();
+                clean.keywords(), roleEmphasis, bulletsForMatch);
+
+        PipelineTimer tRank = PipelineTimer.start("rank (" + candidates.size() + " bullets)");
+        LlmClient.RankResult rank = llm.rankBullets(rankReq, progress);
+        tRank.stop();
 
         // Server-side selection: top 8 overall, cap 3 per project.
-        // Emit each selection/skip decision so the user can see the capping logic live.
-        Map<UUID, Bullet> bulletById = allBullets.stream()
+        Map<UUID, Bullet> bulletById = candidates.stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
-        List<LlmClient.RankedBullet> rankedSorted = match.rankedBullets().stream()
+        List<LlmClient.RankedBullet> rankedSorted = rank.rankedBullets().stream()
                 .sorted(Comparator.comparingInt(LlmClient.RankedBullet::rank))
                 .toList();
 
         progress.emit("Selecting top " + MAX_TOTAL + " bullets (max " + MAX_PER_PROJECT + " per project)...");
         LinkedHashMap<UUID, Integer> perProject = new LinkedHashMap<>();
-        // Track project names for summary at the end.
         LinkedHashMap<String, Integer> perProjectName = new LinkedHashMap<>();
         List<Bullet> selected = new ArrayList<>();
         for (LlmClient.RankedBullet rb : rankedSorted) {
@@ -129,7 +158,6 @@ public class ApplicationService {
             String proj = projectById.containsKey(b.getProjectId())
                     ? projectById.get(b.getProjectId()).getName() : "unknown";
             if (count >= MAX_PER_PROJECT) {
-                // Skipped by cap — no bullet text, just which project hit the limit.
                 progress.emit("Skipped: cap reached for " + proj + " (" + MAX_PER_PROJECT + "/" + MAX_PER_PROJECT + ")");
                 continue;
             }
@@ -137,7 +165,6 @@ public class ApplicationService {
             perProjectName.merge(proj, 1, Integer::sum);
             selected.add(b);
         }
-        // Emit grouped summary so user sees distribution across projects at a glance.
         progress.emit("Selection complete - " + selected.size() + " bullets:");
         perProjectName.forEach((proj, cnt) ->
                 progress.emit("  " + proj + " - " + cnt + " bullet" + (cnt > 1 ? "s" : "")));
@@ -147,10 +174,35 @@ public class ApplicationService {
         PipelineTimer tRender = PipelineTimer.start("LaTeX render");
         String tex = renderer.render(selected, projectById);
         tRender.stop();
-        // Stage: compile PDF
-        progress.emit("Compiling PDF via tectonic...");
-        PipelineTimer tPdf = PipelineTimer.start("tectonic compile");
-        PdfCompiler.Result r = compiler.compile(tex);
+
+        // Fire cover letter in parallel with tectonic compile — cover letter gets
+        // actual selected bullet texts, and tectonic (5-15s) hides most of the LLM latency.
+        if (includeCoverLetter) {
+            progress.emit("Compiling PDF + generating cover letter in parallel...");
+        } else {
+            progress.emit("Compiling PDF via tectonic...");
+            progress.emit("Cover letter: skipped");
+        }
+
+        List<String> selectedTexts = selected.stream().map(Bullet::getText).toList();
+        CompletableFuture<PdfCompiler.Result> pdfFuture = CompletableFuture
+                .supplyAsync(() -> compiler.compile(tex), PARALLEL_EXECUTOR);
+        CompletableFuture<String> coverLetterFuture = includeCoverLetter
+                ? CompletableFuture.supplyAsync(() -> llm.coverLetter(
+                        new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), roleEmphasis, selectedTexts),
+                        progress), PARALLEL_EXECUTOR)
+                : CompletableFuture.completedFuture(null);
+
+        PipelineTimer tPdf = PipelineTimer.start("tectonic + cover letter");
+        PdfCompiler.Result r;
+        String coverLetterText;
+        try {
+            r = pdfFuture.get();
+            coverLetterText = coverLetterFuture.get();
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new RuntimeException("Pipeline failed: " + cause.getMessage(), cause);
+        }
         tPdf.stop("success=" + r.success());
 
         Application a = new Application();
@@ -159,9 +211,9 @@ public class ApplicationService {
         a.setRoleEmphasis(roleEmphasis);
         a.setCompany(clean.company());
         a.setRole(clean.role());
-        a.setCoverLetter(match.coverLetter());
-        a.setAtsMatched(match.atsMatched().toArray(new String[0]));
-        a.setAtsMissing(match.atsMissing().toArray(new String[0]));
+        a.setCoverLetter(coverLetterText);
+        a.setAtsMatched(rank.atsMatched().toArray(new String[0]));
+        a.setAtsMissing(rank.atsMissing().toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
         a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
         try {

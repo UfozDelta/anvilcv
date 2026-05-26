@@ -18,6 +18,12 @@ export function Experiences() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  async function deleteExperience(id: string, label: string) {
+    if (!window.confirm(`Delete "${label}" and all its bullets?`)) return;
+    await api.del(`/api/projects/${id}`);
+    await load();
+  }
+
   async function load() {
     setLoading(true);
     try { setExperiences(await api.get<Project[]>('/api/projects?kind=EXPERIENCE')); }
@@ -58,6 +64,11 @@ export function Experiences() {
                     {[p.company, p.location, p.dates].filter(Boolean).join(' · ') || '—'}
                   </div>
                 </div>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  style={{ marginLeft: 'auto', marginRight: 8 }}
+                  onClick={e => { e.preventDefault(); deleteExperience(p.id, p.title || p.name); }}
+                >DELETE</button>
                 <span className="list__arrow">→</span>
               </Link>
             ))}

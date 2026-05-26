@@ -3,6 +3,7 @@ package com.resumepipeline.llm;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
+import com.google.genai.ResponseStream;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Schema;
@@ -362,10 +363,10 @@ public class GoogleLlmClient implements LlmClient {
         }
     }
 
-    // -------- match --------
+    // -------- rankBullets --------
 
     @Override
-    public MatchResult match(MatchRequest req, ProgressLog progress) {
+    public RankResult rankBullets(RankRequest req, ProgressLog progress) {
         progress.emit("Calling LLM to rank " + req.bullets().size() + " bullets against JD...");
         StringBuilder bulletsBlock = new StringBuilder();
         for (BulletForMatch b : req.bullets()) {
@@ -376,19 +377,12 @@ public class GoogleLlmClient implements LlmClient {
         }
 
         String prompt = """
-                You are an expert resume writer. Rank EVERY bullet below against the job description
-                and write a cover letter.
+                You are an expert resume writer. Rank EVERY bullet below against the job description.
 
                 Rank ALL %d bullets from rank 1 (best fit) to %d (worst). Use integers, no ties.
                 For each bullet give a one-sentence "why" tying it to specific JD requirements.
 
-                Then write a cover letter (3-4 short paragraphs):
-                  - Open by naming the company and role.
-                  - Reference 2-3 of the top-ranked bullets in plain prose (do not list them).
-                  - Close with a brief, confident call to action.
-                  - No "Dear Hiring Manager" — start "Hi %s team," or similar.
-
-                Finally produce atsMatched (keywords from the JD that appear in the top 8 bullets)
+                Produce atsMatched (keywords from the JD that appear in the top 8 bullets)
                 and atsMissing (JD keywords NOT covered).
 
                 Role emphasis: %s
@@ -404,7 +398,6 @@ public class GoogleLlmClient implements LlmClient {
                 %s
                 """.formatted(
                         req.bullets().size(), req.bullets().size(),
-                        req.company() == null ? "the" : req.company(),
                         req.roleEmphasis(),
                         req.company(),
                         req.cleanJd(),
@@ -430,20 +423,18 @@ public class GoogleLlmClient implements LlmClient {
                 .type(Type.Known.OBJECT)
                 .properties(Map.of(
                         "rankedBullets", Schema.builder().type(Type.Known.ARRAY).items(rankedItem).build(),
-                        "coverLetter",   Schema.builder().type(Type.Known.STRING).build(),
                         "atsMatched",    stringArray,
                         "atsMissing",    stringArray
                 ))
-                .required(List.of("rankedBullets", "coverLetter", "atsMatched", "atsMissing"))
+                .required(List.of("rankedBullets", "atsMatched", "atsMissing"))
                 .build();
 
-        String json = call(matchModel, prompt, schema);
+        String json = callStreaming(matchModel, prompt, schema, 1.0, "Ranking", progress);
         try {
-            MatchEnvelope env = mapper.readValue(json, MatchEnvelope.class);
+            RankEnvelope env = mapper.readValue(json, RankEnvelope.class);
             List<RankedBullet> ranked = env.rankedBullets.stream()
                     .map(r -> new RankedBullet(r.bulletId, r.rank, r.why))
                     .toList();
-            // Show top 4 only with tags and reason — enough to understand what the LLM valued.
             progress.emit("Top 4 ranked bullets:");
             ranked.stream()
                     .sorted(java.util.Comparator.comparingInt(RankedBullet::rank))
@@ -462,9 +453,60 @@ public class GoogleLlmClient implements LlmClient {
             if (!atsMissing.isEmpty()) {
                 progress.emit("ATS missing (" + atsMissing.size() + "): " + String.join(", ", atsMissing));
             }
-            return new MatchResult(ranked, env.coverLetter, atsMatched, atsMissing);
+            return new RankResult(ranked, atsMatched, atsMissing);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse LLM match response: " + json, e);
+            throw new RuntimeException("Failed to parse LLM rank response: " + json, e);
+        }
+    }
+
+    // -------- coverLetter --------
+
+    @Override
+    public String coverLetter(CoverLetterRequest req, ProgressLog progress) {
+        progress.emit("Generating cover letter...");
+        String bulletsBlock = req.topBulletTexts().stream()
+                .map(t -> "  - " + t)
+                .reduce("", (a, b) -> a + b + "\n");
+
+        String prompt = """
+                Write a cover letter for this job application.
+
+                Guidelines:
+                  - 3-4 short paragraphs.
+                  - Open by naming the company and role.
+                  - Reference 2-3 of the provided bullets in plain prose (do not list them verbatim).
+                  - Close with a brief, confident call to action.
+                  - No "Dear Hiring Manager" — start "Hi %s team," or similar.
+                  - Plain text only, no markdown.
+
+                Role emphasis: %s
+                Company: %s
+
+                Cleaned JD:
+                %s
+
+                Top selected bullets:
+                %s
+                """.formatted(
+                        req.company() == null ? "the" : req.company(),
+                        req.roleEmphasis(),
+                        req.company(),
+                        req.cleanJd(),
+                        bulletsBlock);
+
+        Schema schema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of("coverLetter", Schema.builder().type(Type.Known.STRING).build()))
+                .required(List.of("coverLetter"))
+                .build();
+
+        String json = callStreaming(matchModel, prompt, schema, 1.0, "Cover letter", progress);
+        try {
+            CoverLetterEnvelope env = mapper.readValue(json, CoverLetterEnvelope.class);
+            progress.emit("Cover letter generated.");
+            return env.coverLetter;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM cover letter response: " + json, e);
         }
     }
 
@@ -504,6 +546,46 @@ public class GoogleLlmClient implements LlmClient {
         }
     }
 
+    private String callStreaming(String model, String prompt, Schema schema,
+                                 double temperature, String label, ProgressLog progress) {
+        GenerateContentConfig config = GenerateContentConfig.builder()
+                .responseMimeType("application/json")
+                .responseSchema(schema)
+                .temperature((float) temperature)
+                .build();
+        try {
+            PipelineTimer tLlm = PipelineTimer.start("LLM stream " + model + " (promptLen=" + prompt.length() + ")");
+            String json = CompletableFuture
+                    .supplyAsync(() -> {
+                        ResponseStream<GenerateContentResponse> stream =
+                                client.models.generateContentStream(model, prompt, config);
+                        StringBuilder sb = new StringBuilder();
+                        int chunks = 0;
+                        for (GenerateContentResponse chunk : stream) {
+                            String t = chunk.text();
+                            if (t != null) sb.append(t);
+                            chunks++;
+                            if (chunks % 10 == 0) {
+                                // Rough word count — strip ** so bold tokens don't inflate count.
+                                int words = sb.toString().replace("**", "").trim().split("\\s+").length;
+                                progress.emit(label + "... (" + words + "w received)");
+                            }
+                        }
+                        return sb.toString();
+                    })
+                    .get(120, TimeUnit.SECONDS);
+            tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
+            log.debug("LLM stream {} raw: {}", model, json);
+            return json;
+        } catch (TimeoutException e) {
+            throw new RuntimeException("LLM call timed out after 2 minutes — Gemini may be overloaded, try again.", e);
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof RuntimeException re) throw re;
+            throw new RuntimeException("LLM call failed: " + cause.getMessage(), cause);
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class BulletsEnvelope { public List<BulletJson> bullets; }
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -513,12 +595,13 @@ public class GoogleLlmClient implements LlmClient {
         public String cleanJd; public String company; public String role; public List<String> keywords;
     }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class MatchEnvelope {
+    private static class RankEnvelope {
         public List<RankedItemJson> rankedBullets;
-        public String coverLetter;
         public List<String> atsMatched;
         public List<String> atsMissing;
     }
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class RankedItemJson { public String bulletId; public int rank; public String why; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static class CoverLetterEnvelope { public String coverLetter; }
 }

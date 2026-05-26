@@ -8,4 +8,5 @@ import java.util.UUID;
 public interface BulletRepository extends JpaRepository<Bullet, UUID> {
     List<Bullet> findByProjectIdOrderByCreatedAtAsc(UUID projectId);
     long countByProjectId(UUID projectId);
+    void deleteByProjectId(UUID projectId);
 }

@@ -10,6 +10,12 @@ export function Applications() {
   const [outcome, setOutcome] = useState('');
   const [loading, setLoading] = useState(true);
 
+  async function deleteApp(id: string, label: string) {
+    if (!window.confirm(`Delete application for "${label}"?`)) return;
+    await api.del(`/api/applications/${id}`);
+    await load();
+  }
+
   async function load() {
     setLoading(true);
     try {
@@ -50,6 +56,11 @@ export function Applications() {
                 </div>
               </div>
               <span className={`outcome outcome--${a.outcome}`}>{a.outcome}</span>
+              <button
+                className="btn btn--ghost btn--sm"
+                style={{ marginLeft: 8 }}
+                onClick={e => { e.preventDefault(); deleteApp(a.id, a.company || 'Untitled'); }}
+              >DELETE</button>
             </Link>
           ))}
           {apps.length === 0 && (

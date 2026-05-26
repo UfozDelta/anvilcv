@@ -56,7 +56,7 @@ public class ApplicationController {
         SSE_EXECUTOR.submit(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
-                Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), progress);
+                Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), req.includeCoverLetter(), progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
@@ -83,7 +83,7 @@ public class ApplicationController {
     @PostMapping
     public ApplicationResponse create(@RequestBody @Valid CreateApplicationRequest req,
                                       @RequestParam(defaultValue = "false") boolean includePdf) {
-        Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), ProgressLog.noOp());
+        Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), req.includeCoverLetter(), ProgressLog.noOp());
         return ApplicationResponse.from(a, includePdf);
     }
 
@@ -116,7 +116,7 @@ public class ApplicationController {
             };
 
             try {
-                Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), progress);
+                Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), req.includeCoverLetter(), progress);
                 emitter.send(SseEmitter.event().name("done").data(a.getId().toString()));
                 emitter.complete();
             } catch (Exception e) {
@@ -130,6 +130,12 @@ public class ApplicationController {
         });
 
         return emitter;
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        service.delete(id);
     }
 
     @PatchMapping("/{id}")

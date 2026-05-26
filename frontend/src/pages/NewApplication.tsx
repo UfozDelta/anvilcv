@@ -16,6 +16,7 @@ export function NewApplication() {
   const [jdText, setJdText] = useState('');
   const [jdUrl, setJdUrl] = useState('');
   const [roleEmphasis, setRoleEmphasis] = useState('backend');
+  const [includeCoverLetter, setIncludeCoverLetter] = useState(false);
   const [streaming, setStreaming] = useState(false);
 
   function submit(e: FormEvent) {
@@ -82,6 +83,17 @@ export function NewApplication() {
           </div>
         </div>
 
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={includeCoverLetter}
+            onChange={e => setIncludeCoverLetter(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer' }}
+          />
+          <span className="field__label" style={{ margin: 0 }}>Generate cover letter</span>
+          <span className="label muted" style={{ fontSize: 10 }}>+~10s</span>
+        </label>
+
         <div className="row row--between row--centered" style={{ marginTop: 12 }}>
           <span className="label muted">SYNC · ~15-25S · MODAL WILL OPEN</span>
           <button type="submit" className="btn btn--acid" disabled={streaming}>
@@ -95,6 +107,7 @@ export function NewApplication() {
           jdText={jdText}
           jdUrl={jdUrl}
           roleEmphasis={roleEmphasis}
+          includeCoverLetter={includeCoverLetter}
           onDone={appId => nav(`/applications/${appId}`)}
           onClose={() => setStreaming(false)}
         />

@@ -13,6 +13,12 @@ export function Projects() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  async function deleteProject(id: string, name: string) {
+    if (!window.confirm(`Delete "${name}" and all its bullets?`)) return;
+    await api.del(`/api/projects/${id}`);
+    await load();
+  }
+
   async function load() {
     setLoading(true);
     try { setProjects(await api.get<Project[]>('/api/projects?kind=PROJECT')); }
@@ -49,6 +55,11 @@ export function Projects() {
                   <h3 className="list__title">{p.name}</h3>
                   <div className="list__meta">{p.sourcePath || 'description-only'}</div>
                 </div>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  style={{ marginLeft: 'auto', marginRight: 8 }}
+                  onClick={e => { e.preventDefault(); deleteProject(p.id, p.name); }}
+                >DELETE</button>
                 <span className="list__arrow">→</span>
               </Link>
             ))}

@@ -18,7 +18,8 @@ public class ApplicationDtos {
     public record CreateApplicationRequest(
             String jdText,
             String jdUrl,
-            @NotBlank String roleEmphasis
+            @NotBlank String roleEmphasis,
+            boolean includeCoverLetter
     ) {}
 
     public record UpdateOutcomeRequest(@NotBlank String outcome) {}

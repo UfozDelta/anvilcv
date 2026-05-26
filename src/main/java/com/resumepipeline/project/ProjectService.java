@@ -1,6 +1,8 @@
 package com.resumepipeline.project;
 
+import com.resumepipeline.bullet.BulletRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -9,9 +11,11 @@ import java.util.UUID;
 public class ProjectService {
 
     private final ProjectRepository repo;
+    private final BulletRepository bulletRepo;
 
-    public ProjectService(ProjectRepository repo) {
+    public ProjectService(ProjectRepository repo, BulletRepository bulletRepo) {
         this.repo = repo;
+        this.bulletRepo = bulletRepo;
     }
 
     public List<Project> list() {
@@ -45,7 +49,9 @@ public class ProjectService {
         return repo.save(p);
     }
 
+    @Transactional
     public void delete(UUID id) {
+        bulletRepo.deleteByProjectId(id);
         repo.deleteById(id);
     }
 }
