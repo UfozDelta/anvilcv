@@ -78,7 +78,7 @@ public class GoogleLlmClient implements LlmClient {
         String countTarget = experience ? "8 to 12" : "4 to 6";
         String sourceWord  = experience ? "ROLE" : "PROJECT";
 
-        GenerationConfig cfg = configService.get();
+        GenerationConfig cfg = configService.get(req.userId());
 
         String lens = CategoryLenses.lensFor(req.category());
         String lensBlock = lens == null ? "" : "\n─────────────────────────────────────────────────────────────\n## 0. CATEGORY LENS (read this FIRST)\n\n" + lens + "\n";

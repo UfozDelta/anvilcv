@@ -4,6 +4,7 @@ import com.resumepipeline.api.dto.BulletDtos.BulletResponse;
 import com.resumepipeline.api.dto.ProjectDtos.CreateProjectRequest;
 import com.resumepipeline.api.dto.ProjectDtos.ProjectResponse;
 import com.resumepipeline.api.dto.ProjectDtos.UpdateProjectRequest;
+import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.bullet.BulletService;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
@@ -11,6 +12,7 @@ import com.resumepipeline.project.ProjectService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -36,19 +38,21 @@ public class ProjectController {
     }
 
     @GetMapping
-    public List<ProjectResponse> list(@RequestParam(required = false) Project.Kind kind) {
-        var rows = kind == null ? projects.list() : projects.listByKind(kind);
+    public List<ProjectResponse> list(Authentication auth, @RequestParam(required = false) Project.Kind kind) {
+        UUID userId = AuthUtils.userId(auth);
+        var rows = kind == null ? projects.list(userId) : projects.listByKind(userId, kind);
         return rows.stream().map(ProjectResponse::from).toList();
     }
 
     @GetMapping("/{id}")
-    public ProjectResponse get(@PathVariable UUID id) {
-        return ProjectResponse.from(projects.get(id));
+    public ProjectResponse get(Authentication auth, @PathVariable UUID id) {
+        return ProjectResponse.from(projects.get(AuthUtils.userId(auth), id));
     }
 
     @PostMapping
-    public ProjectResponse create(@RequestBody @Valid CreateProjectRequest req) {
-        Project p = projects.create(
+    public ProjectResponse create(Authentication auth, @RequestBody @Valid CreateProjectRequest req) {
+        UUID userId = AuthUtils.userId(auth);
+        Project p = projects.create(userId,
                 req.kind() == null ? Project.Kind.PROJECT : req.kind(),
                 req.name(), req.description(), req.sourcePath(),
                 req.title(), req.company(), req.location(), req.dates());
@@ -56,50 +60,40 @@ public class ProjectController {
     }
 
     @PutMapping("/{id}")
-    public ProjectResponse update(@PathVariable UUID id, @RequestBody UpdateProjectRequest req) {
-        return ProjectResponse.from(projects.update(id,
+    public ProjectResponse update(Authentication auth, @PathVariable UUID id, @RequestBody UpdateProjectRequest req) {
+        return ProjectResponse.from(projects.update(AuthUtils.userId(auth), id,
                 req.name(), req.description(), req.sourcePath(),
                 req.title(), req.company(), req.location(), req.dates()));
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable UUID id) {
-        projects.delete(id);
+    public void delete(Authentication auth, @PathVariable UUID id) {
+        projects.delete(AuthUtils.userId(auth), id);
     }
 
     @PostMapping("/{id}/bullets/generate")
-    public List<BulletResponse> generateBullets(@PathVariable UUID id) {
-        return bullets.generateForProject(id).stream().map(BulletResponse::from).toList();
+    public List<BulletResponse> generateBullets(Authentication auth, @PathVariable UUID id) {
+        return bullets.generateForProject(AuthUtils.userId(auth), id).stream().map(BulletResponse::from).toList();
     }
 
     public record GenerateBankRequest(List<String> categories) {}
 
-    /** Blocking generate-bank kept for non-streaming callers. */
     @PostMapping("/{id}/bullets/generate-bank")
-    public List<BulletResponse> generateBank(@PathVariable UUID id, @RequestBody GenerateBankRequest req) {
-        return bullets.generateBank(id, req.categories(), ProgressLog.noOp())
+    public List<BulletResponse> generateBank(Authentication auth, @PathVariable UUID id,
+                                             @RequestBody GenerateBankRequest req) {
+        return bullets.generateBank(AuthUtils.userId(auth), id, req.categories(), ProgressLog.noOp())
                 .stream().map(BulletResponse::from).toList();
     }
 
-    /**
-     * SSE generate-bank — streams real events for each bullet kept/cut/category.
-     *
-     * Event types:
-     *   log  — one progress message (data = plain text)
-     *   done — all categories complete (data = total bullet count)
-     *   error — pipeline failed (data = error message)
-     *
-     * Why POST+SSE: we need the categories list in the body (can be large), and GET
-     * query params would require URL encoding a list. Spring SseEmitter works fine
-     * with POST.
-     */
     @PostMapping(value = "/{id}/bullets/generate-bank/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter generateBankStream(@PathVariable UUID id, @RequestBody GenerateBankRequest req, HttpServletResponse response) {
+    public SseEmitter generateBankStream(Authentication auth, @PathVariable UUID id,
+                                         @RequestBody GenerateBankRequest req, HttpServletResponse response) {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache");
         response.setBufferSize(1);
-        // Timeout: up to 8 categories × ~15s per LLM call = 120s worst case.
         SseEmitter emitter = new SseEmitter(120_000L);
+        // Capture userId before dispatch — SecurityContext is not propagated to virtual threads.
+        UUID userId = AuthUtils.userId(auth);
 
         SSE_EXECUTOR.submit(() -> {
             ScheduledFuture<?> keepalive = SseUtils.startKeepalive(emitter);
@@ -112,7 +106,7 @@ public class ProjectController {
             };
 
             try {
-                List<?> saved = bullets.generateBank(id, req.categories(), progress);
+                List<?> saved = bullets.generateBank(userId, id, req.categories(), progress);
                 emitter.send(SseEmitter.event().name("done").data(String.valueOf(saved.size())));
                 emitter.complete();
             } catch (Exception e) {

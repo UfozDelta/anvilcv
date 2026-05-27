@@ -1,7 +1,9 @@
 package com.resumepipeline.api;
 
+import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.profile.ProfileService.ProfileDto;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -15,12 +17,12 @@ public class ProfileController {
     }
 
     @GetMapping
-    public ProfileDto get() {
-        return ProfileDto.from(service.get(), service);
+    public ProfileDto get(Authentication auth) {
+        return ProfileDto.from(service.get(AuthUtils.userId(auth)), service);
     }
 
     @PutMapping
-    public ProfileDto update(@RequestBody ProfileDto dto) {
-        return ProfileDto.from(service.update(dto), service);
+    public ProfileDto update(Authentication auth, @RequestBody ProfileDto dto) {
+        return ProfileDto.from(service.update(AuthUtils.userId(auth), dto), service);
     }
 }

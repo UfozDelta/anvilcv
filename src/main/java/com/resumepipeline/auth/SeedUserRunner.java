@@ -42,12 +42,12 @@ public class SeedUserRunner implements ApplicationRunner {
         String hash = passwordEncoder.encode(rawPassword);
         userRepository.findById(SEED_USER_ID).ifPresentOrElse(
                 user -> {
+                    user.setUsername(username);
+                    user.setEmail(email);
                     user.setPasswordHash(hash);
                     userRepository.save(user);
                 },
                 () -> {
-                    // Row was inserted by V6 migration with placeholder hash; update it.
-                    // Should not normally reach here, but handles fresh-DB edge case.
                     AppUser u = new AppUser(username, email, hash);
                     userRepository.save(u);
                 }

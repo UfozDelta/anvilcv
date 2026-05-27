@@ -59,12 +59,17 @@ public class Application {
     @Column(nullable = false)
     private String outcome = "applied";
 
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
     public Application() {}
 
     public UUID getId() { return id; }
+    public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
     public String getCompany() { return company; }
     public void setCompany(String company) { this.company = company; }
     public String getRole() { return role; }

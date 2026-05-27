@@ -39,8 +39,8 @@ public class ApplicationRenderer {
         this.profileService = profileService;
     }
 
-    public String render(List<Bullet> selectedInOrder, Map<UUID, Project> projectById) {
-        Profile p = profileService.get();
+    public String render(UUID userId, List<Bullet> selectedInOrder, Map<UUID, Project> projectById) {
+        Profile p = profileService.get(userId);
         List<EducationEntry> education = profileService.readEducation(p);
 
         // Partition selected bullets by their project's kind

@@ -23,6 +23,7 @@ public interface LlmClient {
 
     enum SourceKind { PROJECT, EXPERIENCE }
     record GenerateBulletsRequest(
+            java.util.UUID userId,
             SourceKind kind,
             String category,   // slug from CategoryLenses or "general"
             String projectName,

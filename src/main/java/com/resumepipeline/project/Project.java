@@ -34,13 +34,17 @@ public class Project {
     private String location;
     private String dates;
 
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
     public Project() {}
 
-    public Project(Kind kind, String name, String description, String sourcePath,
+    public Project(UUID userId, Kind kind, String name, String description, String sourcePath,
                    String title, String company, String location, String dates) {
+        this.userId = userId;
         this.kind = kind == null ? Kind.PROJECT : kind;
         this.name = name;
         this.description = description;
@@ -52,6 +56,8 @@ public class Project {
     }
 
     public UUID getId() { return id; }
+    public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
     public Kind getKind() { return kind; }
     public void setKind(Kind kind) { this.kind = kind == null ? Kind.PROJECT : kind; }
     public String getName() { return name; }

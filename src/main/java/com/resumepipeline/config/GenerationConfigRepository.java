@@ -5,5 +5,5 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface GenerationConfigRepository extends JpaRepository<GenerationConfig, UUID> {
-    Optional<GenerationConfig> findFirstBySingletonTrue();
+    Optional<GenerationConfig> findByUserId(UUID userId);
 }

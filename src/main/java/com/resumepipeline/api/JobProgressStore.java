@@ -19,12 +19,17 @@ public class JobProgressStore {
 
     public record Snapshot(List<String> lines, Status status, UUID appId, String error) {}
 
-    private record JobState(List<String> lines, Status status, UUID appId, String error, Instant updatedAt) {}
+    private record JobState(List<String> lines, Status status, UUID appId, String error, UUID userId, Instant updatedAt) {}
 
     private final ConcurrentHashMap<UUID, JobState> store = new ConcurrentHashMap<>();
 
-    public void start(UUID jobId) {
-        store.put(jobId, new JobState(new ArrayList<>(), Status.RUNNING, null, null, Instant.now()));
+    public void start(UUID jobId, UUID userId) {
+        store.put(jobId, new JobState(new ArrayList<>(), Status.RUNNING, null, null, userId, Instant.now()));
+    }
+
+    public boolean isOwner(UUID jobId, UUID userId) {
+        JobState s = store.get(jobId);
+        return s != null && userId.equals(s.userId());
     }
 
     public void append(UUID jobId, String line) {
@@ -32,18 +37,18 @@ public class JobProgressStore {
             if (s == null) return null;
             List<String> lines = new ArrayList<>(s.lines());
             lines.add(line);
-            return new JobState(lines, s.status(), s.appId(), s.error(), Instant.now());
+            return new JobState(lines, s.status(), s.appId(), s.error(), s.userId(), Instant.now());
         });
     }
 
     public void complete(UUID jobId, UUID appId) {
         store.computeIfPresent(jobId, (id, s) ->
-                new JobState(s.lines(), Status.DONE, appId, null, Instant.now()));
+                new JobState(s.lines(), Status.DONE, appId, null, s.userId(), Instant.now()));
     }
 
     public void fail(UUID jobId, String error) {
         store.computeIfPresent(jobId, (id, s) ->
-                new JobState(s.lines(), Status.FAILED, null, error, Instant.now()));
+                new JobState(s.lines(), Status.FAILED, null, error, s.userId(), Instant.now()));
     }
 
     /** Returns null if jobId unknown. */

@@ -3,18 +3,18 @@ package com.resumepipeline.api;
 import com.resumepipeline.api.dto.ApplicationDtos.*;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationService;
+import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.progress.ProgressLog;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
@@ -30,7 +30,6 @@ public class ApplicationController {
     private final ApplicationService service;
     private final JobProgressStore jobStore;
 
-    // Virtual-thread executor — one thread per SSE request, cheap on JDK 21+.
     private static final ExecutorService SSE_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     public ApplicationController(ApplicationService service, JobProgressStore jobStore) {
@@ -39,24 +38,22 @@ public class ApplicationController {
     }
 
     @GetMapping
-    public List<ApplicationSummary> list(@RequestParam(required = false) String outcome) {
-        return service.list(outcome).stream().map(ApplicationSummary::from).toList();
+    public List<ApplicationSummary> list(Authentication auth,
+                                         @RequestParam(required = false) String outcome) {
+        return service.list(AuthUtils.userId(auth), outcome).stream().map(ApplicationSummary::from).toList();
     }
 
-    /**
-     * Async submit — starts the pipeline in the background and returns a job ID
-     * immediately. Frontend polls /jobs/{jobId}/progress for incremental updates.
-     * Avoids SSE streaming entirely, which was batched by React 18's scheduler.
-     */
     @PostMapping("/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public SubmitResponse submit(@RequestBody @Valid CreateApplicationRequest req) {
+    public SubmitResponse submit(Authentication auth, @RequestBody @Valid CreateApplicationRequest req) {
+        UUID userId = AuthUtils.userId(auth); // capture before async dispatch
         UUID jobId = UUID.randomUUID();
-        jobStore.start(jobId);
+        jobStore.start(jobId, userId);
         SSE_EXECUTOR.submit(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
-                Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), req.includeCoverLetter(), progress);
+                Application a = service.create(userId, req.jdText(), req.jdUrl(), req.roleEmphasis(),
+                        req.includeCoverLetter(), progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
@@ -65,45 +62,37 @@ public class ApplicationController {
         return new SubmitResponse(jobId);
     }
 
-    /** Poll endpoint — returns accumulated log lines + current status for a job. */
     @GetMapping("/jobs/{jobId}/progress")
-    public JobProgressResponse jobProgress(@PathVariable UUID jobId) {
+    public JobProgressResponse jobProgress(Authentication auth, @PathVariable UUID jobId) {
+        if (!jobStore.isOwner(jobId, AuthUtils.userId(auth))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown job: " + jobId);
+        }
         JobProgressStore.Snapshot snap = jobStore.getSnapshot(jobId);
-        if (snap == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown job: " + jobId);
         return new JobProgressResponse(snap.lines(), snap.status().name(), snap.appId(), snap.error());
     }
 
     @GetMapping("/{id}")
-    public ApplicationResponse get(@PathVariable UUID id,
+    public ApplicationResponse get(Authentication auth, @PathVariable UUID id,
                                    @RequestParam(defaultValue = "false") boolean includePdf) {
-        return ApplicationResponse.from(service.get(id), includePdf);
+        return ApplicationResponse.from(service.get(AuthUtils.userId(auth), id), includePdf);
     }
 
-    /** Blocking endpoint kept for non-streaming callers. */
     @PostMapping
-    public ApplicationResponse create(@RequestBody @Valid CreateApplicationRequest req,
+    public ApplicationResponse create(Authentication auth, @RequestBody @Valid CreateApplicationRequest req,
                                       @RequestParam(defaultValue = "false") boolean includePdf) {
-        Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), req.includeCoverLetter(), ProgressLog.noOp());
+        Application a = service.create(AuthUtils.userId(auth), req.jdText(), req.jdUrl(),
+                req.roleEmphasis(), req.includeCoverLetter(), ProgressLog.noOp());
         return ApplicationResponse.from(a, includePdf);
     }
 
-    /**
-     * SSE endpoint for resume creation. Streams real progress events as they happen,
-     * then sends a final "done" event carrying the application ID so the frontend
-     * can navigate to the result page without polling.
-     *
-     * Event types:
-     *   log  — one progress message (data = plain text)
-     *   done — pipeline complete (data = application UUID)
-     *   error — pipeline failed (data = error message)
-     */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter createStream(@RequestBody @Valid CreateApplicationRequest req, HttpServletResponse response) {
+    public SseEmitter createStream(Authentication auth, @RequestBody @Valid CreateApplicationRequest req,
+                                   HttpServletResponse response) {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache");
         response.setBufferSize(1);
-        // Timeout matches worst-case pipeline: JD fetch + 2 LLM calls + tectonic compile.
-        SseEmitter emitter = new SseEmitter(600_000L); // 10 min: 3 sequential LLM calls can take 3-6 min total
+        SseEmitter emitter = new SseEmitter(600_000L);
+        UUID userId = AuthUtils.userId(auth); // capture before async dispatch
 
         SSE_EXECUTOR.submit(() -> {
             ScheduledFuture<?> keepalive = SseUtils.startKeepalive(emitter);
@@ -116,7 +105,8 @@ public class ApplicationController {
             };
 
             try {
-                Application a = service.create(req.jdText(), req.jdUrl(), req.roleEmphasis(), req.includeCoverLetter(), progress);
+                Application a = service.create(userId, req.jdText(), req.jdUrl(),
+                        req.roleEmphasis(), req.includeCoverLetter(), progress);
                 emitter.send(SseEmitter.event().name("done").data(a.getId().toString()));
                 emitter.complete();
             } catch (Exception e) {
@@ -134,32 +124,31 @@ public class ApplicationController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        service.delete(id);
+    public void delete(Authentication auth, @PathVariable UUID id) {
+        service.delete(AuthUtils.userId(auth), id);
     }
 
     @PatchMapping("/{id}")
-    public ApplicationResponse updateOutcome(@PathVariable UUID id,
+    public ApplicationResponse updateOutcome(Authentication auth, @PathVariable UUID id,
                                              @RequestBody @Valid UpdateOutcomeRequest req) {
-        return ApplicationResponse.from(service.updateOutcome(id, req.outcome()));
+        return ApplicationResponse.from(service.updateOutcome(AuthUtils.userId(auth), id, req.outcome()));
     }
 
-    /** Blocking rerender kept for non-streaming callers. */
     @PostMapping("/{id}/rerender")
-    public ApplicationResponse rerender(@PathVariable UUID id, @RequestBody RerenderRequest req) {
-        return ApplicationResponse.from(service.rerender(id, req.selectedBulletIds(), ProgressLog.noOp()));
+    public ApplicationResponse rerender(Authentication auth, @PathVariable UUID id,
+                                        @RequestBody RerenderRequest req) {
+        return ApplicationResponse.from(service.rerender(AuthUtils.userId(auth), id,
+                req.selectedBulletIds(), ProgressLog.noOp()));
     }
 
-    /**
-     * SSE rerender — same event protocol as /stream above.
-     * Streams LaTeX render + tectonic compile progress, then sends done with app ID.
-     */
     @PostMapping(value = "/{id}/rerender/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter rerenderStream(@PathVariable UUID id, @RequestBody RerenderRequest req, HttpServletResponse response) {
+    public SseEmitter rerenderStream(Authentication auth, @PathVariable UUID id,
+                                     @RequestBody RerenderRequest req, HttpServletResponse response) {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache");
         response.setBufferSize(1);
         SseEmitter emitter = new SseEmitter(60_000L);
+        UUID userId = AuthUtils.userId(auth); // capture before async dispatch
 
         SSE_EXECUTOR.submit(() -> {
             ScheduledFuture<?> keepalive = SseUtils.startKeepalive(emitter);
@@ -172,7 +161,7 @@ public class ApplicationController {
             };
 
             try {
-                Application a = service.rerender(id, req.selectedBulletIds(), progress);
+                Application a = service.rerender(userId, id, req.selectedBulletIds(), progress);
                 emitter.send(SseEmitter.event().name("done").data(a.getId().toString()));
                 emitter.complete();
             } catch (Exception e) {
@@ -189,21 +178,20 @@ public class ApplicationController {
     }
 
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
-        Application a = service.get(id);
+    public ResponseEntity<byte[]> pdf(Authentication auth, @PathVariable UUID id) {
+        Application a = service.get(AuthUtils.userId(auth), id);
         if (a.getPdfBlob() == null || a.getPdfBlob().length == 0) {
             return ResponseEntity.status(404).body("No PDF stored (compile failed?)".getBytes());
         }
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_PDF);
         String fname = "resume-" + (a.getCompany() == null ? "app" : a.getCompany().replaceAll("\\W+", "_")) + ".pdf";
-        // inline disposition tells the browser to render in iframe, not force-download.
         h.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fname + "\"");
         return new ResponseEntity<>(a.getPdfBlob(), h, 200);
     }
 
     @GetMapping(value = "/{id}/cover-letter", produces = MediaType.TEXT_PLAIN_VALUE)
-    public String coverLetter(@PathVariable UUID id) {
-        return service.get(id).getCoverLetter();
+    public String coverLetter(Authentication auth, @PathVariable UUID id) {
+        return service.get(AuthUtils.userId(auth), id).getCoverLetter();
     }
 }

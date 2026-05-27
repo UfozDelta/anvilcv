@@ -2,6 +2,7 @@ package com.resumepipeline.config;
 
 import org.springframework.stereotype.Service;
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class GenerationConfigService {
@@ -12,13 +13,18 @@ public class GenerationConfigService {
         this.repo = repo;
     }
 
-    public GenerationConfig get() {
-        return repo.findFirstBySingletonTrue().orElseThrow(() ->
-                new IllegalStateException("GenerationConfig singleton row missing (Flyway V5 should have seeded it)."));
+    public GenerationConfig get(UUID userId) {
+        return repo.findByUserId(userId).orElseGet(() -> {
+            GenerationConfig c = new GenerationConfig();
+            c.setId(UUID.randomUUID());
+            c.setUserId(userId);
+            c.setUpdatedAt(Instant.now());
+            return repo.save(c);
+        });
     }
 
-    public GenerationConfig update(GenerationConfigDto dto) {
-        GenerationConfig c = get();
+    public GenerationConfig update(UUID userId, GenerationConfigDto dto) {
+        GenerationConfig c = get(userId);
         c.setWordFilterEnabled(dto.wordFilterEnabled());
         c.setSingleLineLow(dto.singleLineLow());
         c.setSingleLineHigh(dto.singleLineHigh());

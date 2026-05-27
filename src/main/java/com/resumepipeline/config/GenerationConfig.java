@@ -15,8 +15,8 @@ public class GenerationConfig {
     @Id
     private UUID id;
 
-    @Column(nullable = false)
-    private Boolean singleton = true;
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     @Column(name = "word_filter_enabled", nullable = false)
     private boolean wordFilterEnabled = true;
@@ -63,8 +63,8 @@ public class GenerationConfig {
     // getters / setters
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
-    public Boolean getSingleton() { return singleton; }
-    public void setSingleton(Boolean s) { this.singleton = s; }
+    public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
     public boolean isWordFilterEnabled() { return wordFilterEnabled; }
     public void setWordFilterEnabled(boolean v) { this.wordFilterEnabled = v; }
     public int getSingleLineLow() { return singleLineLow; }

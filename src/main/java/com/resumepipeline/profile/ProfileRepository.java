@@ -6,5 +6,5 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ProfileRepository extends JpaRepository<Profile, UUID> {
-    Optional<Profile> findFirstBySingletonTrue();
+    Optional<Profile> findByUserId(UUID userId);
 }

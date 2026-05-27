@@ -38,5 +38,7 @@ public class AppUser {
     public String getPasswordHash() { return passwordHash; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 
+    public void setUsername(String username) { this.username = username; }
+    public void setEmail(String email) { this.email = email; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 }

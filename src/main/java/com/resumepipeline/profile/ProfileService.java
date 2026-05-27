@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class ProfileService {
@@ -17,13 +18,18 @@ public class ProfileService {
         this.repo = repo;
     }
 
-    public Profile get() {
-        return repo.findFirstBySingletonTrue().orElseThrow(() ->
-                new IllegalStateException("Profile singleton row missing (Flyway V2 should have seeded it)."));
+    public Profile get(UUID userId) {
+        return repo.findByUserId(userId).orElseGet(() -> {
+            Profile p = new Profile();
+            p.setId(UUID.randomUUID());
+            p.setUserId(userId);
+            p.setUpdatedAt(Instant.now());
+            return repo.save(p);
+        });
     }
 
-    public Profile update(ProfileDto dto) {
-        Profile p = get();
+    public Profile update(UUID userId, ProfileDto dto) {
+        Profile p = get(userId);
         p.setName(dto.name());
         p.setPhone(dto.phone());
         p.setEmail(dto.email());

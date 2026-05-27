@@ -51,28 +51,29 @@ public class ApplicationService {
         this.compiler = compiler;
     }
 
-    public List<Application> list(String outcome) {
+    public List<Application> list(UUID userId, String outcome) {
         return outcome == null || outcome.isBlank()
-                ? repo.findAllByOrderByCreatedAtDesc()
-                : repo.findByOutcomeOrderByCreatedAtDesc(outcome);
+                ? repo.findAllByUserIdOrderByCreatedAtDesc(userId)
+                : repo.findByUserIdAndOutcomeOrderByCreatedAtDesc(userId, outcome);
     }
 
-    public Application get(UUID id) {
-        return repo.findById(id).orElseThrow(() ->
-                new IllegalArgumentException("Application not found: " + id));
+    public Application get(UUID userId, UUID id) {
+        return repo.findByUserIdAndId(userId, id)
+                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + id));
     }
 
-    public void delete(UUID id) {
-        repo.deleteById(id);
+    public void delete(UUID userId, UUID id) {
+        Application a = get(userId, id);
+        repo.deleteById(a.getId());
     }
 
-    public Application updateOutcome(UUID id, String outcome) {
-        Application a = get(id);
+    public Application updateOutcome(UUID userId, UUID id, String outcome) {
+        Application a = get(userId, id);
         a.setOutcome(outcome);
         return repo.save(a);
     }
 
-    public Application create(String jdText, String jdUrl, String roleEmphasis, boolean includeCoverLetter, ProgressLog progress) {
+    public Application create(UUID userId, String jdText, String jdUrl, String roleEmphasis, boolean includeCoverLetter, ProgressLog progress) {
         if ((jdText == null || jdText.isBlank()) && (jdUrl == null || jdUrl.isBlank())) {
             throw new IllegalArgumentException("Provide jdText or jdUrl");
         }
@@ -90,7 +91,7 @@ public class ApplicationService {
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
-        List<Bullet> allBullets = bulletRepo.findAll();
+        List<Bullet> allBullets = bulletRepo.findByProjectUserId(userId);
         if (allBullets.isEmpty()) {
             throw new IllegalStateException("No bullets in the bank — generate or add some first.");
         }
@@ -172,7 +173,7 @@ public class ApplicationService {
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
         PipelineTimer tRender = PipelineTimer.start("LaTeX render");
-        String tex = renderer.render(selected, projectById);
+        String tex = renderer.render(userId, selected, projectById);
         tRender.stop();
 
         // Fire cover letter in parallel with tectonic compile — cover letter gets
@@ -206,6 +207,7 @@ public class ApplicationService {
         tPdf.stop("success=" + r.success());
 
         Application a = new Application();
+        a.setUserId(userId);
         a.setJdText(jdText);
         a.setJdUrl(jdUrl);
         a.setRoleEmphasis(roleEmphasis);
@@ -243,9 +245,10 @@ public class ApplicationService {
     }
 
     /** Override selection and re-render. Does NOT re-call the LLM. */
-    public Application rerender(UUID applicationId, List<UUID> selectedBulletIds, ProgressLog progress) {
-        Application a = get(applicationId);
-        Map<UUID, Bullet> bulletById = bulletRepo.findAllById(selectedBulletIds).stream()
+    public Application rerender(UUID userId, UUID applicationId, List<UUID> selectedBulletIds, ProgressLog progress) {
+        Application a = get(userId, applicationId);
+        Map<UUID, Bullet> bulletById = bulletRepo.findByIdsAndProjectUserId(
+                selectedBulletIds.toArray(new UUID[0]), userId).stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
         List<Bullet> selected = selectedBulletIds.stream()
                 .map(bulletById::get).filter(Objects::nonNull).toList();
@@ -255,7 +258,7 @@ public class ApplicationService {
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
-        String tex = renderer.render(selected, projectById);
+        String tex = renderer.render(userId, selected, projectById);
         progress.emit("Compiling PDF via tectonic...");
         PdfCompiler.Result r = compiler.compile(tex);
 
