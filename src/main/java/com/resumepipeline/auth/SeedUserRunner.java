@@ -1,5 +1,7 @@
 package com.resumepipeline.auth;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -16,6 +18,7 @@ import java.util.UUID;
 @Component
 public class SeedUserRunner implements ApplicationRunner {
 
+    private static final Logger log = LoggerFactory.getLogger(SeedUserRunner.class);
     static final UUID SEED_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private final AppUserRepository userRepository;
@@ -40,12 +43,18 @@ public class SeedUserRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         String hash = passwordEncoder.encode(rawPassword);
+        if (rawPassword == null || rawPassword.isBlank()) {
+            log.warn("auth.seed.password is blank — seed user password will be empty string. " +
+                     "Set SEED_PASSWORD env var or activate the 'local' Spring profile.");
+        }
+
         userRepository.findById(SEED_USER_ID).ifPresentOrElse(
                 user -> {
                     user.setUsername(username);
                     user.setEmail(email);
                     user.setPasswordHash(hash);
                     userRepository.save(user);
+                    log.info("Seed user ready — username: {}", username);
                 },
                 () -> {
                     AppUser u = new AppUser(username, email, hash);

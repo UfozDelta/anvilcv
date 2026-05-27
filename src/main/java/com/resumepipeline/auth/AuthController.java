@@ -55,6 +55,7 @@ public class AuthController {
             Authentication auth = authManager.authenticate(
                     new UsernamePasswordAuthenticationToken(req.username(), req.password()));
             // Rotate session ID to prevent session fixation.
+            httpReq.getSession(true); // ensure session exists before rotating
             httpReq.changeSessionId();
             SecurityContext ctx = SecurityContextHolder.createEmptyContext();
             ctx.setAuthentication(auth);
@@ -62,6 +63,8 @@ public class AuthController {
             contextRepo.saveContext(ctx, httpReq, httpResp);
             return Map.of("username", auth.getName());
         } catch (BadCredentialsException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+        } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
     }

@@ -13,5 +13,5 @@ VALUES (
     '00000000-0000-0000-0000-000000000001',
     'seed',
     'seed@localhost',
-    '$2a$10$changeme'
+    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
 );
