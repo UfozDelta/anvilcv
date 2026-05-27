@@ -90,6 +90,7 @@ public class AuthController {
         // Log the new user in immediately.
         Authentication auth = authManager.authenticate(
                 new UsernamePasswordAuthenticationToken(req.username(), req.password()));
+        httpReq.getSession(true);
         httpReq.changeSessionId();
         SecurityContext ctx = SecurityContextHolder.createEmptyContext();
         ctx.setAuthentication(auth);
