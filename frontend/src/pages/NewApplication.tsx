@@ -104,12 +104,17 @@ export function NewApplication() {
 
       {streaming && (
         <EventStream
-          jdText={jdText}
-          jdUrl={jdUrl}
-          roleEmphasis={roleEmphasis}
-          includeCoverLetter={includeCoverLetter}
+          submitUrl="/api/applications/submit"
+          submitBody={{
+            jdText: jdText.trim() || undefined,
+            jdUrl: jdUrl.trim() || undefined,
+            roleEmphasis,
+            includeCoverLetter,
+          }}
+          pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
           onDone={appId => nav(`/applications/${appId}`)}
           onClose={() => setStreaming(false)}
+          title="TAILORING RESUME..."
         />
       )}
     </div>

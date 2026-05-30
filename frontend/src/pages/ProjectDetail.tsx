@@ -1,9 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, API_BASE, type Project, type Bullet, CATEGORIES } from '../lib/api';
+import { api, type Project, type Bullet, CATEGORIES } from '../lib/api';
 import { Section } from '../components/Section';
-import { useEventLog } from '../lib/useEventLog';
-import { EventLog } from '../components/EventLog';
+import { EventStream } from '../components/EventStream';
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +11,6 @@ export function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const { stream, state: logState, reset: resetLog } = useEventLog();
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set(['ai-ml', 'backend']));
@@ -32,24 +30,10 @@ export function ProjectDetail() {
   }
   useEffect(() => { load(); }, [id]);
 
-  async function generateBank() {
+  function generateBank() {
     if (!id || picked.size === 0) return;
     setErr(null);
-    resetLog();
     setGenerating(true);
-    const cats = Array.from(picked);
-    try {
-      // SSE endpoint streams real per-bullet events; "done" resolves with total count.
-      await stream(
-        `${API_BASE}/api/projects/${id}/bullets/generate-bank/stream`,
-        { categories: cats }
-      );
-      await load();
-    } catch (e: any) {
-      setErr(e?.message || 'Generation failed');
-    } finally {
-      setGenerating(false);
-    }
   }
 
   async function addBullet(text: string, tags: string[], category: string) {
@@ -233,8 +217,17 @@ export function ProjectDetail() {
         </div>
       </div>
 
-      {/* Live log panel — shows real events from bullet generation pipeline */}
-      <EventLog state={logState} />
+      {generating && (
+        <EventStream
+          submitUrl={`/api/projects/${id}/bullets/generate-bank/submit`}
+          submitBody={{ categories: Array.from(picked) }}
+          pollUrl={jobId => `/api/projects/jobs/${jobId}/progress`}
+          onDone={_id => { setGenerating(false); load(); }}
+          onClose={() => setGenerating(false)}
+          title="GENERATING BULLETS..."
+          doneLabel=""
+        />
+      )}
 
       {err && <div className="err" style={{ marginBottom: 16 }}>{err}</div>}
 

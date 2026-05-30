@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/api';
 
 interface Props {
-  jdText: string;
-  jdUrl: string;
-  roleEmphasis: string;
-  includeCoverLetter: boolean;
-  onDone: (appId: string) => void;
+  submitUrl: string;
+  submitBody: object;
+  pollUrl: (jobId: string) => string;
+  onDone: (resultId: string) => void;
   onClose: () => void;
+  title?: string;
+  doneLabel?: string;
 }
 
 function lineColor(line: string): string {
@@ -25,15 +26,14 @@ function lineColor(line: string): string {
 /**
  * Modal popup that shows pipeline progress via polling.
  *
- * Replaces SSE streaming entirely. On mount, POSTs to /api/applications/submit
- * which returns a jobId immediately and runs the pipeline in a background thread.
- * Then polls GET /api/applications/jobs/{jobId}/progress every 1.5s.
+ * On mount, POSTs to submitUrl which returns a jobId immediately and runs the
+ * pipeline in a background thread. Then polls pollUrl(jobId) every 1.5s.
  *
  * Polling sidesteps every React 18 scheduler / SSE batching issue:
  * each poll response is a normal fetch that updates state in a standard
  * React event handler, so setState triggers immediate re-renders.
  */
-export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, onDone, onClose }: Props) {
+export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, title, doneLabel }: Props) {
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -48,16 +48,11 @@ export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, o
 
     async function start() {
       try {
-        const res = await fetch(`${API_BASE}/api/applications/submit`, {
+        const res = await fetch(`${API_BASE}${submitUrl}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            jdText: jdText.trim() || undefined,
-            jdUrl: jdUrl.trim() || undefined,
-            roleEmphasis,
-            includeCoverLetter,
-          }),
+          body: JSON.stringify(submitBody),
         });
         if (!res.ok) {
           const text = await res.text();
@@ -70,14 +65,13 @@ export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, o
 
         intervalId = setInterval(async () => {
           try {
-            const r = await fetch(`${API_BASE}/api/applications/jobs/${jobId}/progress`, {
+            const r = await fetch(`${API_BASE}${pollUrl(jobId)}`, {
               credentials: 'include',
             });
             if (!r.ok) return;
             const data = await r.json();
             if (cancelled) return;
 
-            // Replace lines with full list from server on each poll.
             setLines(data.lines ?? []);
 
             if (data.status === 'DONE') {
@@ -109,6 +103,12 @@ export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, o
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [lines]);
+
+  const headerLabel = done
+    ? 'PIPELINE COMPLETE'
+    : error
+    ? 'PIPELINE ERROR'
+    : (title ?? 'RUNNING...');
 
   return (
     <div
@@ -148,7 +148,7 @@ export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, o
           }}
         >
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-            {done ? 'PIPELINE COMPLETE' : error ? 'PIPELINE ERROR' : 'TAILORING RESUME...'}
+            {headerLabel}
           </span>
           <button
             onClick={onClose}
@@ -205,9 +205,9 @@ export function EventStream({ jdText, jdUrl, roleEmphasis, includeCoverLetter, o
             <button className="btn btn--ghost btn--sm" onClick={onClose}>
               CLOSE
             </button>
-            {done && (
+            {done && doneLabel !== '' && (
               <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#2a7a2a', alignSelf: 'center' }}>
-                Redirecting...
+                {doneLabel ?? 'Redirecting...'}
               </span>
             )}
           </div>

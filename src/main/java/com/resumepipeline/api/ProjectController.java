@@ -1,5 +1,7 @@
 package com.resumepipeline.api;
 
+import com.resumepipeline.api.dto.ApplicationDtos.JobProgressResponse;
+import com.resumepipeline.api.dto.ApplicationDtos.SubmitResponse;
 import com.resumepipeline.api.dto.BulletDtos.BulletResponse;
 import com.resumepipeline.api.dto.ProjectDtos.CreateProjectRequest;
 import com.resumepipeline.api.dto.ProjectDtos.ProjectResponse;
@@ -11,9 +13,11 @@ import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -29,12 +33,14 @@ public class ProjectController {
 
     private final ProjectService projects;
     private final BulletService bullets;
+    private final JobProgressStore jobStore;
 
     private static final ExecutorService SSE_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
-    public ProjectController(ProjectService projects, BulletService bullets) {
+    public ProjectController(ProjectService projects, BulletService bullets, JobProgressStore jobStore) {
         this.projects = projects;
         this.bullets = bullets;
+        this.jobStore = jobStore;
     }
 
     @GetMapping
@@ -83,6 +89,34 @@ public class ProjectController {
                                              @RequestBody GenerateBankRequest req) {
         return bullets.generateBank(AuthUtils.userId(auth), id, req.categories(), ProgressLog.noOp())
                 .stream().map(BulletResponse::from).toList();
+    }
+
+    @PostMapping("/{id}/bullets/generate-bank/submit")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SubmitResponse generateBankSubmit(Authentication auth, @PathVariable UUID id,
+                                             @RequestBody GenerateBankRequest req) {
+        UUID userId = AuthUtils.userId(auth);
+        UUID jobId = UUID.randomUUID();
+        jobStore.start(jobId, userId);
+        SSE_EXECUTOR.submit(() -> {
+            ProgressLog progress = msg -> jobStore.append(jobId, msg);
+            try {
+                bullets.generateBank(userId, id, req.categories(), progress);
+                jobStore.complete(jobId, id);
+            } catch (Exception e) {
+                jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            }
+        });
+        return new SubmitResponse(jobId);
+    }
+
+    @GetMapping("/jobs/{jobId}/progress")
+    public JobProgressResponse bulletJobProgress(Authentication auth, @PathVariable UUID jobId) {
+        if (!jobStore.isOwner(jobId, AuthUtils.userId(auth))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown job: " + jobId);
+        }
+        JobProgressStore.Snapshot snap = jobStore.getSnapshot(jobId);
+        return new JobProgressResponse(snap.lines(), snap.status().name(), snap.appId(), snap.error());
     }
 
     @PostMapping(value = "/{id}/bullets/generate-bank/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
