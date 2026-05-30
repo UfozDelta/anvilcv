@@ -160,6 +160,50 @@ body::before {
 }
 .masthead__meta a:hover { background: var(--acid); }
 
+.masthead__settings {
+  position: relative;
+  display: inline-block;
+}
+
+.masthead__settings-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  padding: 0;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 60ms linear;
+}
+.masthead__settings-btn:hover { opacity: 1; background: var(--acid); }
+
+.masthead__settings-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--paper);
+  border: 1px solid var(--rule, #ccc);
+  z-index: 100;
+  min-width: 150px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.08);
+}
+
+.masthead__settings-menu a {
+  display: block;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: none;
+  opacity: 0.7;
+}
+.masthead__settings-menu a:hover { background: var(--acid); opacity: 1; }
+
 /* Sub-nav under masthead */
 .nav {
   display: flex;
