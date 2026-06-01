@@ -39,7 +39,7 @@ public class ApplicationRenderer {
         this.profileService = profileService;
     }
 
-    public String render(UUID userId, List<Bullet> selectedInOrder, Map<UUID, Project> projectById) {
+    public String render(UUID userId, List<Bullet> selectedInOrder, Map<UUID, Project> projectById, List<String> selectedCourses) {
         Profile p = profileService.get(userId);
         List<EducationEntry> education = profileService.readEducation(p);
 
@@ -62,7 +62,7 @@ public class ApplicationRenderer {
                 Map.entry("LINKEDIN_HANDLE",  escapePlain(p.getLinkedinHandle())),
                 Map.entry("GITHUB_HANDLE",    escapePlain(p.getGithubHandle())),
                 Map.entry("PORTFOLIO_LINK",   portfolioLatex(p.getPortfolioUrl())),
-                Map.entry("EDUCATION_ITEMS",  renderEducation(education)),
+                Map.entry("EDUCATION_ITEMS",  renderEducation(education, selectedCourses)),
                 Map.entry("EXPERIENCE_ITEMS", renderExperience(experienceBullets, projectById)),
                 Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById)),
                 Map.entry("SKILLS_LANGUAGES", escapeRich(p.getSkillsLanguages())),
@@ -78,14 +78,28 @@ public class ApplicationRenderer {
         return " \\hspace{1pt}\n    \\href{" + url + "}{\\underline{Portfolio}}";
     }
 
-    private String renderEducation(List<EducationEntry> entries) {
+    private String renderEducation(List<EducationEntry> entries, List<String> selectedCourses) {
+        // selectedCourses is a flat list picked by the LLM for this application's JD.
+        // Apply them to the first education entry that originally had coursework; others use raw value.
+        String selectedCoursesStr = selectedCourses == null || selectedCourses.isEmpty()
+                ? null
+                : String.join(", ", selectedCourses);
+        boolean selectedApplied = false;
+
         StringBuilder sb = new StringBuilder();
         for (EducationEntry e : entries) {
             sb.append("    \\resumeSubheadingUni\n")
               .append("      {").append(escapePlain(e.school())).append("}{").append(escapePlain(e.location())).append("}\n")
               .append("      {").append(escapeRich(e.degree())).append("}{").append(escapePlain(e.dates())).append("}\n")
               .append("      {");
-            String cw = e.coursework() == null ? "" : e.coursework().trim();
+            String rawCw = e.coursework() == null ? "" : e.coursework().trim();
+            String cw;
+            if (!selectedApplied && selectedCoursesStr != null && !rawCw.isEmpty()) {
+                cw = selectedCoursesStr;
+                selectedApplied = true;
+            } else {
+                cw = rawCw;
+            }
             if (!cw.isEmpty()) {
                 sb.append("\\textbf{Coursework}: ").append(escapeRich(cw));
             }

@@ -47,6 +47,10 @@ public class Application {
     @Column(name = "ats_missing", columnDefinition = "text[]", nullable = false)
     private String[] atsMissing = new String[0];
 
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "selected_courses", columnDefinition = "text[]", nullable = false)
+    private String[] selectedCourses = new String[0];
+
     @Column(name = "tex_blob")
     private byte[] texBlob;
 
@@ -92,6 +96,8 @@ public class Application {
     public void setAtsMatched(String[] atsMatched) { this.atsMatched = atsMatched == null ? new String[0] : atsMatched; }
     public String[] getAtsMissing() { return atsMissing; }
     public void setAtsMissing(String[] atsMissing) { this.atsMissing = atsMissing == null ? new String[0] : atsMissing; }
+    public String[] getSelectedCourses() { return selectedCourses; }
+    public void setSelectedCourses(String[] selectedCourses) { this.selectedCourses = selectedCourses == null ? new String[0] : selectedCourses; }
     public byte[] getTexBlob() { return texBlob; }
     public void setTexBlob(byte[] texBlob) { this.texBlob = texBlob; }
     public byte[] getPdfBlob() { return pdfBlob; }

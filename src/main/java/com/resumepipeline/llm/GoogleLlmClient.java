@@ -371,6 +371,11 @@ public class GoogleLlmClient implements LlmClient {
                     .append("\n    text: ").append(b.text()).append("\n");
         }
 
+        String coursesBlock = req.courses() == null || req.courses().isEmpty()
+                ? ""
+                : "\nCoursework (select up to 6 most relevant for this role):\n"
+                  + req.courses().stream().map(c -> "  - " + c).reduce("", (a, b) -> a + b + "\n");
+
         String prompt = """
                 You are an expert resume writer. Rank EVERY bullet below against the job description.
 
@@ -379,6 +384,9 @@ public class GoogleLlmClient implements LlmClient {
 
                 Produce atsMatched (keywords from the JD that appear in the top 8 bullets)
                 and atsMissing (JD keywords NOT covered).
+
+                If coursework is provided, select the best matching courses (up to 6) for this role
+                and return them in selectedCourses. Return an empty array if no coursework is provided.
 
                 Role emphasis: %s
                 Company: %s
@@ -390,14 +398,15 @@ public class GoogleLlmClient implements LlmClient {
                 %s
 
                 Bullets:
-                %s
+                %s%s
                 """.formatted(
                         req.bullets().size(), req.bullets().size(),
                         req.roleEmphasis(),
                         req.company(),
                         req.cleanJd(),
                         req.keywords(),
-                        bulletsBlock);
+                        bulletsBlock,
+                        coursesBlock);
 
         Schema rankedItem = Schema.builder()
                 .type(Type.Known.OBJECT)
@@ -417,11 +426,12 @@ public class GoogleLlmClient implements LlmClient {
         Schema schema = Schema.builder()
                 .type(Type.Known.OBJECT)
                 .properties(Map.of(
-                        "rankedBullets", Schema.builder().type(Type.Known.ARRAY).items(rankedItem).build(),
-                        "atsMatched",    stringArray,
-                        "atsMissing",    stringArray
+                        "rankedBullets",   Schema.builder().type(Type.Known.ARRAY).items(rankedItem).build(),
+                        "atsMatched",      stringArray,
+                        "atsMissing",      stringArray,
+                        "selectedCourses", stringArray
                 ))
-                .required(List.of("rankedBullets", "atsMatched", "atsMissing"))
+                .required(List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses"))
                 .build();
 
         String json = callStreaming(matchModel, prompt, schema, 1.0, "Ranking", progress);
@@ -444,11 +454,15 @@ public class GoogleLlmClient implements LlmClient {
                     });
             List<String> atsMatched = env.atsMatched == null ? List.of() : env.atsMatched;
             List<String> atsMissing = env.atsMissing == null ? List.of() : env.atsMissing;
+            List<String> selectedCourses = env.selectedCourses == null ? List.of() : env.selectedCourses;
             progress.emit("ATS matched (" + atsMatched.size() + "): " + String.join(", ", atsMatched));
             if (!atsMissing.isEmpty()) {
                 progress.emit("ATS missing (" + atsMissing.size() + "): " + String.join(", ", atsMissing));
             }
-            return new RankResult(ranked, atsMatched, atsMissing);
+            if (!selectedCourses.isEmpty()) {
+                progress.emit("Selected courses (" + selectedCourses.size() + "): " + String.join(", ", selectedCourses));
+            }
+            return new RankResult(ranked, atsMatched, atsMissing, selectedCourses);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse LLM rank response: " + json, e);
         }
@@ -608,6 +622,7 @@ public class GoogleLlmClient implements LlmClient {
         public List<RankedItemJson> rankedBullets;
         public List<String> atsMatched;
         public List<String> atsMissing;
+        public List<String> selectedCourses;
     }
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class RankedItemJson { public String bulletId; public int rank; public String why; }

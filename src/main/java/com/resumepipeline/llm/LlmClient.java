@@ -41,9 +41,9 @@ public interface LlmClient {
 
     record JdCleanResult(String cleanJd, String company, String role, List<String> keywords) {}
 
-    record RankRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis, List<BulletForMatch> bullets) {}
+    record RankRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis, List<BulletForMatch> bullets, List<String> courses) {}
     record CoverLetterRequest(String cleanJd, String company, String role, String roleEmphasis, List<String> topBulletTexts) {}
     record BulletForMatch(String bulletId, String text, List<String> tags, String projectName) {}
-    record RankResult(List<RankedBullet> rankedBullets, List<String> atsMatched, List<String> atsMissing) {}
+    record RankResult(List<RankedBullet> rankedBullets, List<String> atsMatched, List<String> atsMissing, List<String> selectedCourses) {}
     record RankedBullet(String bulletId, int rank, String why) {}
 }

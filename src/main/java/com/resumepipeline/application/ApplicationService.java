@@ -6,6 +6,7 @@ import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.jd.JdFetcher;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.progress.PipelineTimer;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
@@ -37,11 +38,13 @@ public class ApplicationService {
     private final LlmClient llm;
     private final ApplicationRenderer renderer;
     private final PdfCompiler compiler;
+    private final ProfileService profileService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ApplicationService(ApplicationRepository repo, BulletRepository bulletRepo,
                               ProjectRepository projectRepo, JdFetcher jdFetcher, LlmClient llm,
-                              ApplicationRenderer renderer, PdfCompiler compiler) {
+                              ApplicationRenderer renderer, PdfCompiler compiler,
+                              ProfileService profileService) {
         this.repo = repo;
         this.bulletRepo = bulletRepo;
         this.projectRepo = projectRepo;
@@ -49,6 +52,7 @@ public class ApplicationService {
         this.llm = llm;
         this.renderer = renderer;
         this.compiler = compiler;
+        this.profileService = profileService;
     }
 
     public List<Application> list(UUID userId, String outcome) {
@@ -130,9 +134,18 @@ public class ApplicationService {
         // Fire ranking (always) and cover letter (optional) in parallel.
         progress.emit("Ranking " + candidates.size() + " candidates against JD...");
 
+        // Collect all courses from profile education entries (split comma-separated strings).
+        List<String> allCourses = profileService.readEducation(profileService.get(userId)).stream()
+                .filter(e -> e.coursework() != null && !e.coursework().isBlank())
+                .flatMap(e -> Arrays.stream(e.coursework().split(",")))
+                .map(String::trim)
+                .filter(c -> !c.isEmpty())
+                .distinct()
+                .toList();
+
         LlmClient.RankRequest rankReq = new LlmClient.RankRequest(
                 clean.cleanJd(), clean.company(), clean.role(),
-                clean.keywords(), roleEmphasis, bulletsForMatch);
+                clean.keywords(), roleEmphasis, bulletsForMatch, allCourses);
 
         PipelineTimer tRank = PipelineTimer.start("rank (" + candidates.size() + " bullets)");
         LlmClient.RankResult rank = llm.rankBullets(rankReq, progress);
@@ -170,10 +183,12 @@ public class ApplicationService {
         perProjectName.forEach((proj, cnt) ->
                 progress.emit("  " + proj + " - " + cnt + " bullet" + (cnt > 1 ? "s" : "")));
 
+        List<String> selectedCourses = rank.selectedCourses() == null ? List.of() : rank.selectedCourses();
+
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
         PipelineTimer tRender = PipelineTimer.start("LaTeX render");
-        String tex = renderer.render(userId, selected, projectById);
+        String tex = renderer.render(userId, selected, projectById, selectedCourses);
         tRender.stop();
 
         // Fire cover letter in parallel with tectonic compile — cover letter gets
@@ -217,6 +232,7 @@ public class ApplicationService {
         a.setAtsMatched(rank.atsMatched().toArray(new String[0]));
         a.setAtsMissing(rank.atsMissing().toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
+        a.setSelectedCourses(selectedCourses.toArray(new String[0]));
         a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
         try {
             a.setBulletRanking(mapper.writeValueAsString(rankedSorted));
@@ -258,7 +274,8 @@ public class ApplicationService {
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
-        String tex = renderer.render(userId, selected, projectById);
+        List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
+        String tex = renderer.render(userId, selected, projectById, selectedCourses);
         progress.emit("Compiling PDF via tectonic...");
         PdfCompiler.Result r = compiler.compile(tex);
 

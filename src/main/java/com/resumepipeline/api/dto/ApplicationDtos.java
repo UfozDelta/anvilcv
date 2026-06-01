@@ -39,6 +39,7 @@ public class ApplicationDtos {
             UUID id, String company, String role, String jdText, String jdUrl, String roleEmphasis,
             String bulletRanking, List<UUID> selectedBulletIds,
             String coverLetter, List<String> atsMatched, List<String> atsMissing,
+            List<String> selectedCourses,
             boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
         public static ApplicationResponse from(Application a) {
@@ -56,6 +57,7 @@ public class ApplicationDtos {
                     Arrays.asList(a.getSelectedBulletIds()),
                     a.getCoverLetter(),
                     Arrays.asList(a.getAtsMatched()), Arrays.asList(a.getAtsMissing()),
+                    Arrays.asList(a.getSelectedCourses()),
                     a.getPdfBlob() != null && a.getPdfBlob().length > 0,
                     b64, a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
         }
