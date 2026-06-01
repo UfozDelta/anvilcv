@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -376,6 +377,15 @@ public class GoogleLlmClient implements LlmClient {
                 : "\nCoursework (select up to 6 most relevant for this role):\n"
                   + req.courses().stream().map(c -> "  - " + c).reduce("", (a, b) -> a + b + "\n");
 
+        StringBuilder skillsBlock = new StringBuilder();
+        if (req.skillCategories() != null && !req.skillCategories().isEmpty()) {
+            skillsBlock.append("\nSkills (filter each category to only the most JD-relevant items; keep ordering; return empty array if none relevant):\n");
+            for (LlmClient.SkillCategory sc : req.skillCategories()) {
+                skillsBlock.append("  ").append(sc.name()).append(": ")
+                        .append(String.join(", ", sc.items())).append("\n");
+            }
+        }
+
         String prompt = """
                 You are an expert resume writer. Rank EVERY bullet below against the job description.
 
@@ -387,6 +397,10 @@ public class GoogleLlmClient implements LlmClient {
 
                 If coursework is provided, select the best matching courses (up to 6) for this role
                 and return them in selectedCourses. Return an empty array if no coursework is provided.
+
+                If skills are provided, return selectedSkills with each category filtered to only the
+                JD-relevant items. Preserve the original item text exactly. Return empty arrays for
+                categories with no relevant items.
 
                 Role emphasis: %s
                 Company: %s
@@ -406,7 +420,7 @@ public class GoogleLlmClient implements LlmClient {
                         req.cleanJd(),
                         req.keywords(),
                         bulletsBlock,
-                        coursesBlock);
+                        coursesBlock + skillsBlock);
 
         Schema rankedItem = Schema.builder()
                 .type(Type.Known.OBJECT)
@@ -423,15 +437,27 @@ public class GoogleLlmClient implements LlmClient {
                 .items(Schema.builder().type(Type.Known.STRING).build())
                 .build();
 
+        Schema selectedSkillsSchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "languages", stringArray,
+                        "frameworks", stringArray,
+                        "databases", stringArray,
+                        "devops", stringArray
+                ))
+                .required(List.of("languages", "frameworks", "databases", "devops"))
+                .build();
+
         Schema schema = Schema.builder()
                 .type(Type.Known.OBJECT)
                 .properties(Map.of(
                         "rankedBullets",   Schema.builder().type(Type.Known.ARRAY).items(rankedItem).build(),
                         "atsMatched",      stringArray,
                         "atsMissing",      stringArray,
-                        "selectedCourses", stringArray
+                        "selectedCourses", stringArray,
+                        "selectedSkills",  selectedSkillsSchema
                 ))
-                .required(List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses"))
+                .required(List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses", "selectedSkills"))
                 .build();
 
         String json = callStreaming(matchModel, prompt, schema, 1.0, "Ranking", progress);
@@ -455,6 +481,7 @@ public class GoogleLlmClient implements LlmClient {
             List<String> atsMatched = env.atsMatched == null ? List.of() : env.atsMatched;
             List<String> atsMissing = env.atsMissing == null ? List.of() : env.atsMissing;
             List<String> selectedCourses = env.selectedCourses == null ? List.of() : env.selectedCourses;
+            Map<String, List<String>> selectedSkills = env.selectedSkills == null ? Map.of() : env.selectedSkills;
             progress.emit("ATS matched (" + atsMatched.size() + "): " + String.join(", ", atsMatched));
             if (!atsMissing.isEmpty()) {
                 progress.emit("ATS missing (" + atsMissing.size() + "): " + String.join(", ", atsMissing));
@@ -462,7 +489,10 @@ public class GoogleLlmClient implements LlmClient {
             if (!selectedCourses.isEmpty()) {
                 progress.emit("Selected courses (" + selectedCourses.size() + "): " + String.join(", ", selectedCourses));
             }
-            return new RankResult(ranked, atsMatched, atsMissing, selectedCourses);
+            selectedSkills.forEach((cat, items) -> {
+                if (!items.isEmpty()) progress.emit("Skills/" + cat + ": " + String.join(", ", items));
+            });
+            return new RankResult(ranked, atsMatched, atsMissing, selectedCourses, selectedSkills);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse LLM rank response: " + json, e);
         }
@@ -623,6 +653,7 @@ public class GoogleLlmClient implements LlmClient {
         public List<String> atsMatched;
         public List<String> atsMissing;
         public List<String> selectedCourses;
+        public Map<String, List<String>> selectedSkills;
     }
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class RankedItemJson { public String bulletId; public int rank; public String why; }

@@ -3,10 +3,13 @@ package com.resumepipeline.api.dto;
 import com.resumepipeline.application.Application;
 import jakarta.validation.constraints.NotBlank;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class ApplicationDtos {
@@ -39,9 +42,11 @@ public class ApplicationDtos {
             UUID id, String company, String role, String jdText, String jdUrl, String roleEmphasis,
             String bulletRanking, List<UUID> selectedBulletIds,
             String coverLetter, List<String> atsMatched, List<String> atsMissing,
-            List<String> selectedCourses,
+            List<String> selectedCourses, Map<String, List<String>> selectedSkills,
             boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
+        private static final ObjectMapper MAPPER = new ObjectMapper();
+
         public static ApplicationResponse from(Application a) {
             return from(a, false);
         }
@@ -51,15 +56,25 @@ public class ApplicationDtos {
             if (includePdf && a.getPdfBlob() != null && a.getPdfBlob().length > 0) {
                 b64 = Base64.getEncoder().encodeToString(a.getPdfBlob());
             }
+            Map<String, List<String>> skillsMap = parseSkills(a.getSelectedSkills());
             return new ApplicationResponse(
                     a.getId(), a.getCompany(), a.getRole(), a.getJdText(), a.getJdUrl(),
                     a.getRoleEmphasis(), a.getBulletRanking(),
                     Arrays.asList(a.getSelectedBulletIds()),
                     a.getCoverLetter(),
                     Arrays.asList(a.getAtsMatched()), Arrays.asList(a.getAtsMissing()),
-                    Arrays.asList(a.getSelectedCourses()),
+                    Arrays.asList(a.getSelectedCourses()), skillsMap,
                     a.getPdfBlob() != null && a.getPdfBlob().length > 0,
                     b64, a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
+        }
+
+        private static Map<String, List<String>> parseSkills(String json) {
+            if (json == null || json.isBlank() || json.equals("{}")) return Map.of();
+            try {
+                return MAPPER.readValue(json, new TypeReference<>() {});
+            } catch (Exception e) {
+                return Map.of();
+            }
         }
     }
 }

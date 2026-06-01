@@ -39,7 +39,8 @@ public class ApplicationRenderer {
         this.profileService = profileService;
     }
 
-    public String render(UUID userId, List<Bullet> selectedInOrder, Map<UUID, Project> projectById, List<String> selectedCourses) {
+    public String render(UUID userId, List<Bullet> selectedInOrder, Map<UUID, Project> projectById,
+                         List<String> selectedCourses, Map<String, List<String>> selectedSkills) {
         Profile p = profileService.get(userId);
         List<EducationEntry> education = profileService.readEducation(p);
 
@@ -65,10 +66,10 @@ public class ApplicationRenderer {
                 Map.entry("EDUCATION_ITEMS",  renderEducation(education, selectedCourses)),
                 Map.entry("EXPERIENCE_ITEMS", renderExperience(experienceBullets, projectById)),
                 Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById)),
-                Map.entry("SKILLS_LANGUAGES", escapeRich(p.getSkillsLanguages())),
-                Map.entry("SKILLS_FRAMEWORKS",escapeRich(p.getSkillsFrameworks())),
-                Map.entry("SKILLS_DATABASES", escapeRich(p.getSkillsDatabases())),
-                Map.entry("SKILLS_DEVOPS",    escapeRich(p.getSkillsDevops())),
+                Map.entry("SKILLS_LANGUAGES", selectedSkillValue(selectedSkills, "languages", p.getSkillsLanguages())),
+                Map.entry("SKILLS_FRAMEWORKS",selectedSkillValue(selectedSkills, "frameworks", p.getSkillsFrameworks())),
+                Map.entry("SKILLS_DATABASES", selectedSkillValue(selectedSkills, "databases", p.getSkillsDatabases())),
+                Map.entry("SKILLS_DEVOPS",    selectedSkillValue(selectedSkills, "devops", p.getSkillsDevops())),
                 Map.entry("SKILLS_INTERESTS", escapeRich(p.getSkillsInterests()))
         ));
     }
@@ -168,6 +169,17 @@ public class ApplicationRenderer {
             sb.append("        \\resumeItemListEnd\n\n");
         }
         return sb.toString();
+    }
+
+    /** Returns LLM-selected skills joined by ", " if available; falls back to raw profile value. */
+    private String selectedSkillValue(Map<String, List<String>> selectedSkills, String key, String rawFallback) {
+        if (selectedSkills != null) {
+            List<String> items = selectedSkills.get(key);
+            if (items != null && !items.isEmpty()) {
+                return escapeRich(String.join(", ", items));
+            }
+        }
+        return escapeRich(rawFallback);
     }
 
     private String escapePlain(String s) {

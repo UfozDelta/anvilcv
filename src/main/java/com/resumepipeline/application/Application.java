@@ -51,6 +51,11 @@ public class Application {
     @Column(name = "selected_courses", columnDefinition = "text[]", nullable = false)
     private String[] selectedCourses = new String[0];
 
+    /** JSON map: {languages:[...], frameworks:[...], databases:[...], devops:[...]} */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "selected_skills", columnDefinition = "jsonb", nullable = false)
+    private String selectedSkills = "{}";
+
     @Column(name = "tex_blob")
     private byte[] texBlob;
 
@@ -98,6 +103,8 @@ public class Application {
     public void setAtsMissing(String[] atsMissing) { this.atsMissing = atsMissing == null ? new String[0] : atsMissing; }
     public String[] getSelectedCourses() { return selectedCourses; }
     public void setSelectedCourses(String[] selectedCourses) { this.selectedCourses = selectedCourses == null ? new String[0] : selectedCourses; }
+    public String getSelectedSkills() { return selectedSkills; }
+    public void setSelectedSkills(String selectedSkills) { this.selectedSkills = selectedSkills == null ? "{}" : selectedSkills; }
     public byte[] getTexBlob() { return texBlob; }
     public void setTexBlob(byte[] texBlob) { this.texBlob = texBlob; }
     public byte[] getPdfBlob() { return pdfBlob; }

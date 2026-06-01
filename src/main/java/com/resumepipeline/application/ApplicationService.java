@@ -134,8 +134,11 @@ public class ApplicationService {
         // Fire ranking (always) and cover letter (optional) in parallel.
         progress.emit("Ranking " + candidates.size() + " candidates against JD...");
 
+        // Fetch profile once — used for both courses and skills extraction below.
+        com.resumepipeline.profile.Profile profile = profileService.get(userId);
+
         // Collect all courses from profile education entries (split comma-separated strings).
-        List<String> allCourses = profileService.readEducation(profileService.get(userId)).stream()
+        List<String> allCourses = profileService.readEducation(profile).stream()
                 .filter(e -> e.coursework() != null && !e.coursework().isBlank())
                 .flatMap(e -> Arrays.stream(e.coursework().split(",")))
                 .map(String::trim)
@@ -143,9 +146,12 @@ public class ApplicationService {
                 .distinct()
                 .toList();
 
+        // Collect the 4 selectable skill categories (interests excluded — personal, not JD-matchable).
+        List<LlmClient.SkillCategory> skillCategories = buildSkillCategories(profile);
+
         LlmClient.RankRequest rankReq = new LlmClient.RankRequest(
                 clean.cleanJd(), clean.company(), clean.role(),
-                clean.keywords(), roleEmphasis, bulletsForMatch, allCourses);
+                clean.keywords(), roleEmphasis, bulletsForMatch, allCourses, skillCategories);
 
         PipelineTimer tRank = PipelineTimer.start("rank (" + candidates.size() + " bullets)");
         LlmClient.RankResult rank = llm.rankBullets(rankReq, progress);
@@ -184,11 +190,12 @@ public class ApplicationService {
                 progress.emit("  " + proj + " - " + cnt + " bullet" + (cnt > 1 ? "s" : "")));
 
         List<String> selectedCourses = rank.selectedCourses() == null ? List.of() : rank.selectedCourses();
+        Map<String, List<String>> selectedSkills = rank.selectedSkills() == null ? Map.of() : rank.selectedSkills();
 
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
         PipelineTimer tRender = PipelineTimer.start("LaTeX render");
-        String tex = renderer.render(userId, selected, projectById, selectedCourses);
+        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills);
         tRender.stop();
 
         // Fire cover letter in parallel with tectonic compile — cover letter gets
@@ -233,6 +240,11 @@ public class ApplicationService {
         a.setAtsMissing(rank.atsMissing().toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
         a.setSelectedCourses(selectedCourses.toArray(new String[0]));
+        try {
+            a.setSelectedSkills(mapper.writeValueAsString(selectedSkills));
+        } catch (JsonProcessingException e) {
+            a.setSelectedSkills("{}");
+        }
         a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
         try {
             a.setBulletRanking(mapper.writeValueAsString(rankedSorted));
@@ -275,7 +287,8 @@ public class ApplicationService {
 
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
-        String tex = renderer.render(userId, selected, projectById, selectedCourses);
+        Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
+        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills);
         progress.emit("Compiling PDF via tectonic...");
         PdfCompiler.Result r = compiler.compile(tex);
 
@@ -298,6 +311,33 @@ public class ApplicationService {
             }
         }
         return repo.save(a);
+    }
+
+    private List<LlmClient.SkillCategory> buildSkillCategories(com.resumepipeline.profile.Profile p) {
+        List<LlmClient.SkillCategory> cats = new ArrayList<>();
+        addSkillCategory(cats, "languages", p.getSkillsLanguages());
+        addSkillCategory(cats, "frameworks", p.getSkillsFrameworks());
+        addSkillCategory(cats, "databases", p.getSkillsDatabases());
+        addSkillCategory(cats, "devops", p.getSkillsDevops());
+        return cats;
+    }
+
+    private static void addSkillCategory(List<LlmClient.SkillCategory> cats, String name, String csv) {
+        if (csv == null || csv.isBlank()) return;
+        List<String> items = Arrays.stream(csv.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+        if (!items.isEmpty()) cats.add(new LlmClient.SkillCategory(name, items));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, List<String>> parseSelectedSkills(String json) {
+        if (json == null || json.isBlank() || json.equals("{}")) return Map.of();
+        try {
+            return mapper.readValue(json, Map.class);
+        } catch (Exception e) {
+            log.warn("Failed to parse selectedSkills JSON: {}", json);
+            return Map.of();
+        }
     }
 
     // Short text preview for log messages — keeps lines readable.
