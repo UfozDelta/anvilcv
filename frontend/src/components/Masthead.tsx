@@ -26,7 +26,7 @@ export function Masthead() {
     <>
       <header className="masthead shell">
         <Link to="/" className="masthead__brand" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
-          Resu<span style={{ fontStyle: 'normal', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: '0.55em' }}> // </span>Forge
+          Anvil<span style={{ fontStyle: 'normal', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: '0.55em' }}> // </span>CV
         </Link>
         <div className="masthead__rule" />
         <div className="masthead__meta">

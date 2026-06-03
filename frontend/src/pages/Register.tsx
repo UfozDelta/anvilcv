@@ -66,7 +66,7 @@ export function Register() {
       <div style={{ width: 460, maxWidth: '100%' }}>
         <div style={{ marginBottom: 28, borderBottom: '3px solid var(--ink)', paddingBottom: 14 }}>
           <h1 className="display" style={{ fontSize: 56, margin: '0 0 6px' }}>
-            Resu<span style={{ fontFamily: 'var(--mono)', fontStyle: 'normal', fontWeight: 700, fontSize: '0.5em' }}> // </span>Forge
+            Anvil<span style={{ fontFamily: 'var(--mono)', fontStyle: 'normal', fontWeight: 700, fontSize: '0.5em' }}> // </span>CV
           </h1>
           <div className="editorial muted" style={{ fontSize: 16, marginTop: 8 }}>
             Create your account.

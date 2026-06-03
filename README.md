@@ -1,4 +1,4 @@
-# Resume Pipeline
+# AnvilCV
 
 Full-stack app for managing resume content, generating tailored PDFs, and tracking job applications. Paste a job description, get a ranked bullet selection, and compile a PDF — all in one flow. Supports multiple users, each with isolated data.
 

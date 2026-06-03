@@ -35,7 +35,7 @@ export function Landing() {
       {/* ── HERO ── */}
       <section className="lp-hero shell" style={{ paddingTop: 56 }}>
         <div className="lp-hero__eyebrow">
-          <span className="lp-label">RESU FORGE</span>
+          <span className="lp-label">ANVIL CV</span>
           <div className="lp-hero__rule" />
           <span className="lp-label lp-muted">AI RESUME TAILORING</span>
         </div>
@@ -43,9 +43,9 @@ export function Landing() {
         <div className="lp-hero__grid">
           <div className="lp-hero__left">
             <h1 className="lp-display lp-hero__heading">
-              Resu<br />
+              Anvil<br />
               <span className="lp-hero__slash">// </span>
-              Forge
+              CV
             </h1>
             <p className="lp-editorial lp-hero__sub">
               Paste a job description.<br />
@@ -65,7 +65,7 @@ export function Landing() {
                 <span />
                 <span />
                 <span />
-                <span className="lp-hero__terminal-title">resu-forge — tectonic</span>
+                <span className="lp-hero__terminal-title">anvilcv — tectonic</span>
               </div>
               <pre className="lp-hero__terminal-body">{`$ POST /api/applications?includePdf=true
   jdText: "We're hiring a backend engineer..."
@@ -109,14 +109,14 @@ export function Landing() {
             Your résumé.<br />Every job.<br />In seconds.
           </p>
           <Link to="/login" className="lp-btn lp-btn--ink">
-            OPEN FORGE &nbsp;→
+            OPEN ANVIL &nbsp;→
           </Link>
         </div>
       </section>
 
       {/* ── FOOTER ── */}
       <footer className="lp-footer shell">
-        <span className="lp-label lp-muted">RESU FORGE</span>
+        <span className="lp-label lp-muted">ANVIL CV</span>
         <nav className="lp-footer__links">
           <NavLink to="/login" className="lp-footer__link">GET STARTED</NavLink>
           <span className="lp-footer__sep">·</span>
