@@ -78,7 +78,7 @@ public class BulletService {
                         p.getTechStack(), p.getYourRole(), p.getOwnership(),
                         p.getScaleImpact(), p.getHardestProblem(),
                         p.getTitle(), p.getCompany(), p.getLocation(), p.getDates()),
-                progress);
+                progress, null);
 
         return result.bullets().stream()
                 .map(g -> repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), cat)))

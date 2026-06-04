@@ -52,7 +52,7 @@ public class GoogleLlmClient implements LlmClient {
     // -------- generateBullets --------
 
     @Override
-    public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress) {
+    public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens) {
         boolean experience = req.kind() == SourceKind.EXPERIENCE;
 
         String contextBlock = experience
@@ -219,7 +219,7 @@ public class GoogleLlmClient implements LlmClient {
 
         progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
-        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress);
+        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress, tokens);
 
         // If we lost too many bullets to the word-count filter, retry once with sharper instructions.
         if (cfg.isWordFilterEnabled() && kept.size() < target) {
@@ -234,7 +234,7 @@ public class GoogleLlmClient implements LlmClient {
                     cfg.getDoubleLineLow(), cfg.getDoubleLineHigh());
             log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
             progress.emit("Retry: only " + firstPassCount + "/" + target + " passed filter, calling LLM again with stricter length rules...");
-            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress);
+            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress, tokens);
             if (retry.size() > kept.size()) {
                 progress.emit("Retry result: " + retry.size() + "/" + target + " passed (was " + firstPassCount + "/" + target + ")");
                 kept = retry;
@@ -249,8 +249,8 @@ public class GoogleLlmClient implements LlmClient {
 
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private List<GeneratedBullet> callAndFilter(String prompt, Schema schema,
-                                                int target, GenerationConfig cfg, ProgressLog progress) {
-        String json = call(generateModel, prompt, schema, cfg.getTemperature());
+                                                int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens) {
+        String json = call(generateModel, prompt, schema, cfg.getTemperature(), tokens);
         BulletsEnvelope env;
         try {
             env = mapper.readValue(json, BulletsEnvelope.class);
@@ -319,7 +319,7 @@ public class GoogleLlmClient implements LlmClient {
     // -------- cleanJd --------
 
     @Override
-    public JdCleanResult cleanJd(String rawJd, ProgressLog progress) {
+    public JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
         progress.emit("Calling LLM to clean JD and extract keywords...");
         String prompt = """
                 Clean this job description and extract structured fields.
@@ -346,7 +346,7 @@ public class GoogleLlmClient implements LlmClient {
                 .required(List.of("cleanJd", "company", "role", "keywords"))
                 .build();
 
-        String json = call(cleanJdModel, prompt, schema);
+        String json = call(cleanJdModel, prompt, schema, 1.0, tokens);
         try {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
             List<String> kws = env.keywords == null ? List.of() : env.keywords;
@@ -362,7 +362,7 @@ public class GoogleLlmClient implements LlmClient {
     // -------- rankBullets --------
 
     @Override
-    public RankResult rankBullets(RankRequest req, ProgressLog progress) {
+    public RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens) {
         progress.emit("Calling LLM to rank " + req.bullets().size() + " bullets against JD...");
         StringBuilder bulletsBlock = new StringBuilder();
         for (BulletForMatch b : req.bullets()) {
@@ -460,7 +460,7 @@ public class GoogleLlmClient implements LlmClient {
                 .required(List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses", "selectedSkills"))
                 .build();
 
-        String json = callStreaming(matchModel, prompt, schema, 1.0, "Ranking", progress);
+        String json = callStreaming(matchModel, prompt, schema, 1.0, "Ranking", progress, tokens);
         try {
             RankEnvelope env = mapper.readValue(json, RankEnvelope.class);
             List<RankedBullet> ranked = env.rankedBullets.stream()
@@ -501,7 +501,7 @@ public class GoogleLlmClient implements LlmClient {
     // -------- coverLetter --------
 
     @Override
-    public String coverLetter(CoverLetterRequest req, ProgressLog progress) {
+    public String coverLetter(CoverLetterRequest req, ProgressLog progress, TokenAccumulator tokens) {
         progress.emit("Generating cover letter...");
         String bulletsBlock = req.topBulletTexts().stream()
                 .map(t -> "  - " + t)
@@ -539,7 +539,7 @@ public class GoogleLlmClient implements LlmClient {
                 .required(List.of("coverLetter"))
                 .build();
 
-        String json = callStreaming(matchModel, prompt, schema, 1.0, "Cover letter", progress);
+        String json = callStreaming(matchModel, prompt, schema, 1.0, "Cover letter", progress, tokens);
         try {
             CoverLetterEnvelope env = mapper.readValue(json, CoverLetterEnvelope.class);
             progress.emit("Cover letter generated.");
@@ -567,11 +567,7 @@ public class GoogleLlmClient implements LlmClient {
 
     // -------- shared --------
 
-    private String call(String model, String prompt, Schema schema) {
-        return call(model, prompt, schema, 1.0);
-    }
-
-    private String call(String model, String prompt, Schema schema, double temperature) {
+    private String call(String model, String prompt, Schema schema, double temperature, TokenAccumulator tokens) {
         GenerateContentConfig config = GenerateContentConfig.builder()
                 .responseMimeType("application/json")
                 .responseSchema(schema)
@@ -581,13 +577,21 @@ public class GoogleLlmClient implements LlmClient {
         // Without this, a stalled LLM response blocks the virtual thread forever.
         try {
             PipelineTimer tLlm = PipelineTimer.start("LLM " + model + " (promptLen=" + prompt.length() + ")");
+            GenerateContentResponse[] respHolder = new GenerateContentResponse[1];
             String json = CompletableFuture
                     .supplyAsync(() -> {
                         GenerateContentResponse resp = client.models.generateContent(model, prompt, config);
+                        respHolder[0] = resp;
                         return resp.text();
                     })
                     .get(120, TimeUnit.SECONDS);
             tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
+            if (tokens != null && respHolder[0] != null) {
+                respHolder[0].usageMetadata().ifPresent(u -> tokens.add(
+                        model,
+                        u.promptTokenCount().orElse(0),
+                        u.candidatesTokenCount().orElse(0)));
+            }
             log.debug("LLM {} raw: {}", model, json);
             return json;
         } catch (TimeoutException e) {
@@ -600,7 +604,7 @@ public class GoogleLlmClient implements LlmClient {
     }
 
     private String callStreaming(String model, String prompt, Schema schema,
-                                 double temperature, String label, ProgressLog progress) {
+                                 double temperature, String label, ProgressLog progress, TokenAccumulator tokens) {
         GenerateContentConfig config = GenerateContentConfig.builder()
                 .responseMimeType("application/json")
                 .responseSchema(schema)
@@ -608,26 +612,38 @@ public class GoogleLlmClient implements LlmClient {
                 .build();
         try {
             PipelineTimer tLlm = PipelineTimer.start("LLM stream " + model + " (promptLen=" + prompt.length() + ")");
+            int[] promptOut = {0, 0};
             String json = CompletableFuture
                     .supplyAsync(() -> {
                         ResponseStream<GenerateContentResponse> stream =
                                 client.models.generateContentStream(model, prompt, config);
                         StringBuilder sb = new StringBuilder();
                         int chunks = 0;
+                        GenerateContentResponse lastChunk = null;
                         for (GenerateContentResponse chunk : stream) {
                             String t = chunk.text();
                             if (t != null) sb.append(t);
                             chunks++;
+                            lastChunk = chunk;
                             if (chunks % 10 == 0) {
                                 // Rough word count — strip ** so bold tokens don't inflate count.
                                 int words = sb.toString().replace("**", "").trim().split("\\s+").length;
                                 progress.emit(label + "... (" + words + "w received)");
                             }
                         }
+                        if (tokens != null && lastChunk != null) {
+                            lastChunk.usageMetadata().ifPresent(u -> {
+                                promptOut[0] = u.promptTokenCount().orElse(0);
+                                promptOut[1] = u.candidatesTokenCount().orElse(0);
+                            });
+                        }
                         return sb.toString();
                     })
                     .get(120, TimeUnit.SECONDS);
             tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
+            if (tokens != null && (promptOut[0] > 0 || promptOut[1] > 0)) {
+                tokens.add(model, promptOut[0], promptOut[1]);
+            }
             log.debug("LLM stream {} raw: {}", model, json);
             return json;
         } catch (TimeoutException e) {

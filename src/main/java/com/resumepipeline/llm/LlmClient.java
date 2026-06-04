@@ -11,13 +11,13 @@ import java.util.List;
  */
 public interface LlmClient {
 
-    BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress);
+    BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens);
 
-    JdCleanResult cleanJd(String rawJd, ProgressLog progress);
+    JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
-    RankResult rankBullets(RankRequest req, ProgressLog progress);
+    RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens);
 
-    String coverLetter(CoverLetterRequest req, ProgressLog progress);
+    String coverLetter(CoverLetterRequest req, ProgressLog progress, TokenAccumulator tokens);
 
     // --- types ---
 

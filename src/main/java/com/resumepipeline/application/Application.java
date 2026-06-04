@@ -68,6 +68,15 @@ public class Application {
     @Column(nullable = false)
     private String outcome = "applied";
 
+    @Column(name = "llm_prompt_tokens", nullable = false)
+    private int llmPromptTokens = 0;
+
+    @Column(name = "llm_candidates_tokens", nullable = false)
+    private int llmCandidatesTokens = 0;
+
+    @Column(name = "llm_cost_usd", nullable = false)
+    private java.math.BigDecimal llmCostUsd = java.math.BigDecimal.ZERO;
+
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
@@ -113,5 +122,11 @@ public class Application {
     public void setTectonicLog(String tectonicLog) { this.tectonicLog = tectonicLog; }
     public String getOutcome() { return outcome; }
     public void setOutcome(String outcome) { this.outcome = outcome; }
+    public int getLlmPromptTokens() { return llmPromptTokens; }
+    public void setLlmPromptTokens(int llmPromptTokens) { this.llmPromptTokens = llmPromptTokens; }
+    public int getLlmCandidatesTokens() { return llmCandidatesTokens; }
+    public void setLlmCandidatesTokens(int llmCandidatesTokens) { this.llmCandidatesTokens = llmCandidatesTokens; }
+    public java.math.BigDecimal getLlmCostUsd() { return llmCostUsd; }
+    public void setLlmCostUsd(java.math.BigDecimal llmCostUsd) { this.llmCostUsd = llmCostUsd; }
     public Instant getCreatedAt() { return createdAt; }
 }

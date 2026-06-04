@@ -6,6 +6,7 @@ import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.jd.JdFetcher;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.progress.PipelineTimer;
 import com.resumepipeline.progress.ProgressLog;
@@ -89,9 +90,11 @@ public class ApplicationService {
             progress.emit("Fetched JD (" + jdText.length() + " chars)");
         }
 
+        TokenAccumulator tokens = new TokenAccumulator();
+
         // Stage: clean JD — strips boilerplate and extracts role/company/keywords
         PipelineTimer tClean = PipelineTimer.start("cleanJd");
-        LlmClient.JdCleanResult clean = llm.cleanJd(jdText, progress);
+        LlmClient.JdCleanResult clean = llm.cleanJd(jdText, progress, tokens);
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
@@ -158,7 +161,7 @@ public class ApplicationService {
                 clean.keywords(), roleEmphasis, bulletsForMatch, allCourses, skillCategories);
 
         PipelineTimer tRank = PipelineTimer.start("rank (" + candidates.size() + " bullets)");
-        LlmClient.RankResult rank = llm.rankBullets(rankReq, progress);
+        LlmClient.RankResult rank = llm.rankBullets(rankReq, progress, tokens);
         tRank.stop();
 
         // Server-side selection: top 8 overall, cap 3 per project.
@@ -333,7 +336,7 @@ public class ApplicationService {
         CompletableFuture<String> coverLetterFuture = includeCoverLetter
                 ? CompletableFuture.supplyAsync(() -> llm.coverLetter(
                         new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), roleEmphasis, selectedTexts),
-                        progress), PARALLEL_EXECUTOR)
+                        progress, tokens), PARALLEL_EXECUTOR)
                 : CompletableFuture.completedFuture(null);
 
         PipelineTimer tPdf = PipelineTimer.start("tectonic + cover letter");
@@ -389,6 +392,11 @@ public class ApplicationService {
                 }
             }
         }
+        a.setLlmPromptTokens(tokens.getPromptTokens());
+        a.setLlmCandidatesTokens(tokens.getCandidatesTokens());
+        a.setLlmCostUsd(tokens.getCostUsd());
+        progress.emit("LLM cost: $" + tokens.getCostUsd().toPlainString()
+                + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)");
         return repo.save(a);
     }
 
