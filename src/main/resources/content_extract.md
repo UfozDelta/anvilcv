@@ -6,6 +6,26 @@ You are Claude. A developer has pointed you at a codebase. Explore it autonomous
 
 ---
 
+## Before You Begin — Ask the Developer
+
+Before exploring the codebase, ask both questions in one message:
+
+> "What was your specific role on this project, and what did you personally own end-to-end? Also — what was the hardest technical problem you had to solve? And finally: if you had one line on a resume for this project, what would you lead with?"
+
+Do not begin codebase exploration or write any section until the developer replies.
+
+Use their answer to fill **Your Role**, **What You Owned End-to-End**, and **Hardest Problem Solved**. The third question reveals what they consider most impressive — surface that in the **Standout Signal** section and as the lead sentence of **Architecture Overview**. Cross-check all claims against git history — if their answer conflicts with blame data, note the discrepancy rather than silently overriding either source.
+
+**Multi-contributor pre-flight:** Before writing any ownership section, run:
+
+```bash
+git shortlog -sn --no-merges
+```
+
+If more than one contributor has significant commits on core files, lock verb choices to "Led", "Contributed to", or "Collaborated on" — do not use "Architected", "Built", or "Designed" for shared work. Note the contributor count explicitly in **Your Role**.
+
+---
+
 ## Output Format
 
 Emit plain headed sections — no outer code fence. Use backticks only for inline technique names. If the repo contains multiple independently-deployable services, emit one full block per service.

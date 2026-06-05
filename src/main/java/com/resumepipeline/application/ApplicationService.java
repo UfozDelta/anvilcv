@@ -91,6 +91,9 @@ public class ApplicationService {
         }
 
         TokenAccumulator tokens = new TokenAccumulator();
+        PipelineTimer tTotal = PipelineTimer.start("total pipeline");
+        Application a = new Application();
+        try {
 
         // Stage: clean JD — strips boilerplate and extracts role/company/keywords
         PipelineTimer tClean = PipelineTimer.start("cleanJd");
@@ -351,7 +354,6 @@ public class ApplicationService {
         }
         tPdf.stop("success=" + r.success());
 
-        Application a = new Application();
         a.setUserId(userId);
         a.setJdText(jdText);
         a.setJdUrl(jdUrl);
@@ -395,9 +397,16 @@ public class ApplicationService {
         a.setLlmPromptTokens(tokens.getPromptTokens());
         a.setLlmCandidatesTokens(tokens.getCandidatesTokens());
         a.setLlmCostUsd(tokens.getCostUsd());
+        a.setPipelineDurationMs(tTotal.stop());
         progress.emit("LLM cost: $" + tokens.getCostUsd().toPlainString()
-                + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)");
+                + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)"
+                + " pipeline: " + a.getPipelineDurationMs() + "ms");
         return repo.save(a);
+
+        } catch (RuntimeException e) {
+            tTotal.stop("FAILED");
+            throw e;
+        }
     }
 
     /** Override selection and re-render. Does NOT re-call the LLM. */
@@ -413,6 +422,7 @@ public class ApplicationService {
         Map<UUID, Project> projectById = projectRepo.findByIdIn(projectIds).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
+        PipelineTimer tRerender = PipelineTimer.start("rerender pipeline");
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
         Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
@@ -438,6 +448,7 @@ public class ApplicationService {
                 }
             }
         }
+        a.setPipelineDurationMs(tRerender.stop());
         return repo.save(a);
     }
 
