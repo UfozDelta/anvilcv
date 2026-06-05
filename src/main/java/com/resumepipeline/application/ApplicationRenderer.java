@@ -151,17 +151,19 @@ public class ApplicationRenderer {
         for (Map.Entry<UUID, List<Bullet>> g : grouped.entrySet()) {
             Project p = projectById.get(g.getKey());
             String name = p == null ? "Project" : p.getName();
-            String tagSummary = g.getValue().stream()
-                    .flatMap(b -> Arrays.stream(b.getTags() == null ? new String[0] : b.getTags()))
-                    .distinct().limit(6)
-                    .reduce((a, b) -> a + ", " + b).orElse("");
+            String tagSummary = (p != null && p.getTechStack() != null && !p.getTechStack().isBlank())
+                    ? p.getTechStack()
+                    : g.getValue().stream()
+                        .flatMap(b -> Arrays.stream(b.getTags() == null ? new String[0] : b.getTags()))
+                        .distinct().limit(6)
+                        .reduce((a, b) -> a + ", " + b).orElse("");
 
             sb.append("      \\resumeProjectHeading\n")
               .append("        {\\textbf{").append(escapePlain(name)).append("}");
             if (!tagSummary.isEmpty()) {
-                sb.append(" -- \\emph{").append(escapePlain(tagSummary)).append("}");
+                sb.append(" -- \\emph{").append(escapeRich(tagSummary)).append("}");
             }
-            sb.append("}{}\n")
+            sb.append("}{").append(escapePlain(p == null ? "" : nz(p.getDates()))).append("}\n")
               .append("        \\resumeItemListStart\n");
             for (Bullet b : g.getValue()) {
                 sb.append("          \\resumeItem{").append(escapeRich(b.getText())).append("}\n");

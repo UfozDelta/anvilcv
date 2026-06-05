@@ -51,6 +51,7 @@ export function SettingsPage() {
   if (loading) return <div className="shell"><span className="spinner">LOADING</span></div>;
 
   return (
+    <>
     <div className="shell" style={{ maxWidth: 720 }}>
       <h1 style={{ fontFamily: 'var(--mono)', fontSize: '1rem', marginBottom: 32 }}>
         05 — GENERATION SETTINGS
@@ -184,6 +185,7 @@ export function SettingsPage() {
         </a>
       </div>
     </div>
+    </>
   );
 }
 
