@@ -16,13 +16,26 @@ export function Applications() {
     await load();
   }
 
+  const q = outcome ? `?outcome=${outcome}` : '';
+
   async function load() {
     setLoading(true);
     try {
-      const q = outcome ? `?outcome=${outcome}` : '';
       setApps(await api.get<ApplicationSummary[]>(`/api/applications${q}`));
     } finally { setLoading(false); }
   }
+
+  async function exportCsv() {
+    const res = await api.fetchRaw(`/api/applications/export${q}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'applications.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   useEffect(() => { load(); }, [outcome]);
 
   return (
@@ -40,6 +53,9 @@ export function Applications() {
             {o ? o.toUpperCase() : 'ALL'}
           </button>
         ))}
+        <button className="btn btn--sm btn--ghost" onClick={exportCsv} style={{ marginLeft: 'auto', border: '2px solid var(--ink)' }}>
+          ↓ CSV
+        </button>
       </div>
 
       {loading ? <span className="spinner">LOADING</span> : (

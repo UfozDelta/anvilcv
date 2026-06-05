@@ -14,6 +14,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -33,10 +35,39 @@ public class ApplicationController {
         this.jobStore = jobStore;
     }
 
+    private static final DateTimeFormatter CSV_DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
+
+    private static String csvField(String s) {
+        if (s == null) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
+    }
+
     @GetMapping
     public List<ApplicationSummary> list(Authentication auth,
                                          @RequestParam(required = false) String outcome) {
         return service.list(AuthUtils.userId(auth), outcome).stream().map(ApplicationSummary::from).toList();
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(Authentication auth,
+                                         @RequestParam(required = false) String outcome) {
+        List<ApplicationSummary> apps = service.list(AuthUtils.userId(auth), outcome)
+                .stream().map(ApplicationSummary::from).toList();
+        StringBuilder csv = new StringBuilder("Company,Role,Outcome,Date\n");
+        for (ApplicationSummary a : apps) {
+            csv.append(csvField(a.company())).append(',')
+               .append(csvField(a.role())).append(',')
+               .append(csvField(a.outcome())).append(',')
+               .append(CSV_DATE.format(a.createdAt())).append('\n');
+        }
+        byte[] bytes = csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"applications.csv\"")
+                .body(bytes);
     }
 
     @PostMapping("/submit")
