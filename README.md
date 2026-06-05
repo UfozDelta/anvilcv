@@ -5,12 +5,19 @@ Full-stack app for managing resume content, generating tailored PDFs, and tracki
 ## Features
 
 - **Multi-user** — each user has isolated profile, projects, bullets, and applications
-- **Bullet management** — create, edit, tag, and filter resume bullets by skill
+- **Bullet management** — create, edit, tag, and filter resume bullets by skill; manual entry with category tagging
 - **Job application pipeline** — paste JD → LLM cleans and analyzes it → bullets ranked by relevance → PDF compiled
+- **Project enrichment** — GitHub repo fetch + structured enrichment fields (tech stack, role, ownership, scale, hardest problem) feed the LLM for higher-quality bullets
+- **Experience enrichment** — same enrichment flow applied to EXPERIENCE-kind entries
+- **Skill filtering** — LLM selects relevant skill categories per JD at compile time
+- **Coursework selection** — LLM picks relevant courses from profile per JD
 - **Cover letter** — optional co-generation alongside the resume
 - **Async progress tracking** — long LLM + PDF jobs run in background; frontend polls for status
 - **Bulk import** — upload page with rule-based resume parser for importing existing content
-- **LaTeX PDF output** — resume rendered via a Tectonic-compiled LaTeX template
+- **LaTeX PDF output** — resume rendered via a Tectonic-compiled LaTeX template; project headings show tech stack and date
+- **Generation config** — per-user tuning: word filter ranges, temperature, bold density, tone, action verb style
+- **Token tracking** — LLM token usage and cost tracked per application
+- **Project Context Extractor** — downloadable Claude instruction file for generating structured project context from any codebase
 
 ## What Is In This Repo
 
