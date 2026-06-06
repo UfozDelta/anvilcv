@@ -2,6 +2,8 @@ package com.resumepipeline.api;
 
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.llm.LlmUsageLog;
+import com.resumepipeline.llm.LlmUsageLogRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,9 +21,11 @@ import java.util.stream.Collectors;
 public class AdminController {
 
     private final ApplicationRepository repo;
+    private final LlmUsageLogRepository usageRepo;
 
-    public AdminController(ApplicationRepository repo) {
+    public AdminController(ApplicationRepository repo, LlmUsageLogRepository usageRepo) {
         this.repo = repo;
+        this.usageRepo = usageRepo;
     }
 
     @GetMapping("/stats")
@@ -71,6 +75,35 @@ public class AdminController {
                 })
                 .toList();
 
+        // LLM usage log aggregates (covers bullet generation + application pipeline)
+        List<LlmUsageLog> usageLogs = usageRepo.findAll();
+        Map<String, BigDecimal> costBySource = usageLogs.stream()
+                .collect(Collectors.groupingBy(LlmUsageLog::getSource,
+                        Collectors.reducing(BigDecimal.ZERO, LlmUsageLog::getCostUsd, BigDecimal::add)));
+        Map<String, Integer> promptBySource = usageLogs.stream()
+                .collect(Collectors.groupingBy(LlmUsageLog::getSource,
+                        Collectors.summingInt(LlmUsageLog::getPromptTokens)));
+        Map<String, Integer> candidatesBySource = usageLogs.stream()
+                .collect(Collectors.groupingBy(LlmUsageLog::getSource,
+                        Collectors.summingInt(LlmUsageLog::getCandidatesTokens)));
+
+        List<Map<String, Object>> usageBySource = costBySource.entrySet().stream()
+                .map(e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("source", e.getKey());
+                    m.put("promptTokens", promptBySource.getOrDefault(e.getKey(), 0));
+                    m.put("candidatesTokens", candidatesBySource.getOrDefault(e.getKey(), 0));
+                    m.put("costUsd", e.getValue().setScale(8, RoundingMode.HALF_UP));
+                    return m;
+                })
+                .sorted((a, b) -> ((BigDecimal) b.get("costUsd")).compareTo((BigDecimal) a.get("costUsd")))
+                .toList();
+
+        BigDecimal totalLogCost = usageLogs.stream()
+                .map(LlmUsageLog::getCostUsd)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(8, RoundingMode.HALF_UP);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalApplications", all.size());
         result.put("totalPromptTokens", totalPrompt);
@@ -78,6 +111,8 @@ public class AdminController {
         result.put("totalCostUsd", totalCost);
         result.put("perUser", perUser);
         result.put("perApplication", perApp);
+        result.put("usageLogTotalCostUsd", totalLogCost);
+        result.put("usageLogBySource", usageBySource);
         return result;
     }
 }

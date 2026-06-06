@@ -1,0 +1,15 @@
+feat(observability): track LLM cost and pipeline duration
+
+  Bullet generation costs were invisible — generateBullets() received  null TokenAccumulator so no tokens were recorded. Application pipeline
+  had no wall-clock timing at all.
+  - V13 adds pipeline_duration_ms to application (nullable, old rows null)
+  - V14 adds llm_usage_log with hard FKs to application + project,
+    CHECK ensures at least one FK is set per row
+  - LlmUsageService.record() guards zero-token no-ops and swallows
+    persistence errors so a log failure never breaks a pipeline run
+  - BulletService wraps generateBullets() in try/finally so partial
+    token use on exception still logs
+  - ApplicationService times full create() after validation, catches
+    RuntimeException to log FAILED; rerender() timed separately
+  - AdminController gains usageLogBySource and usageLogTotalCostUsd
+    aggregates alongside existing per-application stats
