@@ -6,6 +6,7 @@ import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.jd.JdFetcher;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.progress.PipelineTimer;
@@ -40,12 +41,13 @@ public class ApplicationService {
     private final ApplicationRenderer renderer;
     private final PdfCompiler compiler;
     private final ProfileService profileService;
+    private final LlmUsageService llmUsageService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ApplicationService(ApplicationRepository repo, BulletRepository bulletRepo,
                               ProjectRepository projectRepo, JdFetcher jdFetcher, LlmClient llm,
                               ApplicationRenderer renderer, PdfCompiler compiler,
-                              ProfileService profileService) {
+                              ProfileService profileService, LlmUsageService llmUsageService) {
         this.repo = repo;
         this.bulletRepo = bulletRepo;
         this.projectRepo = projectRepo;
@@ -54,6 +56,7 @@ public class ApplicationService {
         this.renderer = renderer;
         this.compiler = compiler;
         this.profileService = profileService;
+        this.llmUsageService = llmUsageService;
     }
 
     public List<Application> list(UUID userId, String outcome) {
@@ -91,6 +94,9 @@ public class ApplicationService {
         }
 
         TokenAccumulator tokens = new TokenAccumulator();
+        PipelineTimer tTotal = PipelineTimer.start("total pipeline");
+        Application a = new Application();
+        try {
 
         // Stage: clean JD — strips boilerplate and extracts role/company/keywords
         PipelineTimer tClean = PipelineTimer.start("cleanJd");
@@ -351,7 +357,6 @@ public class ApplicationService {
         }
         tPdf.stop("success=" + r.success());
 
-        Application a = new Application();
         a.setUserId(userId);
         a.setJdText(jdText);
         a.setJdUrl(jdUrl);
@@ -395,9 +400,18 @@ public class ApplicationService {
         a.setLlmPromptTokens(tokens.getPromptTokens());
         a.setLlmCandidatesTokens(tokens.getCandidatesTokens());
         a.setLlmCostUsd(tokens.getCostUsd());
+        a.setPipelineDurationMs(tTotal.stop());
         progress.emit("LLM cost: $" + tokens.getCostUsd().toPlainString()
-                + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)");
-        return repo.save(a);
+                + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)"
+                + " pipeline: " + a.getPipelineDurationMs() + "ms");
+        Application saved = repo.save(a);
+        llmUsageService.record(userId, "application_pipeline", tokens, saved.getId(), null);
+        return saved;
+
+        } catch (RuntimeException e) {
+            tTotal.stop("FAILED");
+            throw e;
+        }
     }
 
     /** Override selection and re-render. Does NOT re-call the LLM. */
@@ -413,6 +427,7 @@ public class ApplicationService {
         Map<UUID, Project> projectById = projectRepo.findByIdIn(projectIds).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
+        PipelineTimer tRerender = PipelineTimer.start("rerender pipeline");
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
         Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
@@ -438,6 +453,7 @@ public class ApplicationService {
                 }
             }
         }
+        a.setPipelineDurationMs(tRerender.stop());
         return repo.save(a);
     }
 

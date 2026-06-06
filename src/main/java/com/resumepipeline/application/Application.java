@@ -68,6 +68,9 @@ public class Application {
     @Column(nullable = false)
     private String outcome = "applied";
 
+    @Column(name = "pipeline_duration_ms")
+    private Long pipelineDurationMs;
+
     @Column(name = "llm_prompt_tokens", nullable = false)
     private int llmPromptTokens = 0;
 
@@ -122,6 +125,8 @@ public class Application {
     public void setTectonicLog(String tectonicLog) { this.tectonicLog = tectonicLog; }
     public String getOutcome() { return outcome; }
     public void setOutcome(String outcome) { this.outcome = outcome; }
+    public Long getPipelineDurationMs() { return pipelineDurationMs; }
+    public void setPipelineDurationMs(Long pipelineDurationMs) { this.pipelineDurationMs = pipelineDurationMs; }
     public int getLlmPromptTokens() { return llmPromptTokens; }
     public void setLlmPromptTokens(int llmPromptTokens) { this.llmPromptTokens = llmPromptTokens; }
     public int getLlmCandidatesTokens() { return llmCandidatesTokens; }
