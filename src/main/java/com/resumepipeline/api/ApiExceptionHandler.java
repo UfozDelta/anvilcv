@@ -72,6 +72,17 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleStatus(org.springframework.web.server.ResponseStatusException e) {
+        // Preserve the intended HTTP status (e.g. 404 from service ownership checks).
+        // Without this, the broad RuntimeException handler below would turn it into a 500.
+        return ResponseEntity.status(e.getStatusCode()).body(Map.of(
+                "source", "request",
+                "status", e.getStatusCode().value(),
+                "message", e.getReason() == null ? "Request failed" : e.getReason()
+        ));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException e) {
         // Unwrap LLM errors that escaped via parsing failures.
