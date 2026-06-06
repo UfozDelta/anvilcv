@@ -8,9 +8,12 @@ You are Claude. A developer has pointed you at a codebase. Explore it autonomous
 
 ## Before You Begin — Ask the Developer
 
-Before exploring the codebase, ask both questions in one message:
+Ask exactly this, as one message, then **STOP and wait for the reply**. Send nothing else — do not start exploring, do not preview your plan:
 
-> "What was your specific role on this project, and what did you personally own end-to-end? Also — what was the hardest technical problem you had to solve? And finally: if you had one line on a resume for this project, what would you lead with?"
+> Before I explore the codebase, three quick questions:
+> 1. What was your role — what did you personally own end-to-end?
+> 2. What was the hardest technical problem you solved?
+> 3. If you had one resume line for this project, what would you lead with?
 
 Do not begin codebase exploration or write any section until the developer replies.
 
@@ -26,9 +29,26 @@ If more than one contributor has significant commits on core files, lock verb ch
 
 ---
 
-## Output Format
+## Output — Write to File (do NOT paste the sections into chat)
 
-Emit plain headed sections — no outer code fence. Use backticks only for inline technique names. If the repo contains multiple independently-deployable services, emit one full block per service.
+When all sections are ready, **write the full document to a file** using your
+file-write tool:
+
+    anvilcv-context.md      (in the repo root — the current working directory)
+
+Overwrite the file if it already exists.
+
+File content = all the headed sections below, plain text, no outer code fence.
+Use backticks only for inline technique names. If the repo contains multiple
+independently-deployable services, emit one full block per service in the same
+file.
+
+After writing the file, reply in chat with **only**:
+- the path written: `anvilcv-context.md`
+- a 2–3 line summary: project name, category lens(es) picked, how many sections filled
+- one line: "Paste each section into its matching AnvilCV field."
+
+Do **not** print the section contents in chat — they live in the file.
 
 ---
 
@@ -239,3 +259,4 @@ Before outputting, verify:
 - [ ] No scale numbers that come from test/seed data rather than production
 - [ ] No present-tense metrics on an inactive repo (last commit > 18 months)
 - [ ] Anti-patterns table checked — anything flagged is either suppressed or qualified
+- [ ] Output written to `anvilcv-context.md` in the repo root — NOT pasted into chat; chat shows only path + 2–3 line summary
