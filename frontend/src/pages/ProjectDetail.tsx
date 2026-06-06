@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api, type Project, type Bullet, CATEGORIES } from '../lib/api';
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
+import { parseExtract } from '../lib/parseExtract';
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,9 @@ export function ProjectDetail() {
   const [ownership, setOwnership] = useState('');
   const [scaleImpact, setScaleImpact] = useState('');
   const [hardestProblem, setHardestProblem] = useState('');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteMsg, setPasteMsg] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoSaving, setInfoSaving] = useState(false);
   const [infoErr, setInfoErr] = useState<string | null>(null);
@@ -74,7 +78,7 @@ export function ProjectDetail() {
     if (!id) return;
     setEnrichErr(null); setEnrichSaving(true);
     try {
-      await api.put(`/api/projects/${id}`, { techStack, yourRole, ownership, scaleImpact, hardestProblem });
+      await api.put(`/api/projects/${id}`, { techStack, yourRole, ownership, scaleImpact, hardestProblem, description: editDescription });
       await load();
       setEnrichOpen(false);
     } catch (e: any) {
@@ -82,6 +86,25 @@ export function ProjectDetail() {
     } finally {
       setEnrichSaving(false);
     }
+  }
+
+  function parseAndFill() {
+    setPasteMsg(null);
+    const fields = parseExtract(pasteText);
+    const keys = Object.keys(fields) as (keyof typeof fields)[];
+    if (keys.length === 0) {
+      setPasteMsg('No recognized sections found. Paste the full extractor output.');
+      return;
+    }
+    if (fields.techStack !== undefined) setTechStack(fields.techStack);
+    if (fields.yourRole !== undefined) setYourRole(fields.yourRole);
+    if (fields.ownership !== undefined) setOwnership(fields.ownership);
+    if (fields.scaleImpact !== undefined) setScaleImpact(fields.scaleImpact);
+    if (fields.hardestProblem !== undefined) setHardestProblem(fields.hardestProblem);
+    if (fields.description !== undefined) setEditDescription(fields.description);
+    setPasteMsg(`Filled ${keys.length}/6 fields — review below, then SAVE CONTEXT.`);
+    setPasteOpen(false);
+    setPasteText('');
   }
 
   function generateBank() {
@@ -242,6 +265,39 @@ export function ProjectDetail() {
             )}
             {enrichOpen && (
               <div className="stack" style={{ marginTop: 8 }}>
+                {/* Paste-from-extractor shortcut */}
+                <div className="panel panel--inset stack-sm" style={{ background: 'var(--paper)' }}>
+                  <button
+                    type="button"
+                    style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    onClick={() => { setPasteOpen(o => !o); setPasteMsg(null); }}
+                  >
+                    <span className="label">PASTE EXTRACT</span>
+                    <span className="label muted">{pasteOpen ? '▲ COLLAPSE' : '▼ AUTO-FILL'}</span>
+                  </button>
+                  {!pasteOpen && (
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+                      Paste the Project Context Extractor output to auto-fill all fields below.
+                    </div>
+                  )}
+                  {pasteOpen && (
+                    <div className="stack-sm" style={{ marginTop: 8 }}>
+                      <textarea
+                        className="field__textarea"
+                        value={pasteText}
+                        onChange={e => setPasteText(e.target.value)}
+                        style={{ minHeight: 160 }}
+                        autoFocus
+                        placeholder={"Paste the full extractor output here, e.g.\n\n## Tech Stack\nReact, PostgreSQL, AES-256-GCM…\n\n## Your Role\n…"}
+                      />
+                      <div className="row">
+                        <button type="button" className="btn btn--acid btn--sm" onClick={parseAndFill} disabled={!pasteText.trim()}>PARSE &amp; FILL</button>
+                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setPasteOpen(false); setPasteText(''); }}>CANCEL</button>
+                      </div>
+                    </div>
+                  )}
+                  {pasteMsg && <div className="label muted" style={{ marginTop: 4 }}>{pasteMsg}</div>}
+                </div>
                 <label className="field">
                   <div className="field__label">Tech stack</div>
                   <input className="field__input" value={techStack} onChange={e => setTechStack(e.target.value)}
@@ -268,6 +324,12 @@ export function ProjectDetail() {
                   <textarea className="field__textarea" value={hardestProblem} onChange={e => setHardestProblem(e.target.value)}
                     style={{ minHeight: 80 }}
                     placeholder="Had to guarantee exactly-once delivery under network partitions…" />
+                </label>
+                <label className="field">
+                  <div className="field__label">Description / architecture overview</div>
+                  <textarea className="field__textarea" value={editDescription} onChange={e => setEditDescription(e.target.value)}
+                    style={{ minHeight: 80 }}
+                    placeholder="3–5 sentences: lead each with one subsystem + its technique or number…" />
                 </label>
                 {enrichErr && <div className="err">{enrichErr}</div>}
                 <div className="row">
