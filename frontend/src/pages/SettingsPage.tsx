@@ -173,7 +173,7 @@ export function SettingsPage() {
           </span>
           <p style={{ fontFamily: 'var(--mono)', fontSize: '0.75rem', color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.6 }}>
             A Claude instruction file. Point Claude at any codebase — it explores the repo and
-            produces a filled context doc ready to paste into your ResuForge project fields.
+            produces a filled context doc ready to paste into your AnvilCV project fields.
           </p>
         </div>
         <a
