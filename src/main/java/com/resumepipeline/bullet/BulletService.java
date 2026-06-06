@@ -2,6 +2,8 @@ package com.resumepipeline.bullet;
 
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.LlmUsageService;
+import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
@@ -23,11 +25,14 @@ public class BulletService {
     private final BulletRepository repo;
     private final ProjectService projectService;
     private final LlmClient llm;
+    private final LlmUsageService llmUsageService;
 
-    public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm) {
+    public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
+                         LlmUsageService llmUsageService) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
+        this.llmUsageService = llmUsageService;
     }
 
     public List<Bullet> listForProject(UUID userId, UUID projectId) {
@@ -71,14 +76,20 @@ public class BulletService {
 
         String cat = (category == null || category.isBlank()) ? "general" : category;
 
-        LlmClient.BulletGenerationResult result = llm.generateBullets(
-                new LlmClient.GenerateBulletsRequest(
-                        userId, sk, cat,
-                        p.getName(), p.getDescription(), p.getRepoContext(),
-                        p.getTechStack(), p.getYourRole(), p.getOwnership(),
-                        p.getScaleImpact(), p.getHardestProblem(),
-                        p.getTitle(), p.getCompany(), p.getLocation(), p.getDates()),
-                progress, null);
+        TokenAccumulator tokens = new TokenAccumulator();
+        LlmClient.BulletGenerationResult result;
+        try {
+            result = llm.generateBullets(
+                    new LlmClient.GenerateBulletsRequest(
+                            userId, sk, cat,
+                            p.getName(), p.getDescription(), p.getRepoContext(),
+                            p.getTechStack(), p.getYourRole(), p.getOwnership(),
+                            p.getScaleImpact(), p.getHardestProblem(),
+                            p.getTitle(), p.getCompany(), p.getLocation(), p.getDates()),
+                    progress, tokens);
+        } finally {
+            llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
+        }
 
         return result.bullets().stream()
                 .map(g -> repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), cat)))
