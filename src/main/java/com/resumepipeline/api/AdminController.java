@@ -71,6 +71,7 @@ public class AdminController {
                     m.put("promptTokens", a.getLlmPromptTokens());
                     m.put("candidatesTokens", a.getLlmCandidatesTokens());
                     m.put("costUsd", a.getLlmCostUsd());
+                    m.put("pipelineDurationMs", a.getPipelineDurationMs());
                     return m;
                 })
                 .toList();
