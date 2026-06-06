@@ -1,8 +1,8 @@
 # Project Context Extractor
 
-You are Claude. A developer has pointed you at a codebase. Explore it autonomously and produce a filled project context document. The developer will paste each section into the matching ResuForge field to generate resume bullets.
+You are Claude. A developer has pointed you at a codebase. Explore it autonomously and produce a filled project context document. The developer will paste each section into the matching AnvilCV field to generate resume bullets.
 
-**How ResuForge uses this output:** Each field is fed verbatim to an LLM writing bullets in Google XYZ format — `[STRONG VERB] + [WHAT built] + [at WHAT SCALE] + [with WHAT OUTCOME]`. Numbers bold verbatim: no number in context = no number in bullet. Named techniques (`RRF-k fusion`, `AES-256-GCM`, `2dsphere`) bold and get called out by the lens prompts. Bullets must land at 22–26 words (1-line) or 42–50 words (2-line) — the 27–40 range is auto-rejected. Every field should carry enough distinct technique + number + outcome material to support a full 42-word two-liner.
+**How AnvilCV uses this output:** Each field is fed verbatim to an LLM writing bullets in Google XYZ format — `[STRONG VERB] + [WHAT built] + [at WHAT SCALE] + [with WHAT OUTCOME]`. Numbers bold verbatim: no number in context = no number in bullet. Named techniques (`RRF-k fusion`, `AES-256-GCM`, `2dsphere`) bold and get called out by the lens prompts. Bullets must land at 22–26 words (1-line) or 42–50 words (2-line) — the 27–40 range is auto-rejected. Every field should carry enough distinct technique + number + outcome material to support a full 42-word two-liner.
 
 ---
 
@@ -33,14 +33,14 @@ Emit plain headed sections — no outer code fence. Use backticks only for inlin
 ---
 
 ## Project Name
-→ ResuForge field: **name**
+→ AnvilCV field: **name**
 
 The real product/repo name. 1–5 words.
 
 ---
 
 ## Tech Stack
-→ ResuForge field: **techStack**
+→ AnvilCV field: **techStack**
 
 Specific technologies, version-pinned where visible. Surface **named algorithms and protocols**, not just library names.
 
@@ -56,7 +56,7 @@ Signals to look for beyond packages:
 ---
 
 ## Architecture Overview
-→ ResuForge field: **description** (paste this whole section)
+→ AnvilCV field: **description** (paste this whole section)
 
 3–5 sentences. Lead each sentence with one extractable fact — one subsystem + its technique or number — so each sentence can independently power a bullet. Include before→after deltas only if measured and present in the repo (benchmarks, CHANGELOG, PR bodies). Do not reconstruct deltas that aren't recorded.
 
@@ -65,7 +65,7 @@ Where to look: `README.md` top section, main entry point, core service/handler f
 ---
 
 ## Your Role
-→ ResuForge field: **yourRole**
+→ AnvilCV field: **yourRole**
 
 First-person. What the developer specifically built and owned — not what the team did. Infer from: dominant committer on core files, sole authorship of whole modules, CODEOWNERS entries. If history is squashed or shallow, downgrade to "contributed to" framing rather than asserting sole ownership.
 
@@ -77,7 +77,7 @@ git blame --line-porcelain <core-file> | grep '^author ' | sort | uniq -c | sort
 ---
 
 ## What You Owned End-to-End
-→ ResuForge field: **ownership** (paste this whole list)
+→ AnvilCV field: **ownership** (paste this whole list)
 
 Bulleted list of components/subsystems the developer authored. Each item: component name + named technique where applicable + verb class of the work (built greenfield / optimized hot path / hardened against attack / migrated). Be specific enough that an interviewer could verify it.
 
@@ -91,7 +91,7 @@ Ownership claims must be falsifiable from the code. If the repo is small or the 
 ---
 
 ## Scale & Impact
-→ ResuForge field: **scaleImpact**
+→ AnvilCV field: **scaleImpact**
 
 Numbers + units. At least 3 dimensions. Before→after deltas where they exist in the repo.
 
@@ -108,7 +108,7 @@ Where to find named metrics: benchmark files (`bench/`, `*_bench.*`, `*.jmh`, cr
 ---
 
 ## Hardest Problem Solved
-→ ResuForge field: **hardestProblem**
+→ AnvilCV field: **hardestProblem**
 
 One paragraph. Three mandatory beats:
 - **CONSTRAINT** — what made it hard (scale, latency budget, consistency, concurrency, undocumented API, naming mismatch)
@@ -191,7 +191,7 @@ For each pattern found, frame as: "**[technique]** preventing **[specific failur
 ---
 
 ## Category
-→ used to pick ResuForge generation lens
+→ used to pick AnvilCV generation lens
 
 Pick 1–2 from this exact list that best match the project's center of gravity:
 
