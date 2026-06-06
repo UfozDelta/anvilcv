@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -170,17 +171,18 @@ class ApplicationServiceTest {
         }
 
         @Test
-        void usageRecordFailureDoesNotFailPipeline() {
+        void usageRecordedAfterSave() {
+            // LlmUsageService.record() swallows its own persistence failures (see
+            // LlmUsageServiceTest), so a usage-logging error cannot fail the pipeline.
+            // Here assert the ordering contract: record runs after the application is saved.
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
-            doThrow(new RuntimeException("usage db down"))
-                    .when(llmUsageService).record(any(), any(), any(), any(), any());
 
-            // record is the very last step after save; its failure must not bubble up... but the
-            // current code calls record() AFTER save() and returns saved, so a throw WOULD bubble.
-            // Assert the actual contract: record runs after save.
-            assertThrows(RuntimeException.class,
-                    () -> service.create(user, "jd text", null, "backend", false, ProgressLog.noOp()));
-            verify(repo).save(any());
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            InOrder order = inOrder(repo, llmUsageService);
+            order.verify(repo).save(any());
+            order.verify(llmUsageService).record(eq(user), eq("application_pipeline"), any(),
+                    eq(out.getId()), isNull());
         }
 
         @Test
