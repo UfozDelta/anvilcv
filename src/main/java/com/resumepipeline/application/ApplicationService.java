@@ -29,8 +29,6 @@ import java.util.stream.Collectors;
 public class ApplicationService {
 
     private static final Logger log = LoggerFactory.getLogger(ApplicationService.class);
-    private static final int MAX_TOTAL = 15;
-    private static final int MAX_PER_PROJECT = 3; // also used as the per-project minimum target
     private static final ExecutorService PARALLEL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final ApplicationRepository repo;
@@ -170,119 +168,30 @@ public class ApplicationService {
         LlmClient.RankResult rank = llm.rankBullets(rankReq, progress, tokens);
         tRank.stop();
 
-        // Server-side selection: top 8 overall, cap 3 per project.
+        // Server-side selection: greedy top-N capped per project, then kind-floor + min-fill.
+        // Logic lives in BulletSelector so it can be unit-tested without the LLM/DB stubs.
         Map<UUID, Bullet> bulletById = candidates.stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
         List<LlmClient.RankedBullet> rankedSorted = rank.rankedBullets().stream()
                 .sorted(Comparator.comparingInt(LlmClient.RankedBullet::rank))
                 .toList();
 
-        progress.emit("Selecting top " + MAX_TOTAL + " bullets (max " + MAX_PER_PROJECT + " per project)...");
-        LinkedHashMap<UUID, Integer> perProject = new LinkedHashMap<>();
+        progress.emit("Selecting top " + BulletSelector.MAX_TOTAL + " bullets (max "
+                + BulletSelector.MAX_PER_PROJECT + " per project)...");
+        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, kwLower);
+
+        // Rebuild the per-project / per-kind summary for the progress stream.
         LinkedHashMap<String, Integer> perProjectName = new LinkedHashMap<>();
-        List<Bullet> selected = new ArrayList<>();
-        for (LlmClient.RankedBullet rb : rankedSorted) {
-            if (selected.size() >= MAX_TOTAL) break;
-            UUID bid;
-            try { bid = UUID.fromString(rb.bulletId()); } catch (Exception e) { continue; }
-            Bullet b = bulletById.get(bid);
-            if (b == null) continue;
-            int count = perProject.getOrDefault(b.getProjectId(), 0);
-            String proj = projectById.containsKey(b.getProjectId())
-                    ? projectById.get(b.getProjectId()).getName() : "unknown";
-            if (count >= MAX_PER_PROJECT) {
-                progress.emit("Skipped: cap reached for " + proj + " (" + MAX_PER_PROJECT + "/" + MAX_PER_PROJECT + ")");
-                continue;
-            }
-            perProject.put(b.getProjectId(), count + 1);
-            perProjectName.merge(proj, 1, Integer::sum);
-            selected.add(b);
+        for (Bullet b : selected) {
+            Project p = projectById.get(b.getProjectId());
+            perProjectName.merge(p != null ? p.getName() : "unknown", 1, Integer::sum);
         }
-        // Kind-floor pass: if greedy result is missing EXPERIENCE or PROJECT diversity,
-        // walk remaining ranked bullets and force-add from under-represented kinds (best-effort).
-        final int MIN_EXPERIENCE_PROJECTS = 2;
-        final int MIN_PROJECT_ENTRIES = 3;
-        Set<UUID> selectedIds = selected.stream().map(Bullet::getId).collect(Collectors.toCollection(java.util.HashSet::new));
         long expDistinct = selected.stream().map(Bullet::getProjectId).distinct()
                 .filter(pid -> { Project p = projectById.get(pid); return p != null && p.getKind() == Project.Kind.EXPERIENCE; })
                 .count();
         long projDistinct = selected.stream().map(Bullet::getProjectId).distinct()
                 .filter(pid -> { Project p = projectById.get(pid); return p != null && p.getKind() == Project.Kind.PROJECT; })
                 .count();
-
-        if (expDistinct < MIN_EXPERIENCE_PROJECTS || projDistinct < MIN_PROJECT_ENTRIES) {
-            Set<UUID> selectedProjects = selected.stream().map(Bullet::getProjectId).collect(Collectors.toCollection(java.util.HashSet::new));
-            for (LlmClient.RankedBullet rb : rankedSorted) {
-                if (expDistinct >= MIN_EXPERIENCE_PROJECTS && projDistinct >= MIN_PROJECT_ENTRIES) break;
-                UUID bid;
-                try { bid = UUID.fromString(rb.bulletId()); } catch (Exception e) { continue; }
-                if (selectedIds.contains(bid)) continue;
-                Bullet b = bulletById.get(bid);
-                if (b == null) continue;
-                Project p = projectById.get(b.getProjectId());
-                if (p == null || selectedProjects.contains(b.getProjectId())) continue;
-                if (p.getKind() == Project.Kind.EXPERIENCE && expDistinct < MIN_EXPERIENCE_PROJECTS) {
-                    selected.add(b);
-                    selectedIds.add(bid);
-                    selectedProjects.add(b.getProjectId());
-                    perProjectName.merge(p.getName(), 1, Integer::sum);
-                    expDistinct++;
-                } else if (p.getKind() == Project.Kind.PROJECT && projDistinct < MIN_PROJECT_ENTRIES) {
-                    selected.add(b);
-                    selectedIds.add(bid);
-                    selectedProjects.add(b.getProjectId());
-                    perProjectName.merge(p.getName(), 1, Integer::sum);
-                    projDistinct++;
-                }
-            }
-        }
-
-        // Minimum fill pass: for each project already on the resume with < MAX_PER_PROJECT bullets,
-        // pad up to MAX_PER_PROJECT using (1) remaining LLM-ranked candidates for that project,
-        // then (2) raw allBullets by tag score as a fallback for thin banks.
-        Map<UUID, List<Bullet>> allByProject = allBullets.stream()
-                .collect(Collectors.groupingBy(Bullet::getProjectId));
-        Set<UUID> selectedProjectIds = selected.stream().map(Bullet::getProjectId)
-                .collect(Collectors.toCollection(java.util.HashSet::new));
-
-        for (UUID pid : new ArrayList<>(selectedProjectIds)) {
-            int have = (int) selected.stream().filter(b -> b.getProjectId().equals(pid)).count();
-            if (have >= MAX_PER_PROJECT) continue;
-
-            Project proj = projectById.get(pid);
-            String projName = proj != null ? proj.getName() : "unknown";
-
-            // Source 1: remaining LLM-ranked candidates for this project (respect LLM signal).
-            for (LlmClient.RankedBullet rb : rankedSorted) {
-                if (have >= MAX_PER_PROJECT) break;
-                UUID bid;
-                try { bid = UUID.fromString(rb.bulletId()); } catch (Exception e) { continue; }
-                if (selectedIds.contains(bid)) continue;
-                Bullet b = bulletById.get(bid);
-                if (b == null || !b.getProjectId().equals(pid)) continue;
-                selected.add(b);
-                selectedIds.add(bid);
-                perProjectName.merge(projName, 1, Integer::sum);
-                have++;
-                progress.emit("Fill (ranked): " + projName + " +" + have);
-            }
-
-            // Source 2: raw allBullets fallback for thin banks, sorted by tag score.
-            if (have < MAX_PER_PROJECT) {
-                List<Bullet> bank = allByProject.getOrDefault(pid, List.of()).stream()
-                        .filter(b -> !selectedIds.contains(b.getId()))
-                        .sorted(Comparator.comparingLong(tagScore).reversed())
-                        .toList();
-                for (Bullet b : bank) {
-                    if (have >= MAX_PER_PROJECT) break;
-                    selected.add(b);
-                    selectedIds.add(b.getId());
-                    perProjectName.merge(projName, 1, Integer::sum);
-                    have++;
-                    progress.emit("Fill (bank fallback): " + projName + " +" + have);
-                }
-            }
-        }
 
         if (selected.size() > 12) {
             progress.emit("Warning: " + selected.size() + " bullets selected — PDF may exceed one page.");
@@ -294,29 +203,16 @@ public class ApplicationService {
                 progress.emit("  " + proj + " - " + cnt + " bullet" + (cnt > 1 ? "s" : "")));
 
         List<String> selectedCourses = rank.selectedCourses() == null ? List.of() : rank.selectedCourses();
-        Map<String, List<String>> selectedSkills = rank.selectedSkills() == null ? Map.of() : rank.selectedSkills();
 
-        // Skill floor pass: each category must have at least MIN_SKILLS_PER_CATEGORY items.
-        // LLM picks the top relevant ones first; pad remainder from raw profile order.
-        final int MIN_SKILLS_PER_CATEGORY = 6;
-        final String[] SKILL_KEYS = {"languages", "frameworks", "databases", "devops"};
+        // Skill-floor pass: pad each category up to the minimum from raw profile skills.
         Map<String, List<String>> rawSkills = Map.of(
                 "languages",  splitCsv(profile.getSkillsLanguages()),
                 "frameworks", splitCsv(profile.getSkillsFrameworks()),
                 "databases",  splitCsv(profile.getSkillsDatabases()),
                 "devops",     splitCsv(profile.getSkillsDevops())
         );
-        Map<String, List<String>> filledSkills = new LinkedHashMap<>(selectedSkills);
-        for (String key : SKILL_KEYS) {
-            List<String> sel = new ArrayList<>(filledSkills.getOrDefault(key, List.of()));
-            Set<String> seen = new LinkedHashSet<>(sel);
-            for (String item : rawSkills.getOrDefault(key, List.of())) {
-                if (sel.size() >= MIN_SKILLS_PER_CATEGORY) break;
-                if (seen.add(item)) sel.add(item);
-            }
-            filledSkills.put(key, sel);
-        }
-        progress.emit("Skills filled: " + SKILL_KEYS[0] + "=" + filledSkills.get("languages").size()
+        Map<String, List<String>> filledSkills = BulletSelector.fillSkills(rank.selectedSkills(), rawSkills);
+        progress.emit("Skills filled: languages=" + filledSkills.get("languages").size()
                 + " fw=" + filledSkills.get("frameworks").size()
                 + " db=" + filledSkills.get("databases").size()
                 + " devops=" + filledSkills.get("devops").size());

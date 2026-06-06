@@ -267,53 +267,37 @@ public class GoogleLlmClient implements LlmClient {
         List<GeneratedBullet> kept = new java.util.ArrayList<>();
         int dropped = 0;
         for (BulletJson b : env.bullets) {
-            String text = ensureTerminalPeriod(b.text);
-            int wc = wordCount(text);
-            if (cfg.isWordFilterEnabled()) {
-                if (wc >= cfg.getDeadZoneLow() && wc <= cfg.getDeadZoneHigh()) {
+            String text = BulletTextRules.ensureTerminalPeriod(b.text);
+            int wc = BulletTextRules.wordCount(text);
+            BulletTextRules.Decision decision = BulletTextRules.decide(wc, cfg);
+            switch (decision) {
+                case DEAD_ZONE -> {
                     log.info("Dropped bullet (word count {} in dead zone {}-{}): {}", wc,
                             cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(), abbreviate(text));
                     progress.emit("Cut: " + wc + "w - dead zone (" + cfg.getDeadZoneLow() + "-" + cfg.getDeadZoneHigh()
                             + "), needs " + cfg.getSingleLineLow() + "-" + cfg.getSingleLineHigh()
                             + " or " + cfg.getDoubleLineLow() + "-" + cfg.getDoubleLineHigh());
                     dropped++;
-                    continue;
                 }
-                if (wc < cfg.getMinWordFloor()) {
+                case TOO_SHORT -> {
                     log.info("Dropped bullet (word count {} too short, floor {}): {}", wc, cfg.getMinWordFloor(), abbreviate(text));
                     progress.emit("Cut: " + wc + "w - too short (min " + cfg.getMinWordFloor() + ")");
                     dropped++;
-                    continue;
+                }
+                case KEPT -> {
+                    List<String> tags = b.tags == null ? List.of() : b.tags;
+                    progress.emit("Kept: " + wc + "w [" + String.join(", ", tags) + "]");
+                    kept.add(new GeneratedBullet(text, tags));
                 }
             }
-            List<String> tags = b.tags == null ? List.of() : b.tags;
-            progress.emit("Kept: " + wc + "w [" + String.join(", ", tags) + "]");
-            kept.add(new GeneratedBullet(text, tags));
         }
         log.info("Generation kept {} bullets, dropped {}.", kept.size(), dropped);
         return kept;
     }
 
-    private static int wordCount(String s) {
-        if (s == null || s.isBlank()) return 0;
-        // Strip markdown bolds before counting so **64K** counts as one word, not three tokens.
-        String stripped = s.replace("**", "");
-        return stripped.trim().split("\\s+").length;
-    }
-
     private static String abbreviate(String s) {
         if (s == null) return "";
         return s.length() <= 80 ? s : s.substring(0, 77) + "...";
-    }
-
-    /** Trim and ensure terminal period. Bullets without a period look unfinished on a resume. */
-    private static String ensureTerminalPeriod(String s) {
-        if (s == null) return "";
-        String t = s.trim();
-        if (t.isEmpty()) return t;
-        char last = t.charAt(t.length() - 1);
-        if (last == '.' || last == '!' || last == '?') return t;
-        return t + ".";
     }
 
     // -------- cleanJd --------
