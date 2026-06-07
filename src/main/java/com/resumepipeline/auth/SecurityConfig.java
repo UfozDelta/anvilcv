@@ -31,7 +31,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/login", "/api/logout", "/api/me", "/api/register", "/error", "/api/tools/content-extract").permitAll()
+                .requestMatchers("/api/login", "/api/logout", "/api/me", "/api/register", "/error", "/api/tools/content-extract", "/api/public/stats").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )
