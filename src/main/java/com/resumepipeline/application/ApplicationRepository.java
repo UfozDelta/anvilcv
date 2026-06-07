@@ -14,4 +14,9 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
 
     @Query("SELECT a FROM Application a ORDER BY a.createdAt DESC")
     List<Application> findAllOrderByCreatedAtDesc();
+
+    @Query("SELECT AVG(a.pipelineDurationMs) FROM Application a WHERE a.pipelineDurationMs IS NOT NULL")
+    Double avgPipelineDurationMs();
+
+    long countByPipelineDurationMsNotNull();
 }

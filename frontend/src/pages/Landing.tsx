@@ -1,11 +1,21 @@
+import { useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
+import { api } from '../lib/api';
 import '../styles/landing.css';
+
+interface PublicStats {
+  avgPipelineDurationSec: number | null;
+  sampleSize: number | null;
+}
+
+// Fallback shown instantly; live value overwrites once /api/public/stats resolves.
+const DEFAULT_AVG_SEC = 17;
 
 const STEPS = [
   {
     num: '01',
     title: 'Build your\nbullet bank',
-    body: 'Add projects and experiences. Paste a description — AI writes 6–12 bullets per entry. Edit freely.',
+    body: 'Add projects and experiences. Paste a description. AI writes 6 to 12 bullets per entry. Edit freely.',
     tag: 'AI GENERATION',
   },
   {
@@ -28,7 +38,43 @@ const STEPS = [
   },
 ];
 
+const FEATURES = [
+  {
+    icon: '[01]',
+    title: 'NOT A CHATBOT',
+    body: 'ChatGPT forgets your work between sessions. Anvil keeps a permanent bullet bank. Write once, reuse across every application.',
+  },
+  {
+    icon: '[02]',
+    title: 'ATS-AWARE',
+    body: 'Every Job Description parsed for keywords. The pipeline tells you which terms matched and which are missing before you apply. No guessing.',
+  },
+  {
+    icon: '[03]',
+    title: 'ONE BANK, MANY JOBS',
+    body: 'Tailor the same experience to a backend role and a data role in minutes. The bank stays; only the selection changes.',
+  },
+];
+
 export function Landing() {
+  const [avgSec, setAvgSec] = useState<number>(DEFAULT_AVG_SEC);
+  const [sampleSize, setSampleSize] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.get<PublicStats>('/api/public/stats')
+      .then((s) => {
+        if (!alive) return;
+        if (s.avgPipelineDurationSec != null) setAvgSec(s.avgPipelineDurationSec);
+        setSampleSize(s.sampleSize);
+      })
+      .catch(() => { /* keep default on any failure — no error UI on landing */ });
+    return () => { alive = false; };
+  }, []);
+
+  // round to whole seconds for the headline stat
+  const avgDisplay = Math.round(avgSec);
+
   return (
     <div className="lp-root">
 
@@ -65,7 +111,7 @@ export function Landing() {
                 <span />
                 <span />
                 <span />
-                <span className="lp-hero__terminal-title">anvilcv — tectonic</span>
+                <span className="lp-hero__terminal-title">anvilcv : tectonic</span>
               </div>
               <pre className="lp-hero__terminal-body">{`$ POST /api/applications?includePdf=true
   jdText: "We're hiring a backend engineer..."
@@ -78,6 +124,71 @@ export function Landing() {
   atsMatched:  ["Kubernetes","gRPC","Postgres"]
   atsMissing:  ["Terraform"]
   pdfBase64:   264 KB  ✓`}</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PROOF: SAMPLE OUTPUT ── */}
+      <section className="lp-proof shell">
+        <div className="lp-section-mark">
+          <span className="lp-section-title">SAMPLE OUTPUT</span>
+          <div className="lp-section-rule" />
+          <span className="lp-section-title lp-muted">ONE JD → ONE PDF</span>
+        </div>
+
+        <div className="lp-proof__grid">
+          <div className="lp-proof__copy">
+            <h2 className="lp-display lp-proof__heading">
+              See the<br />actual page.
+            </h2>
+            <p className="lp-proof__body">
+              Not a mockup. Every run produces a real, compiled PDF.
+              Ranked bullets, matched keywords, single-page fit.
+            </p>
+            <div className="lp-proof__stats">
+              <div className="lp-proof__stat">
+                <span className="lp-proof__stat-num">8</span>
+                <span className="lp-proof__stat-label">bullets selected</span>
+              </div>
+              <div className="lp-proof__stat">
+                <span className="lp-proof__stat-num">34</span>
+                <span className="lp-proof__stat-label">bullets ranked</span>
+              </div>
+              <div className="lp-proof__stat">
+                <span className="lp-proof__stat-num">{avgDisplay}s</span>
+                <span className="lp-proof__stat-label">
+                  avg JD → PDF
+                  {sampleSize != null && ` · ${sampleSize} runs`}
+                </span>
+              </div>
+            </div>
+            <div className="lp-proof__ats">
+              <span className="lp-tag lp-tag--acid">KUBERNETES ✓</span>
+              <span className="lp-tag lp-tag--acid">GRPC ✓</span>
+              <span className="lp-tag lp-tag--acid">POSTGRES ✓</span>
+              <span className="lp-tag lp-tag--miss">TERRAFORM : MISSING</span>
+            </div>
+          </div>
+
+          {/* CSS-rendered résumé page mock */}
+          <div className="lp-proof__paper" aria-label="Sample résumé page preview">
+            <div className="lp-doc">
+              <div className="lp-doc__name">JORDAN REYES</div>
+              <div className="lp-doc__contact">SENIOR ENGINEER · BACKEND · DISTRIBUTED SYSTEMS</div>
+              <div className="lp-doc__rule" />
+              <div className="lp-doc__section">EXPERIENCE</div>
+              <div className="lp-doc__line lp-doc__line--w90" />
+              <div className="lp-doc__line lp-doc__line--w70" />
+              <div className="lp-doc__bullet"><span /><div className="lp-doc__line lp-doc__line--w85" /></div>
+              <div className="lp-doc__bullet"><span /><div className="lp-doc__line lp-doc__line--w95" /></div>
+              <div className="lp-doc__bullet"><span /><div className="lp-doc__line lp-doc__line--w60" /></div>
+              <div className="lp-doc__section">PROJECTS</div>
+              <div className="lp-doc__line lp-doc__line--w80" />
+              <div className="lp-doc__bullet"><span /><div className="lp-doc__line lp-doc__line--w90" /></div>
+              <div className="lp-doc__bullet"><span /><div className="lp-doc__line lp-doc__line--w75" /></div>
+              <div className="lp-doc__section">SKILLS</div>
+              <div className="lp-doc__line lp-doc__line--w95" />
             </div>
           </div>
         </div>
@@ -97,6 +208,25 @@ export function Landing() {
               <h3 className="lp-display lp-step__title">{s.title}</h3>
               <p className="lp-step__body">{s.body}</p>
               <div className="lp-tag">{s.tag}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── WHY ANVIL ── */}
+      <section className="lp-features shell">
+        <div className="lp-section-mark">
+          <span className="lp-section-title">WHY ANVIL</span>
+          <div className="lp-section-rule" />
+          <span className="lp-section-title lp-muted">NOT JUST A PROMPT</span>
+        </div>
+
+        <div className="lp-features__grid">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="lp-feature">
+              <span className="lp-feature__icon">{f.icon}</span>
+              <h3 className="lp-feature__title">{f.title}</h3>
+              <p className="lp-feature__body">{f.body}</p>
             </div>
           ))}
         </div>
