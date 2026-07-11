@@ -300,9 +300,13 @@ public class ApplicationService {
         progress.emit("LLM cost: $" + tokens.getCostUsd().toPlainString()
                 + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)"
                 + " pipeline: " + a.getPipelineDurationMs() + "ms");
+<<<<<<< HEAD
         Application saved = repo.save(a);
         llmUsageService.record(userId, "application_pipeline", tokens, saved.getId(), null);
         return saved;
+=======
+        return repo.save(a);
+>>>>>>> application_timing
 
         } catch (RuntimeException e) {
             tTotal.stop("FAILED");
