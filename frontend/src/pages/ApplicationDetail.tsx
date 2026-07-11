@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, type ApplicationResponse, type Bullet, type RankedBullet } from '../lib/api';
+import { api, type ApplicationResponse, type Bullet, type Project, type RankedBullet } from '../lib/api';
+import { groupRankedByProject, type BulletGroup } from '../lib/groupBullets';
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
 
@@ -8,6 +9,8 @@ export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
   const [app, setApp] = useState<ApplicationResponse | null>(null);
   const [bullets, setBullets] = useState<Record<string, Bullet>>({});
+  const [projectById, setProjectById] = useState<Record<string, Project>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [rerenderStreaming, setRerenderStreaming] = useState(false);
@@ -18,6 +21,7 @@ export function ApplicationDetail() {
   const [showTail, setShowTail] = useState(false);
 
   const TOP_N = 15;
+  const GROUP_CAP = 3;
 
   async function load() {
     if (!id) return;
@@ -35,7 +39,10 @@ export function ApplicationDetail() {
     const ids = ranking.map(r => r.bulletId);
     if (ids.length > 0) {
       // No batch endpoint; pull all bullets per project. Easier: pull all projects then their bullets.
-      const projects = await api.get<{ id: string }[]>(`/api/projects`);
+      const projects = await api.get<Project[]>(`/api/projects`);
+      const projMap: Record<string, Project> = {};
+      projects.forEach(p => { projMap[p.id] = p; });
+      setProjectById(projMap);
       const all: Bullet[] = [];
       for (const p of projects) {
         const bs = await api.get<Bullet[]>(`/api/projects/${p.id}/bullets`);
@@ -69,6 +76,23 @@ export function ApplicationDetail() {
     return parseRanking(app.bulletRanking).sort((a, b) => a.rank - b.rank);
   }, [app]);
 
+  const bulletsReady = Object.keys(bullets).length > 0 && Object.keys(projectById).length > 0;
+
+  // Group the rank-sorted ranking by owning project, split into Experience/Projects
+  // sections to mirror the PDF. Logic lives in groupBullets.ts so it can be unit-tested.
+  const grouped = useMemo(
+    () => groupRankedByProject(ranking, bullets, projectById),
+    [ranking, bullets, projectById],
+  );
+
+  function toggleGroup(key: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   async function setOutcome(o: string) {
     if (!app) return;
     setBusy(true);
@@ -92,6 +116,72 @@ export function ApplicationDetail() {
       if (next.has(bid)) next.delete(bid); else next.add(bid);
       return next;
     });
+  }
+
+  function renderBulletRow(r: RankedBullet) {
+    const b = bullets[r.bulletId];
+    const isSel = selectedIds.has(r.bulletId);
+    const whyOpen = expandedWhys.has(r.bulletId);
+    return (
+      <div key={r.bulletId} className="bullet" style={{ opacity: isSel ? 1 : 0.45 }}>
+        <div
+          className={`bullet__rank ${isSel ? 'bullet__rank--selected' : ''}`}
+          onClick={() => toggleBullet(r.bulletId)}
+          title={isSel ? 'Click to exclude' : 'Click to include'}
+          style={{ cursor: 'pointer' }}
+        >
+          #{String(r.rank).padStart(2, '0')}
+        </div>
+        <div style={{ width: '100%' }}>
+          <div className="bullet__text">{b?.text || <em className="muted">— bullet missing —</em>}</div>
+          {isSel && b && (
+            <div className="bullet__tags" style={{ marginTop: 4 }}>
+              {b.tags.map(t => <span key={t} className="tag">{t}</span>)}
+            </div>
+          )}
+          {r.why && (
+            <div style={{ marginTop: 4 }}>
+              <button
+                className="btn btn--ghost btn--sm"
+                style={{ fontSize: 10, padding: '2px 6px' }}
+                onClick={() => toggleWhy(r.bulletId)}
+              >
+                WHY {whyOpen ? '↑' : '↓'}
+              </button>
+              {whyOpen && (
+                <div className="bullet__why" style={{ marginTop: 4 }}>{r.why}</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderGroup(g: BulletGroup) {
+    const open = expandedGroups.has(g.key);
+    const visible = open ? g.items : g.items.slice(0, GROUP_CAP);
+    const hidden = g.items.length - visible.length;
+    const name = g.project?.name ?? 'Other';
+    const selCount = g.items.filter(r => selectedIds.has(r.bulletId)).length;
+    return (
+      <div key={g.key} style={{ marginBottom: 14 }}>
+        <div className="row row--between row--centered" style={{ marginBottom: 4 }}>
+          <span className="label" style={{ fontWeight: 700 }}>{name}</span>
+          <span className="label muted">{selCount}/{g.items.length}</span>
+        </div>
+        {visible.map(renderBulletRow)}
+        {(hidden > 0 || open) && g.items.length > GROUP_CAP && (
+          <button
+            className="btn btn--ghost btn--sm"
+            style={{ marginTop: 4, width: '100%', fontSize: 10 }}
+            onClick={() => toggleGroup(g.key)}
+          >
+            {open ? `SHOW LESS` : `+${hidden} MORE`}
+          </button>
+        )}
+      </div>
+    );
   }
 
   if (!app) return <div className="shell"><span className="spinner">LOADING</span></div>;
@@ -135,58 +225,26 @@ export function ApplicationDetail() {
             CLICK RANK TO TOGGLE · {selectedIds.size} INCLUDED
           </div>
 
-          <div>
-            {ranking.slice(0, showTail ? ranking.length : TOP_N).map(r => {
-              const b = bullets[r.bulletId];
-              const isSel = selectedIds.has(r.bulletId);
-              const whyOpen = expandedWhys.has(r.bulletId);
-              return (
-                <div key={r.bulletId} className="bullet" style={{ opacity: isSel ? 1 : 0.45 }}>
-                  <div
-                    className={`bullet__rank ${isSel ? 'bullet__rank--selected' : ''}`}
-                    onClick={() => toggleBullet(r.bulletId)}
-                    title={isSel ? 'Click to exclude' : 'Click to include'}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    #{String(r.rank).padStart(2, '0')}
-                  </div>
-                  <div style={{ width: '100%' }}>
-                    <div className="bullet__text">{b?.text || <em className="muted">— bullet missing —</em>}</div>
-                    {isSel && b && (
-                      <div className="bullet__tags" style={{ marginTop: 4 }}>
-                        {b.tags.map(t => <span key={t} className="tag">{t}</span>)}
-                      </div>
-                    )}
-                    {r.why && (
-                      <div style={{ marginTop: 4 }}>
-                        <button
-                          className="btn btn--ghost btn--sm"
-                          style={{ fontSize: 10, padding: '2px 6px' }}
-                          onClick={() => toggleWhy(r.bulletId)}
-                        >
-                          WHY {whyOpen ? '↑' : '↓'}
-                        </button>
-                        {whyOpen && (
-                          <div className="bullet__why" style={{ marginTop: 4 }}>{r.why}</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+          {!bulletsReady ? (
+            // Fallback while bullets/projects load — flat list, no project grouping yet.
+            <div>
+              {ranking.slice(0, showTail ? ranking.length : TOP_N).map(renderBulletRow)}
+            </div>
+          ) : (
+            <div>
+              {grouped.experience.length > 0 && (
+                <div style={{ marginBottom: 18 }}>
+                  <div className="label muted" style={{ marginBottom: 8, letterSpacing: 1 }}>EXPERIENCE</div>
+                  {grouped.experience.map(renderGroup)}
                 </div>
-              );
-            })}
-          </div>
-
-          {ranking.length > TOP_N && (
-            <button
-              className="btn btn--ghost btn--sm"
-              style={{ marginTop: 8, width: '100%' }}
-              onClick={() => setShowTail(s => !s)}
-            >
-              {showTail
-                ? `HIDE TAIL (${ranking.length - TOP_N})`
-                : `SHOW REMAINING ${ranking.length - TOP_N} BULLETS`}
-            </button>
+              )}
+              {grouped.projects.length > 0 && (
+                <div>
+                  <div className="label muted" style={{ marginBottom: 8, letterSpacing: 1 }}>PROJECTS</div>
+                  {grouped.projects.map(renderGroup)}
+                </div>
+              )}
+            </div>
           )}
 
           <div className="row row--between row--centered" style={{ marginTop: 20, position: 'sticky', bottom: 16, background: 'var(--paper)', padding: '12px 0', borderTop: '2px solid var(--ink)' }}>
