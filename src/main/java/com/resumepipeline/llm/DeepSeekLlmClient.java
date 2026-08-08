@@ -6,6 +6,7 @@ import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
@@ -41,12 +42,15 @@ public class DeepSeekLlmClient extends BaseLlmClient {
     private final String matchModel;
     private final String cleanJdModel;
 
+    // Two constructors, so Spring needs to be told which one to wire — without this it
+    // falls back to a no-arg constructor that does not exist.
+    @Autowired
     public DeepSeekLlmClient(
-            @Value("${llm.base-url:https://opencode.ai/zen/v1}") String baseUrl,
-            @Value("${llm.api-key:}") String apiKey,
-            @Value("${llm.model.generate}") String generateModel,
-            @Value("${llm.model.match}") String matchModel,
-            @Value("${llm.model.clean-jd}") String cleanJdModel,
+            @Value("${llm.deepseek.base-url:https://opencode.ai/zen/v1}") String baseUrl,
+            @Value("${llm.deepseek.api-key:}") String apiKey,
+            @Value("${llm.deepseek.model.generate}") String generateModel,
+            @Value("${llm.deepseek.model.match}") String matchModel,
+            @Value("${llm.deepseek.model.clean-jd}") String cleanJdModel,
             GenerationConfigService configService) {
         this(builder(baseUrl, apiKey), generateModel, matchModel, cleanJdModel, configService);
     }

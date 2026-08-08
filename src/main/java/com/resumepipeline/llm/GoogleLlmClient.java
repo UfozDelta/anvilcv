@@ -39,10 +39,10 @@ public class GoogleLlmClient extends BaseLlmClient {
     private final String cleanJdModel;
 
     public GoogleLlmClient(
-            @Value("${llm.api-key}") String apiKey,
-            @Value("${llm.model.generate}") String generateModel,
-            @Value("${llm.model.match}") String matchModel,
-            @Value("${llm.model.clean-jd}") String cleanJdModel,
+            @Value("${llm.gemini.api-key}") String apiKey,
+            @Value("${llm.gemini.model.generate}") String generateModel,
+            @Value("${llm.gemini.model.match}") String matchModel,
+            @Value("${llm.gemini.model.clean-jd}") String cleanJdModel,
             GenerationConfigService configService) {
         super(configService);
         this.client = Client.builder().apiKey(apiKey).build();
