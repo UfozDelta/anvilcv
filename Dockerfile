@@ -11,8 +11,15 @@ FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
 # Install tectonic from GitHub releases (pinned, no install script)
+# TARGETARCH is set by BuildKit; needed so this builds on Oracle A1 (aarch64) too.
+ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -fsSL https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz \
+    case "$TARGETARCH" in \
+      arm64) TECT_ARCH=aarch64 ;; \
+      amd64) TECT_ARCH=x86_64 ;; \
+      *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-${TECT_ARCH}-unknown-linux-musl.tar.gz" \
       | tar -xz -C /usr/local/bin && \
     apt-get remove -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 

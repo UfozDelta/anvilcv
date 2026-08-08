@@ -18,6 +18,8 @@ build/
 coverage/
 .vite/
 frontend/.vite/
+# built frontend, emitted here by vite build
+src/main/resources/static/
 
 # Local config and secrets
 .env
