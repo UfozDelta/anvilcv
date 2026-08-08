@@ -1,0 +1,557 @@
+package com.resumepipeline.llm;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.resumepipeline.config.GenerationConfig;
+import com.resumepipeline.config.GenerationConfigService;
+import com.resumepipeline.progress.ProgressLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Provider-agnostic half of an {@link LlmClient} implementation. Owns the four
+ * pipeline prompts, the word-count filter / retry logic, and the JSON envelope
+ * parsing. Concrete subclasses only implement {@link #callJson} — turning a
+ * prompt + {@link SchemaSpec} into a raw JSON string (plus token accounting)
+ * for their specific provider transport (Gemini SDK, OpenAI-compatible REST,
+ * etc.).
+ */
+public abstract class BaseLlmClient implements LlmClient {
+
+    private static final Logger log = LoggerFactory.getLogger(BaseLlmClient.class);
+
+    protected final ObjectMapper mapper = new ObjectMapper();
+    protected final GenerationConfigService configService;
+
+    protected BaseLlmClient(GenerationConfigService configService) {
+        this.configService = configService;
+    }
+
+    /**
+     * Send a prompt to the provider and return the raw JSON text of the reply.
+     * Subclasses decide how the provider schema is enforced (Gemini responseSchema,
+     * json_object + inline shape, etc.) and how token usage is recorded. {@code label}
+     * names the pipeline step (e.g. "Ranking") for streamed progress events.
+     */
+    protected abstract String callJson(String model, String prompt, SchemaSpec schema,
+                                       double temperature, ProgressLog progress,
+                                       TokenAccumulator tokens, boolean stream, String label);
+
+    // -------- provider-agnostic schema model --------
+
+    public enum SpecType { OBJECT, ARRAY, STRING, INTEGER }
+
+    public record SchemaSpec(SpecType type, Map<String, SchemaSpec> properties,
+                             SchemaSpec items, List<String> required) {
+        public static SchemaSpec string() {
+            return new SchemaSpec(SpecType.STRING, null, null, null);
+        }
+        public static SchemaSpec integer() {
+            return new SchemaSpec(SpecType.INTEGER, null, null, null);
+        }
+        public static SchemaSpec array(SchemaSpec items) {
+            return new SchemaSpec(SpecType.ARRAY, null, items, null);
+        }
+        public static SchemaSpec object(Map<String, SchemaSpec> properties, List<String> required) {
+            return new SchemaSpec(SpecType.OBJECT, properties, null, required);
+        }
+    }
+
+    // -------- generateBullets --------
+
+    @Override
+    public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        boolean experience = req.kind() == SourceKind.EXPERIENCE;
+
+        String contextBlock = experience
+                ? """
+                Role:     %s
+                Company:  %s
+                Location: %s
+                Dates:    %s
+
+                Description of work (what was built, with what tech, at what scale):
+                %s
+                """.formatted(nz(req.title()), nz(req.company()), nz(req.location()), nz(req.dates()), nz(req.description()))
+                : buildProjectContextBlock(req);
+
+        String repoBlock = req.repoContext() == null || req.repoContext().isBlank()
+                ? ""
+                : "\nRepo context (README + file listing):\n" + req.repoContext();
+
+        String countTarget = experience ? "8 to 12" : "4 to 6";
+        String sourceWord  = experience ? "ROLE" : "PROJECT";
+
+        GenerationConfig cfg = configService.get(req.userId());
+
+        String lens = CategoryLenses.lensFor(req.category());
+        String lensBlock = lens == null ? "" : "\n─────────────────────────────────────────────────────────────\n## 0. CATEGORY LENS (read this FIRST)\n\n" + lens + "\n";
+
+        String toneInstruction = switch (cfg.getTone()) {
+            case CONSERVATIVE -> "Write in a precise, understated tone. Avoid hyperbole. Let the metrics speak.";
+            case AGGRESSIVE   -> "Write with a confident, high-impact tone. Emphasise scale, speed, and results aggressively.";
+            default           -> "";
+        };
+        String boldInstruction = switch (cfg.getBoldDensity()) {
+            case NONE  -> "Do NOT use any **bold** markup in bullets.";
+            case HEAVY -> "Bold aggressively — every metric, every technology, every named system or technique.";
+            default    -> "";
+        };
+        String verbInstruction = switch (cfg.getActionVerbStyle()) {
+            case LEADERSHIP -> "Prefer leadership verbs: Led, Owned, Directed, Coordinated, Mentored, Drove, Championed.";
+            case IMPACT     -> "Prefer impact verbs: Accelerated, Reduced, Eliminated, Boosted, Saved, Cut, Scaled.";
+            default         -> "";
+        };
+        String tuningBlock = (toneInstruction + boldInstruction + verbInstruction).isBlank() ? "" :
+                "\n─────────────────────────────────────────────────────────────\n## STYLE OVERRIDES\n\n"
+                + (toneInstruction.isBlank() ? "" : toneInstruction + "\n")
+                + (boldInstruction.isBlank() ? "" : boldInstruction + "\n")
+                + (verbInstruction.isBlank() ? "" : verbInstruction + "\n");
+
+        String prompt = lensBlock + tuningBlock + """
+                You are writing resume bullet points for a %s.
+                Produce %s bullets in JSON. EVERY rule below is mandatory.
+
+                ─────────────────────────────────────────────────────────────
+                ## 1. LENGTH — line-filling discipline (CRITICAL)
+
+                Each bullet must compile to EITHER exactly 1 full line OR exactly 2 full lines on the
+                rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
+                second line — that looks broken.
+
+                Targets (after \\textbf{} expansion):
+                  • 1-line bullet: roughly %d to %d words (≈ 130 chars including spaces).
+                  • 2-line bullet: roughly %d to %d words (≈ 250 chars including spaces).
+                  • NEVER produce a bullet of %d-%d words — that range half-fills line 2.
+
+                Default to 2-line bullets where the substance warrants it; reserve 1-liners for crisp
+                accomplishments. Aim for a mix.
+
+                ## 2. FORMAT — Google XYZ pattern
+
+                Every bullet reads as:
+                  [STRONG ACTION VERB] + [WHAT was built] + [at WHAT SCALE] + [with WHAT OUTCOME].
+
+                Strong verbs only — open each bullet with one of:
+                  Built · Designed · Shipped · Engineered · Owned · Led · Authored ·
+                  Implemented · Architected · Stood up · Migrated · Hardened · Integrated.
+
+                Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
+                "Contributed to", "Collaborated on" — these are passive and weak.
+
+                EVERY bullet ends with a period.
+
+                ## 3. BOLD — **double asterisks** (compiles to \\textbf{})
+
+                Aim for **3 to 6 bolds per bullet**. Bold everything in these categories:
+
+                  (a) Every quantity / scale / metric:
+                      **64K**, **500+**, **300ms**, **sub-200ms**, **95%%+**, **$200K**,
+                      **11.5MB**, **2-3%%**, **120K transactions/month**, **15+ features**
+
+                  (b) Every marquee technology / framework / protocol / vendor:
+                      **RAG**, **RRF-k fusion**, **React-Leaflet**, **MongoDB 2dsphere**,
+                      **AES-256-GCM**, **Clerk JWT**, **PyTorch**, **Stripe**, **BetterAuth**,
+                      **WebRTC**, **Next.js 16**, **D3.js**
+
+                  (c) Signature systems / techniques you designed (the noun phrase that names the thing):
+                      **sub-cent-precision credit ledger**, **3-tier fuzzy matching**,
+                      **AST-based parser**, **5-role RBAC**, **hybrid three-store architecture**
+
+                Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action verb itself.
+
+                ## 4. CONTENT RULES
+
+                  • Quote anchor numbers from the description VERBATIM. NEVER fabricate metrics.
+                    If the description doesn't have a number, omit it — don't invent one.
+                  • NO internal identifiers (table names, function names, file paths, env-var names).
+                    Those belong in interview answers, not on a resume.
+                  • Each bullet stands alone — a recruiter must understand it in 5 seconds without
+                    reading neighbors.
+                  • Tag each bullet with 1 to 3 tags from this allowlist only:
+                      backend, frontend, ai-ml, devops, data, systems, communication, mobile, security
+
+                ─────────────────────────────────────────────────────────────
+                ## EXAMPLES (study these — match this length, bold density, and ending punctuation)
+
+                  ✓ Built a **RAG** pipeline over **64K** MLS listings with hybrid full-text + vector search, **RRF-k fusion**, and a semantic cache, cutting query latency under **300ms** and LLM calls by **40%%**.
+
+                  ✓ Engineered a real-time geospatial pipeline over **64K live listings** using **React-Leaflet**, **Turf.js**, and **MongoDB 2dsphere** queries with viewport-aware fetching and marker diffing, cutting map re-render from **180ms to 70ms**.
+
+                  ✓ Designed a **sub-cent-precision credit ledger** powering metered billing across AI, voice, and SMS usage, processing **120K transactions/month** through an append-only audit trail and idempotent **Stripe** webhook integration.
+
+                  ✓ Encrypted all third-party OAuth and telephony tokens at rest with **AES-256-GCM**, eliminating plaintext credentials from the database across the multi-tenant platform.
+
+                  ✗ Worked on backend stuff using various tools and got things faster.
+                    (passive opener, no bolds, no metrics, no period-style impact)
+
+                ─────────────────────────────────────────────────────────────
+                ## %s CONTEXT
+
+                %s%s
+                """.formatted(sourceWord, countTarget,
+                        cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
+                        cfg.getDoubleLineLow(), cfg.getDoubleLineHigh(),
+                        cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(),
+                        sourceWord, contextBlock, repoBlock);
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                        "text", SchemaSpec.string(),
+                        "tags", SchemaSpec.array(SchemaSpec.string())
+                )), List.of("text", "tags")))
+        )), List.of("bullets"));
+
+        // Show first meaningful line of the lens so user knows what angle the LLM is targeting.
+        if (lens != null) {
+            String lensFirstLine = lens.lines()
+                    .map(String::strip)
+                    .filter(l -> !l.isBlank() && !l.startsWith("LENS:"))
+                    .findFirst().orElse("");
+            if (!lensFirstLine.isBlank()) progress.emit("Lens: " + lensFirstLine);
+        }
+
+        progress.emit("Calling LLM for category: " + req.category() + "...");
+        int target = experience ? 8 : 4;
+        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress, tokens);
+
+        // If we lost too many bullets to the word-count filter, retry once with sharper instructions.
+        if (cfg.isWordFilterEnabled() && kept.size() < target) {
+            int firstPassCount = kept.size();
+            String retryPrompt = prompt + ("\n─────────────────────────────────────────────────────────────\n"
+                    + "## RETRY NOTE\n\n"
+                    + "The previous attempt produced too many bullets in the FORBIDDEN %d-%d word range.\n"
+                    + "Every bullet must be EITHER %d-%d words (fits 1 line) OR %d-%d words (fills 2 lines).\n"
+                    + "Count words before emitting. Re-do the entire batch with this constraint enforced.\n"
+            ).formatted(cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(),
+                    cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
+                    cfg.getDoubleLineLow(), cfg.getDoubleLineHigh());
+            log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
+            progress.emit("Retry: only " + firstPassCount + "/" + target + " passed filter, calling LLM again with stricter length rules...");
+            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress, tokens);
+            if (retry.size() > kept.size()) {
+                progress.emit("Retry result: " + retry.size() + "/" + target + " passed (was " + firstPassCount + "/" + target + ")");
+                kept = retry;
+            } else {
+                progress.emit("Retry result: no improvement (" + retry.size() + "/" + target + "), keeping first-pass output");
+            }
+        }
+
+        progress.emit("Saved " + kept.size() + " bullets for category: " + req.category());
+        return new BulletGenerationResult(kept);
+    }
+
+    // progress param lets us emit per-bullet filter decisions without exposing bullet text.
+    private List<GeneratedBullet> callAndFilter(String prompt, SchemaSpec schema,
+                                                int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens) {
+        String json = callJson(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Bullets");
+        BulletsEnvelope env;
+        try {
+            env = mapper.readValue(json, BulletsEnvelope.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
+        }
+        int total = env.bullets == null ? 0 : env.bullets.size();
+        if (cfg.isWordFilterEnabled()) {
+            progress.emit("LLM returned " + total + " bullets, filtering by word count (target: " + target + ")...");
+        } else {
+            progress.emit("LLM returned " + total + " bullets (word filter disabled, keeping all)...");
+        }
+
+        List<GeneratedBullet> kept = new ArrayList<>();
+        int dropped = 0;
+        for (BulletJson b : env.bullets) {
+            String text = BulletTextRules.ensureTerminalPeriod(b.text);
+            int wc = BulletTextRules.wordCount(text);
+            BulletTextRules.Decision decision = BulletTextRules.decide(wc, cfg);
+            switch (decision) {
+                case DEAD_ZONE -> {
+                    log.info("Dropped bullet (word count {} in dead zone {}-{}): {}", wc,
+                            cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(), abbreviate(text));
+                    progress.emit("Cut: " + wc + "w - dead zone (" + cfg.getDeadZoneLow() + "-" + cfg.getDeadZoneHigh()
+                            + "), needs " + cfg.getSingleLineLow() + "-" + cfg.getSingleLineHigh()
+                            + " or " + cfg.getDoubleLineLow() + "-" + cfg.getDoubleLineHigh());
+                    dropped++;
+                }
+                case TOO_SHORT -> {
+                    log.info("Dropped bullet (word count {} too short, floor {}): {}", wc, cfg.getMinWordFloor(), abbreviate(text));
+                    progress.emit("Cut: " + wc + "w - too short (min " + cfg.getMinWordFloor() + ")");
+                    dropped++;
+                }
+                case KEPT -> {
+                    List<String> tags = b.tags == null ? List.of() : b.tags;
+                    progress.emit("Kept: " + wc + "w [" + String.join(", ", tags) + "]");
+                    kept.add(new GeneratedBullet(text, tags));
+                }
+            }
+        }
+        log.info("Generation kept {} bullets, dropped {}.", kept.size(), dropped);
+        return kept;
+    }
+
+    private static String abbreviate(String s) {
+        if (s == null) return "";
+        return s.length() <= 80 ? s : s.substring(0, 77) + "...";
+    }
+
+    // -------- cleanJd --------
+
+    @Override
+    public JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+        progress.emit("Calling LLM to clean JD and extract keywords...");
+        String prompt = """
+                Clean this job description and extract structured fields.
+                  - cleanJd: the JD text with navigation, marketing fluff, and "about us" boilerplate stripped. Keep responsibilities, requirements, and tech stack.
+                  - company: the hiring company name.
+                  - role: the job title.
+                  - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
+
+                Raw JD:
+                %s
+                """.formatted(rawJd);
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "cleanJd",  SchemaSpec.string(),
+                "company",  SchemaSpec.string(),
+                "role",     SchemaSpec.string(),
+                "keywords", SchemaSpec.array(SchemaSpec.string())
+        )), List.of("cleanJd", "company", "role", "keywords"));
+
+        String json = callJson(cleanJdModel(), prompt, schema, 1.0, progress, tokens, false, "JD clean");
+        try {
+            JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
+            List<String> kws = env.keywords == null ? List.of() : env.keywords;
+            // Emit what we extracted so the user can see the parsed role/company immediately.
+            progress.emit("Extracted: role=" + env.role + ", company=" + env.company
+                    + ", " + kws.size() + " keywords: " + String.join(", ", kws));
+            return new JdCleanResult(env.cleanJd, env.company, env.role, kws);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM cleanJd response: " + json, e);
+        }
+    }
+
+    // -------- rankBullets --------
+
+    @Override
+    public RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        progress.emit("Calling LLM to rank " + req.bullets().size() + " bullets against JD...");
+        StringBuilder bulletsBlock = new StringBuilder();
+        for (BulletForMatch b : req.bullets()) {
+            bulletsBlock.append("  - id=").append(b.bulletId())
+                    .append(" project=").append(b.projectName())
+                    .append(" tags=").append(b.tags())
+                    .append("\n    text: ").append(b.text()).append("\n");
+        }
+
+        String coursesBlock = req.courses() == null || req.courses().isEmpty()
+                ? ""
+                : "\nCoursework (select up to 6 most relevant for this role):\n"
+                  + req.courses().stream().map(c -> "  - " + c).reduce("", (a, b) -> a + b + "\n");
+
+        StringBuilder skillsBlock = new StringBuilder();
+        if (req.skillCategories() != null && !req.skillCategories().isEmpty()) {
+            skillsBlock.append("\nSkills (filter each category to only the most JD-relevant items; keep ordering; return empty array if none relevant):\n");
+            for (LlmClient.SkillCategory sc : req.skillCategories()) {
+                skillsBlock.append("  ").append(sc.name()).append(": ")
+                        .append(String.join(", ", sc.items())).append("\n");
+            }
+        }
+
+        String prompt = """
+                You are an expert resume writer. Rank EVERY bullet below against the job description.
+
+                Rank ALL %d bullets from rank 1 (best fit) to %d (worst). Use integers, no ties.
+                For each bullet give a one-sentence "why" tying it to specific JD requirements.
+
+                Produce atsMatched (keywords from the JD that appear in the top 8 bullets)
+                and atsMissing (JD keywords NOT covered).
+
+                If coursework is provided, select the best matching courses (up to 6) for this role
+                and return them in selectedCourses. Return an empty array if no coursework is provided.
+
+                If skills are provided, return selectedSkills with each category filtered to only the
+                JD-relevant items. Preserve the original item text exactly. Return empty arrays for
+                categories with no relevant items.
+
+                Role emphasis: %s
+                Company: %s
+
+                Cleaned JD:
+                %s
+
+                Keywords from JD:
+                %s
+
+                Bullets:
+                %s%s
+                """.formatted(
+                        req.bullets().size(), req.bullets().size(),
+                        req.roleEmphasis(),
+                        req.company(),
+                        req.cleanJd(),
+                        req.keywords(),
+                        bulletsBlock,
+                        coursesBlock + skillsBlock);
+
+        SchemaSpec rankedItem = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "bulletId", SchemaSpec.string(),
+                "rank",     SchemaSpec.integer(),
+                "why",      SchemaSpec.string()
+        )), List.of("bulletId", "rank", "why"));
+
+        SchemaSpec stringArray = SchemaSpec.array(SchemaSpec.string());
+
+        SchemaSpec selectedSkillsSchema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "languages",   stringArray,
+                "frameworks",  stringArray,
+                "databases",   stringArray,
+                "devops",      stringArray
+        )), List.of("languages", "frameworks", "databases", "devops"));
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "rankedBullets",   SchemaSpec.array(rankedItem),
+                "atsMatched",      stringArray,
+                "atsMissing",      stringArray,
+                "selectedCourses", stringArray,
+                "selectedSkills",  selectedSkillsSchema
+        )), List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses", "selectedSkills"));
+
+        String json = callJson(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Ranking");
+        try {
+            RankEnvelope env = mapper.readValue(json, RankEnvelope.class);
+            List<RankedBullet> ranked = env.rankedBullets.stream()
+                    .map(r -> new RankedBullet(r.bulletId, r.rank, r.why))
+                    .toList();
+            progress.emit("Top 4 ranked bullets:");
+            ranked.stream()
+                    .sorted(java.util.Comparator.comparingInt(RankedBullet::rank))
+                    .limit(4)
+                    .forEach(r -> {
+                        String tags = req.bullets().stream()
+                                .filter(b -> b.bulletId().equals(r.bulletId()))
+                                .map(b -> String.join(", ", b.tags()))
+                                .findFirst().orElse("");
+                        String tagsStr = tags.isBlank() ? "" : " [" + tags + "]";
+                        progress.emit("Rank #" + r.rank() + tagsStr + " - " + r.why());
+                    });
+            List<String> atsMatched = env.atsMatched == null ? List.of() : env.atsMatched;
+            List<String> atsMissing = env.atsMissing == null ? List.of() : env.atsMissing;
+            List<String> selectedCourses = env.selectedCourses == null ? List.of() : env.selectedCourses;
+            Map<String, List<String>> selectedSkills = env.selectedSkills == null ? Map.of() : env.selectedSkills;
+            progress.emit("ATS matched (" + atsMatched.size() + "): " + String.join(", ", atsMatched));
+            if (!atsMissing.isEmpty()) {
+                progress.emit("ATS missing (" + atsMissing.size() + "): " + String.join(", ", atsMissing));
+            }
+            if (!selectedCourses.isEmpty()) {
+                progress.emit("Selected courses (" + selectedCourses.size() + "): " + String.join(", ", selectedCourses));
+            }
+            selectedSkills.forEach((cat, items) -> {
+                if (!items.isEmpty()) progress.emit("Skills/" + cat + ": " + String.join(", ", items));
+            });
+            return new RankResult(ranked, atsMatched, atsMissing, selectedCourses, selectedSkills);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM rank response: " + json, e);
+        }
+    }
+
+    // -------- coverLetter --------
+
+    @Override
+    public String coverLetter(CoverLetterRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        progress.emit("Generating cover letter...");
+        String bulletsBlock = req.topBulletTexts().stream()
+                .map(t -> "  - " + t)
+                .reduce("", (a, b) -> a + b + "\n");
+
+        String prompt = """
+                Write a cover letter for this job application.
+
+                Guidelines:
+                  - 3-4 short paragraphs.
+                  - Open by naming the company and role.
+                  - Reference 2-3 of the provided bullets in plain prose (do not list them verbatim).
+                  - Close with a brief, confident call to action.
+                  - No "Dear Hiring Manager" — start "Hi %s team," or similar.
+                  - Plain text only, no markdown.
+
+                Role emphasis: %s
+                Company: %s
+
+                Cleaned JD:
+                %s
+
+                Top selected bullets:
+                %s
+                """.formatted(
+                        req.company() == null ? "the" : req.company(),
+                        req.roleEmphasis(),
+                        req.company(),
+                        req.cleanJd(),
+                        bulletsBlock);
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "coverLetter", SchemaSpec.string()
+        )), List.of("coverLetter"));
+
+        String json = callJson(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Cover letter");
+        try {
+            CoverLetterEnvelope env = mapper.readValue(json, CoverLetterEnvelope.class);
+            progress.emit("Cover letter generated.");
+            return env.coverLetter;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM cover letter response: " + json, e);
+        }
+    }
+
+    // -------- model selectors (subclass config) --------
+
+    protected abstract String generateModel();
+    protected abstract String matchModel();
+    protected abstract String cleanJdModel();
+
+    // -------- shared helpers --------
+
+    private static String nz(String s) { return s == null ? "" : s; }
+
+    private static String buildProjectContextBlock(GenerateBulletsRequest req) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Project name: ").append(nz(req.projectName())).append("\n\n");
+        sb.append("Project description:\n").append(nz(req.description())).append("\n");
+        if (has(req.techStack()))      sb.append("\nTech stack: ").append(req.techStack()).append("\n");
+        if (has(req.yourRole()))       sb.append("Your role: ").append(req.yourRole()).append("\n");
+        if (has(req.ownership()))      sb.append("\nWhat you owned:\n").append(req.ownership()).append("\n");
+        if (has(req.scaleImpact()))    sb.append("\nScale & impact: ").append(req.scaleImpact()).append("\n");
+        if (has(req.hardestProblem())) sb.append("\nHardest problem solved:\n").append(req.hardestProblem()).append("\n");
+        return sb.toString();
+    }
+
+    private static boolean has(String s) { return s != null && !s.isBlank(); }
+
+    // -------- JSON envelopes (shared across providers) --------
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class BulletsEnvelope { public List<BulletJson> bullets; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class BulletJson { public String text; public List<String> tags; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class JdCleanEnvelope {
+        public String cleanJd; public String company; public String role; public List<String> keywords;
+    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class RankEnvelope {
+        public List<RankedItemJson> rankedBullets;
+        public List<String> atsMatched;
+        public List<String> atsMissing;
+        public List<String> selectedCourses;
+        public Map<String, List<String>> selectedSkills;
+    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class RankedItemJson { public String bulletId; public int rank; public String why; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class CoverLetterEnvelope { public String coverLetter; }
+}
