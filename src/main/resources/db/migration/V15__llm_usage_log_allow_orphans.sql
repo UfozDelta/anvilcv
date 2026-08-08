@@ -1,0 +1,15 @@
+-- V14 gave llm_usage_log two rules that cannot both hold:
+--
+--   application_id ... ON DELETE SET NULL
+--   CHECK (application_id IS NOT NULL OR project_id IS NOT NULL)
+--
+-- Deleting an application makes the FK null out application_id. For a row logged
+-- against an application, project_id is already null, so the row ends up with both
+-- null, the CHECK fails, and the delete rolls back. Any application that ever made
+-- an LLM call was undeletable; project deletes had the same bug by symmetry.
+--
+-- The usage log is a cost audit trail and should outlive what it points at, so the
+-- FKs keep ON DELETE SET NULL and the CHECK goes. user_id, source, cost_usd and
+-- created_at are all still NOT NULL, so per-user and per-source totals are
+-- unaffected -- only the link back to a deleted row is lost.
+ALTER TABLE llm_usage_log DROP CONSTRAINT IF EXISTS chk_llm_usage_source_id;
