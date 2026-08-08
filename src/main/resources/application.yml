@@ -14,6 +14,13 @@ spring:
     password: ${DB_PASSWORD:}
     hikari:
       maximum-pool-size: 5
+      # Neon free scales to zero after 5 min idle and bills compute while awake.
+      # minimum-idle defaults to maximum-pool-size, which would pin 5 connections
+      # open forever and burn the 100 CU-hour/month quota. Drain instead.
+      minimum-idle: 0
+      idle-timeout: 60000
+      max-lifetime: 240000
+      connection-timeout: 30000   # cold start after suspend takes a few seconds
   jpa:
     hibernate:
       ddl-auto: validate
