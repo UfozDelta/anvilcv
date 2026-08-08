@@ -31,13 +31,24 @@ spring:
     out-of-order: true
 
 llm:
-  provider: deepseek
-  api-key:  ${LLM_API_KEY:}
-  base-url: ${LLM_BASE_URL:https://opencode.ai/zen/v1}
-  model:
-    generate: deepseek-v4-flash-free
-    match:    deepseek-v4-flash-free
-    clean-jd: deepseek-v4-flash-free
+  # The only switch. Each provider keeps its own key and models below, so both can
+  # stay configured and flipping providers is this one line.
+  provider: ${LLM_PROVIDER:gemini}   # gemini | deepseek
+
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model:
+      generate: gemini-2.5-flash
+      match:    gemini-2.5-flash
+      clean-jd: gemini-2.5-flash-lite
+
+  deepseek:
+    api-key:  ${DEEPSEEK_API_KEY:}
+    base-url: ${DEEPSEEK_BASE_URL:https://opencode.ai/zen/v1}
+    model:
+      generate: deepseek-v4-flash-free
+      match:    deepseek-v4-flash-free
+      clean-jd: deepseek-v4-flash-free
 
 tectonic:
   binary: ${TECTONIC_BIN:tectonic}

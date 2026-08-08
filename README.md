@@ -102,34 +102,44 @@ tectonic:
 
 The seed user is created (or updated) automatically on startup. No manual password hashing needed.
 
-## Start The Backend
+## Start
 
 From the repo root:
+
+```powershell
+./start.ps1
+```
+
+Builds the frontend if it changed, starts the backend, and opens the browser. UI and API are both served at `http://localhost:8080` — there is no second port and no second terminal.
+
+Flags:
+
+| Flag | Effect |
+|------|--------|
+| `-Frontend` | Force a frontend rebuild even if it looks current |
+| `-NoBrowser` | Do not open the browser |
+
+Ctrl-C stops it. If a later run reports port 8080 in use, a previous JVM outlived its Maven process — the script prints the PID and the command to kill it.
+
+### Manual Start
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE="local"
 mvn spring-boot:run
 ```
 
-Backend runs at `http://localhost:8080`.
+Vite builds into `src/main/resources/static`, so run `npm run build` in `frontend/` first if the UI changed — otherwise Spring serves the previous build.
 
-## Start The Frontend
+### Frontend Development
 
-In a second terminal:
+For hot reload, run the Vite dev server alongside the backend:
 
 ```powershell
 cd frontend
-npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173` and talks to the backend at `http://localhost:8080` by default.
-
-To override the backend URL:
-
-```powershell
-$env:VITE_API_BASE="http://localhost:8080"
-```
+Serves `http://localhost:5173` against the backend on `:8080`. This is the only case needing `FRONTEND_ORIGIN` and CORS; the single-port setup above is same-origin.
 
 ## Docker
 
