@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # No ports: — nothing is published to the host. cloudflared reaches the JVM
+    # over the compose network, so the machine has no open inbound port at all.
+    mem_limit: 3g   # JVM 21 is container-aware; heap caps at ~25% of this
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
