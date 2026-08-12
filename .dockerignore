@@ -1,0 +1,16 @@
+# Local secrets — Dockerfile does `COPY src ./src`, so without this the Neon
+# password and API keys get baked into the image when building from a working
+# tree (gitignore does not apply to docker build context).
+src/main/resources/application-local.yml
+.env
+.env.*
+!.env.example
+
+# Build output and deps — rebuilt inside the image, only slow the context upload
+target/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+src/main/resources/static/
+
+.git/
