@@ -6,13 +6,9 @@ import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -21,20 +17,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI-compatible transport for {@link LlmClient}, pointed at an OpenAI-style
- * {@code POST /chat/completions} endpoint (DeepSeek, OpenRouter, a local
- * Ollama/LM Studio server, etc.). Defaults to the OpenCode Zen free tier
- * ({@code deepseek-v4-flash-free}).
+ * Shared OpenAI-compatible transport for {@link LlmClient}: any provider exposing an
+ * OpenAI-style {@code POST /chat/completions} endpoint (OpenCode Zen, OpenAI, OpenRouter,
+ * a local Ollama/LM Studio server, etc.). Concrete subclasses only supply the base URL,
+ * API key, and model names for their provider via their own {@code @Value} config prefix.
  *
- * The provider only guarantees {@code response_format: json_object}, not schema
+ * Providers here only guarantee {@code response_format: json_object}, not schema
  * enforcement, so the expected JSON shape is spelled out in the system message
  * (from {@link SchemaSpec}) and the reply is parsed defensively.
  */
-@Component
-@ConditionalOnProperty(name = "llm.provider", havingValue = "deepseek")
-public class DeepSeekLlmClient extends BaseLlmClient {
+public abstract class OpenAiCompatibleLlmClient extends BaseLlmClient {
 
-    private static final Logger log = LoggerFactory.getLogger(DeepSeekLlmClient.class);
+    private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleLlmClient.class);
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final RestClient rest;
@@ -42,21 +36,8 @@ public class DeepSeekLlmClient extends BaseLlmClient {
     private final String matchModel;
     private final String cleanJdModel;
 
-    // Two constructors, so Spring needs to be told which one to wire — without this it
-    // falls back to a no-arg constructor that does not exist.
-    @Autowired
-    public DeepSeekLlmClient(
-            @Value("${llm.deepseek.base-url:https://opencode.ai/zen/v1}") String baseUrl,
-            @Value("${llm.deepseek.api-key:}") String apiKey,
-            @Value("${llm.deepseek.model.generate}") String generateModel,
-            @Value("${llm.deepseek.model.match}") String matchModel,
-            @Value("${llm.deepseek.model.clean-jd}") String cleanJdModel,
-            GenerationConfigService configService) {
-        this(builder(baseUrl, apiKey), generateModel, matchModel, cleanJdModel, configService);
-    }
-
-    DeepSeekLlmClient(RestClient.Builder builder, String generateModel, String matchModel,
-                      String cleanJdModel, GenerationConfigService configService) {
+    protected OpenAiCompatibleLlmClient(RestClient.Builder builder, String generateModel, String matchModel,
+                                        String cleanJdModel, GenerationConfigService configService) {
         super(configService);
         this.rest = builder.build();
         this.generateModel = generateModel;
@@ -64,7 +45,7 @@ public class DeepSeekLlmClient extends BaseLlmClient {
         this.cleanJdModel = cleanJdModel;
     }
 
-    private static RestClient.Builder builder(String baseUrl, String apiKey) {
+    protected static RestClient.Builder builder(String baseUrl, String apiKey) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(20_000);
         factory.setReadTimeout(120_000);
