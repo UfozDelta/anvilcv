@@ -3,8 +3,11 @@ package com.resumepipeline.llm;
 import com.resumepipeline.config.GenerationConfig;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static com.resumepipeline.llm.BulletTextRules.Decision;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BulletTextRulesTest {
 
@@ -66,5 +69,69 @@ class BulletTextRulesTest {
         c.setDeadZoneHigh(20);
         c.setMinWordFloor(15);
         assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(10, c));
+    }
+
+    // ---- fabricatedNumbers ----
+
+    private static final String SRC = "Served 5 regions over 64,000 listings across 3 tenants in 2024.";
+
+    @Test void fabricatedNoBoldIsClean() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Built a thing.", SRC).isEmpty());
+    }
+
+    @Test void fabricatedBoldWithoutNumbersIsClean() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Built **Kubernetes** tooling.", SRC).isEmpty());
+    }
+
+    @Test void quotedNumberIsKept() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Served **5** regions.", SRC).isEmpty());
+    }
+
+    // The old substring check let any superset of a source digit run through: source "5"
+    // vouched for "500ms", "95" and "15+". These are the regressions that matter most.
+    @Test void supersetOfSourceNumberIsFabricated() {
+        assertEquals(List.of("500ms"), BulletTextRules.fabricatedNumbers("Cut latency to **500ms**.", SRC));
+    }
+
+    @Test void otherSupersetsOfSourceNumberAreFabricated() {
+        assertEquals(List.of("95%"), BulletTextRules.fabricatedNumbers("Hit **95%** coverage.", SRC));
+        assertEquals(List.of("15+"), BulletTextRules.fabricatedNumbers("Shipped **15+** features.", SRC));
+    }
+
+    // The mirror case: source "2024" used to vouch for "24" and "202".
+    @Test void substringOfSourceNumberIsFabricated() {
+        assertEquals(List.of("24"), BulletTextRules.fabricatedNumbers("Ran **24** jobs.", SRC));
+    }
+
+    @Test void scaledSuffixMatchesSpelledOutSource() {
+        // Source says "64,000"; the bullet writes it "64K". Same quantity, must survive.
+        assertTrue(BulletTextRules.fabricatedNumbers("Indexed **64K** listings.", SRC).isEmpty());
+    }
+
+    @Test void separatorFormMatchesSource() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Indexed **64,000** listings.", SRC).isEmpty());
+    }
+
+    @Test void scaledSuffixStillCaughtWhenQuantityAbsent() {
+        assertEquals(List.of("70K"), BulletTextRules.fabricatedNumbers("Indexed **70K** listings.", SRC));
+    }
+
+    @Test void multipleFabricationsEachReported() {
+        assertEquals(List.of("500ms", "99%"),
+                BulletTextRules.fabricatedNumbers("Cut to **500ms** at **99%** uptime.", SRC));
+    }
+
+    @Test void rangeTokenNeedsBothEndsInSource() {
+        // "3" is in the source, "180" is not — one bad end condemns the whole token.
+        assertEquals(List.of("3 to 180"), BulletTextRules.fabricatedNumbers("Went **3 to 180** ms.", SRC));
+    }
+
+    @Test void fabricatedNullAndBlankAreClean() {
+        assertTrue(BulletTextRules.fabricatedNumbers(null, SRC).isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("   ", SRC).isEmpty());
+    }
+
+    @Test void nullSourceMakesEveryNumberFabricated() {
+        assertEquals(List.of("5"), BulletTextRules.fabricatedNumbers("Served **5** regions.", null));
     }
 }

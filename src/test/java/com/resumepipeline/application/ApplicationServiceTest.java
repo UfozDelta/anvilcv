@@ -39,6 +39,7 @@ import static org.mockito.Mockito.*;
 class ApplicationServiceTest {
 
     @Mock ApplicationRepository repo;
+    @Mock OutcomeHistoryRepository outcomeHistoryRepo;
     @Mock BulletRepository bulletRepo;
     @Mock ProjectRepository projectRepo;
     @Mock JdFetcher jdFetcher;
@@ -82,6 +83,18 @@ class ApplicationServiceTest {
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             Application out = service.updateOutcome(user, id, "rejected");
             assertEquals("rejected", out.getOutcome());
+            verify(outcomeHistoryRepo).save(any());
+        }
+
+        @Test
+        void updateOutcomeSkipsHistoryWhenOutcomeUnchanged() {
+            UUID user = UUID.randomUUID(), id = UUID.randomUUID();
+            Application a = new Application();
+            a.setOutcome("interview");
+            when(repo.findByUserIdAndId(user, id)).thenReturn(Optional.of(a));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            service.updateOutcome(user, id, "interview");
+            verify(outcomeHistoryRepo, never()).save(any());
         }
     }
 
@@ -99,7 +112,7 @@ class ApplicationServiceTest {
             UUID user = UUID.randomUUID();
             when(llm.cleanJd(any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean", "Acme", "Eng", List.of("java")));
-            when(bulletRepo.findByProjectUserId(user)).thenReturn(List.of());
+            when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of());
 
             assertThrows(IllegalStateException.class,
                     () -> service.create(user, "jd text", null, "backend", false, ProgressLog.noOp()));
@@ -122,7 +135,7 @@ class ApplicationServiceTest {
             Project project = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
             when(llm.cleanJd(any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java")));
-            when(bulletRepo.findByProjectUserId(user)).thenReturn(List.of(bullet));
+            when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(bullet));
             when(projectRepo.findAllByUserIdOrderByCreatedAtDesc(user)).thenReturn(List.of(project));
             Profile profile = new Profile();
             profile.setUserId(user);

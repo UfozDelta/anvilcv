@@ -12,9 +12,14 @@ public interface BulletRepository extends JpaRepository<Bullet, UUID> {
     long countByProjectId(UUID projectId);
     void deleteByProjectId(UUID projectId);
 
-    /** All bullets belonging to projects owned by the given user. Used for application matching. */
-    @Query(value = "SELECT b.* FROM bullet b JOIN project p ON p.id = b.project_id WHERE p.user_id = :userId", nativeQuery = true)
-    List<Bullet> findByProjectUserId(@Param("userId") UUID userId);
+    /**
+     * Bullets belonging to projects owned by the given user that are eligible for a resume.
+     * REJECTED bullets are excluded — the user triaged them off the bank, so matching must
+     * never put them back on a document. PENDING stays eligible so untriaged banks still work.
+     */
+    @Query(value = "SELECT b.* FROM bullet b JOIN project p ON p.id = b.project_id "
+                 + "WHERE p.user_id = :userId AND b.status <> 'REJECTED'", nativeQuery = true)
+    List<Bullet> findSelectableByProjectUserId(@Param("userId") UUID userId);
 
     /** Scoped bulk fetch — only returns bullets whose project belongs to the given user. */
     @Query(value = "SELECT b.* FROM bullet b JOIN project p ON p.id = b.project_id WHERE b.id = ANY(:ids) AND p.user_id = :userId", nativeQuery = true)

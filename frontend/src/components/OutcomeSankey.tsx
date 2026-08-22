@@ -1,89 +1,123 @@
 import { useMemo } from 'react';
+import { sankey, sankeyLinkHorizontal, type SankeyGraph } from 'd3-sankey';
 import type { OutcomeHistoryEntry } from '../lib/api';
 
-const STAGES = ['applied', 'interview', 'offer', 'rejected'] as const;
-const COL: Record<string, number> = { applied: 0, interview: 1, offer: 2, rejected: 2 };
+/**
+ * Stage order. Doubles as the cycle guard: d3-sankey throws on a circular link, and
+ * nothing stops someone marking interview and then applied again, so only moves that
+ * advance along this list are drawn. Adding a stage means adding it here and to COLOR.
+ */
+export const RANK = ['applied', 'oa', 'interview', 'offer', 'rejected'];
+
 const COLOR: Record<string, string> = {
-  applied: 'var(--ink)', interview: 'var(--acid)', offer: 'var(--ink)', rejected: 'var(--rust)',
+  applied: 'var(--ink)', oa: 'var(--acid)', interview: 'var(--acid)',
+  offer: 'var(--ink)', rejected: 'var(--rust)',
 };
+const stageColor = (s: string) => COLOR[s] ?? 'var(--ink)';
 
-const W = 560, H = 260, NODE_W = 14, ROW_H = 34;
+const W = 560, H = 240, NODE_W = 14;
 
-function nodeY(stage: string, rowInCol: number): number {
-  return rowInCol * (ROW_H + 10) + 10;
+export interface Transition { from: string; to: string; count: number }
+
+/**
+ * Tally stage-to-stage moves across every application's history. Rows are grouped
+ * by application, consecutive duplicates collapsed (re-marking the same outcome is
+ * not a transition), then each adjacent pair counted once.
+ */
+export function countTransitions(history: OutcomeHistoryEntry[]): Transition[] {
+  const byApp = new Map<string, OutcomeHistoryEntry[]>();
+  for (const h of history) {
+    if (!byApp.has(h.applicationId)) byApp.set(h.applicationId, []);
+    byApp.get(h.applicationId)!.push(h);
+  }
+  const counts = new Map<string, number>();
+  for (const rows of byApp.values()) {
+    const seq = rows.map(r => r.outcome).filter((o, i, arr) => i === 0 || arr[i - 1] !== o);
+    for (let i = 0; i < seq.length - 1; i++) {
+      const key = `${seq[i]}->${seq[i + 1]}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries()).map(([key, count]) => {
+    const [from, to] = key.split('->');
+    return { from, to, count };
+  });
 }
 
-// ponytail: hand-rolled flow diagram, not a general sankey layout — fine for our fixed 3-column
-// stage set (applied/interview/offer|rejected); revisit with a real layout lib if stages grow.
+/** Drop backward and unknown-stage moves, which would make the graph cyclic. */
+export function forwardOnly(edges: Transition[]): Transition[] {
+  return edges.filter(e => {
+    const a = RANK.indexOf(e.from), b = RANK.indexOf(e.to);
+    return a !== -1 && b !== -1 && b > a;
+  });
+}
+
+interface Node { name: string }
+interface Link { source: string; target: string; value: number }
+
 export function OutcomeSankey({ history }: { history: OutcomeHistoryEntry[] }) {
-  const { edges, colNodes } = useMemo(() => {
-    const byApp = new Map<string, OutcomeHistoryEntry[]>();
-    for (const h of history) {
-      if (!byApp.has(h.applicationId)) byApp.set(h.applicationId, []);
-      byApp.get(h.applicationId)!.push(h);
-    }
-    const counts = new Map<string, number>();
-    for (const rows of byApp.values()) {
-      const seq = rows.map(r => r.outcome).filter((o, i, arr) => i === 0 || arr[i - 1] !== o);
-      for (let i = 0; i < seq.length - 1; i++) {
-        const key = `${seq[i]}->${seq[i + 1]}`;
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    }
-    const edges = Array.from(counts.entries()).map(([key, count]) => {
-      const [from, to] = key.split('->');
-      return { from, to, count };
-    });
+  const graph = useMemo(() => {
+    const edges = forwardOnly(countTransitions(history));
+    if (edges.length === 0) return null;
 
-    const colNodes: Record<number, string[]> = { 0: [], 1: [], 2: [] };
-    for (const s of STAGES) if (!colNodes[COL[s]].includes(s)) colNodes[COL[s]].push(s);
+    const names = RANK.filter(s => edges.some(e => e.from === s || e.to === s));
+    const layout = sankey<Node, Link>()
+      .nodeId(d => d.name)
+      .nodeWidth(NODE_W)
+      .nodePadding(18)
+      .extent([[1, 1], [W - 1, H - 1]]);
 
-    return { edges, colNodes };
+    // d3-sankey mutates what it is given, so hand it throwaway objects.
+    return layout({
+      nodes: names.map(name => ({ name })),
+      links: edges.map(e => ({ source: e.from, target: e.to, value: e.count })),
+    } as SankeyGraph<Node, Link>);
   }, [history]);
 
-  if (edges.length === 0) {
-    return <div className="muted" style={{ fontSize: 13 }}>Not enough transition data yet — mark a few outcomes to see the flow.</div>;
+  if (!graph) {
+    return (
+      <div className="muted" style={{ fontSize: 13 }}>
+        {history.length === 0
+          ? 'No outcome history recorded yet.'
+          : `${history.length} history ${history.length === 1 ? 'entry' : 'entries'} loaded, but no application has advanced a stage yet.`}
+      </div>
+    );
   }
 
-  const maxCount = Math.max(...edges.map(e => e.count));
-  const colX = [20, W / 2 - NODE_W / 2, W - 20 - NODE_W];
-
-  const nodePos = new Map<string, { x: number; y: number }>();
-  for (const [col, stages] of Object.entries(colNodes)) {
-    stages.forEach((s, i) => nodePos.set(s, { x: colX[Number(col)], y: nodeY(s, i) }));
-  }
+  const path = sankeyLinkHorizontal<Node, Link>();
 
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ maxWidth: W }}>
-      {edges.map((e, i) => {
-        const from = nodePos.get(e.from);
-        const to = nodePos.get(e.to);
-        if (!from || !to) return null;
-        const strokeW = 2 + (e.count / maxCount) * 16;
-        const x1 = from.x + NODE_W, y1 = from.y + ROW_H / 2;
-        const x2 = to.x, y2 = to.y + ROW_H / 2;
-        const midX = (x1 + x2) / 2;
+      {graph.links.map((l, i) => (
+        <path
+          key={i}
+          d={path(l) ?? undefined}
+          fill="none"
+          stroke={stageColor((l.source as Node).name)}
+          strokeOpacity={0.35}
+          strokeWidth={Math.max(1, l.width ?? 1)}
+        >
+          <title>{`${(l.source as Node).name} → ${(l.target as Node).name}: ${l.value}`}</title>
+        </path>
+      ))}
+      {graph.nodes.map(n => {
+        const leftHalf = (n.x0 ?? 0) < W / 2;
         return (
-          <path
-            key={i}
-            d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
-            fill="none"
-            stroke={COLOR[e.from]}
-            strokeOpacity={0.35}
-            strokeWidth={strokeW}
-          />
+          <g key={n.name}>
+            <rect x={n.x0} y={n.y0} width={(n.x1 ?? 0) - (n.x0 ?? 0)} height={Math.max(1, (n.y1 ?? 0) - (n.y0 ?? 0))}
+                  fill={stageColor(n.name)} />
+            <text
+              x={leftHalf ? (n.x1 ?? 0) + 6 : (n.x0 ?? 0) - 6}
+              y={((n.y0 ?? 0) + (n.y1 ?? 0)) / 2}
+              textAnchor={leftHalf ? 'start' : 'end'}
+              dominantBaseline="middle"
+              fontSize={11} fill="var(--ink)" style={{ textTransform: 'uppercase' }}
+            >
+              {n.name} ({n.value})
+            </text>
+          </g>
         );
       })}
-      {Array.from(nodePos.entries()).map(([stage, pos]) => (
-        <g key={stage}>
-          <rect x={pos.x} y={pos.y} width={NODE_W} height={ROW_H} fill={COLOR[stage]} />
-          <text x={pos.x + (COL[stage] === 0 ? NODE_W + 6 : -6)} y={pos.y + ROW_H / 2}
-                textAnchor={COL[stage] === 0 ? 'start' : 'end'} dominantBaseline="middle"
-                fontSize={11} fill="var(--ink)" style={{ textTransform: 'uppercase' }}>
-            {stage}
-          </text>
-        </g>
-      ))}
     </svg>
   );
 }

@@ -78,9 +78,12 @@ public class ApplicationService {
 
     public Application updateOutcome(UUID userId, UUID id, String outcome) {
         Application a = get(userId, id);
+        // Re-marking the outcome already in effect is not a transition. Logging it anyway
+        // piles up rows the flow diagram has to collapse again on every read.
+        boolean changed = !outcome.equals(a.getOutcome());
         a.setOutcome(outcome);
         Application saved = repo.save(a);
-        outcomeHistoryRepo.save(new OutcomeHistory(a.getId(), outcome));
+        if (changed) outcomeHistoryRepo.save(new OutcomeHistory(a.getId(), outcome));
         return saved;
     }
 
@@ -111,7 +114,7 @@ public class ApplicationService {
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
-        List<Bullet> allBullets = bulletRepo.findByProjectUserId(userId);
+        List<Bullet> allBullets = bulletRepo.findSelectableByProjectUserId(userId);
         if (allBullets.isEmpty()) {
             throw new IllegalStateException("No bullets in the bank — generate or add some first.");
         }
