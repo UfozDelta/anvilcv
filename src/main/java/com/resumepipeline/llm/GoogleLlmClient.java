@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -32,6 +34,11 @@ import java.util.concurrent.TimeoutException;
 public class GoogleLlmClient extends BaseLlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(GoogleLlmClient.class);
+
+    // Bounded, named pool for the async LLM call wrapper below — never the JDK common
+    // ForkJoinPool, whose limited/shared parallelism would queue calls behind unrelated
+    // work and burn the 120s timeout budget before the call even starts.
+    private static final ExecutorService LLM_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final Client client;
     private final String generateModel;
@@ -97,7 +104,7 @@ public class GoogleLlmClient extends BaseLlmClient {
                         GenerateContentResponse resp = client.models.generateContent(model, prompt, config);
                         respHolder[0] = resp;
                         return resp.text();
-                    })
+                    }, LLM_EXECUTOR)
                     .get(120, TimeUnit.SECONDS);
             tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
             if (tokens != null && respHolder[0] != null) {
@@ -152,7 +159,7 @@ public class GoogleLlmClient extends BaseLlmClient {
                             });
                         }
                         return sb.toString();
-                    })
+                    }, LLM_EXECUTOR)
                     .get(120, TimeUnit.SECONDS);
             tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
             if (tokens != null && (promptOut[0] > 0 || promptOut[1] > 0)) {

@@ -17,6 +17,10 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class BulletService {
@@ -26,6 +30,9 @@ public class BulletService {
     // Jaccard word-overlap threshold above which a newly generated bullet is treated as a
     // near-duplicate of one already in the bank (or elsewhere in the same batch) and dropped.
     private static final double DEDUP_SIMILARITY_THRESHOLD = 0.6;
+
+    // Fans out per-category LLM calls in generateBank; blocking I/O, so virtual threads.
+    private static final ExecutorService PARALLEL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final BulletRepository repo;
     private final ProjectService projectService;
@@ -84,8 +91,10 @@ public class BulletService {
         return generateForProjectAndCategory(userId, projectId, "general", ProgressLog.noOp());
     }
 
-    /** Generate bullets for one project and one category lens. */
-    public List<Bullet> generateForProjectAndCategory(UUID userId, UUID projectId, String category, ProgressLog progress) {
+    private record RawGeneration(String category, LlmClient.BulletGenerationResult result) {}
+
+    /** Call the LLM for one project/category. No shared state — safe to run concurrently. */
+    private RawGeneration generateBulletsOnly(UUID userId, UUID projectId, String category, ProgressLog progress) {
         Project p = projectService.get(userId, projectId);
 
         LlmClient.SourceKind sk = p.getKind() == Project.Kind.EXPERIENCE
@@ -108,12 +117,18 @@ public class BulletService {
         } finally {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
         }
+        return new RawGeneration(cat, result);
+    }
 
-        List<String> seenTexts = new ArrayList<>(
-                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
+    /**
+     * Dedup + persist one category's generated bullets against {@code seenTexts}, which is
+     * mutated in place so callers can chain this across categories in a batch. Must be called
+     * serially — it is not safe to call concurrently against a shared seenTexts list.
+     */
+    private List<Bullet> saveDeduped(UUID projectId, RawGeneration gen, List<String> seenTexts, ProgressLog progress) {
         List<Bullet> saved = new ArrayList<>();
         int dupDropped = 0;
-        for (LlmClient.GeneratedBullet g : result.bullets()) {
+        for (LlmClient.GeneratedBullet g : gen.result().bullets()) {
             boolean nearDuplicate = seenTexts.stream()
                     .anyMatch(t -> BulletTextRules.similarity(t, g.text()) >= DEDUP_SIMILARITY_THRESHOLD);
             if (nearDuplicate) {
@@ -121,12 +136,22 @@ public class BulletService {
                 continue;
             }
             seenTexts.add(g.text());
-            saved.add(repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), cat)));
+            saved.add(repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), gen.category())));
         }
         if (dupDropped > 0) {
             progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
         }
         return saved;
+    }
+
+    /** Generate bullets for one project and one category lens. */
+    public List<Bullet> generateForProjectAndCategory(UUID userId, UUID projectId, String category, ProgressLog progress) {
+        RawGeneration gen = generateBulletsOnly(userId, projectId, category, progress);
+        // Fetched fresh here (not passed in) so this standalone entry point still sees any
+        // bullets saved by other calls in the meantime — same behavior as before the split.
+        List<String> seenTexts = new ArrayList<>(
+                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
+        return saveDeduped(projectId, gen, seenTexts, progress);
     }
 
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, ProgressLog progress) {
@@ -138,15 +163,40 @@ public class BulletService {
                 throw new IllegalArgumentException("Unknown category: " + c);
             }
         }
-        List<Bullet> combined = new ArrayList<>();
         int total = categories.size();
         for (int i = 0; i < total; i++) {
-            String c = categories.get(i);
-            progress.emit("[" + (i + 1) + "/" + total + "] Starting category: " + c);
-            log.info("Generating bank for project {} category {}", projectId, c);
-            combined.addAll(generateForProjectAndCategory(userId, projectId, c, progress));
+            progress.emit("[" + (i + 1) + "/" + total + "] Starting category: " + categories.get(i));
+        }
+        log.info("Generating bank for project {} categories {}", projectId, categories);
+
+        List<CompletableFuture<RawGeneration>> futures = categories.stream()
+                .map(c -> CompletableFuture.supplyAsync(
+                        () -> generateBulletsOnly(userId, projectId, c, tagged(progress, c)), PARALLEL_EXECUTOR))
+                .toList();
+
+        List<RawGeneration> results;
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            results = futures.stream().map(CompletableFuture::join).toList();
+        } catch (CompletionException e) {
+            // Unwrap so e.g. ResponseStatusException(404) from projectService.get() still
+            // surfaces as 404 through the synchronous endpoint, not a wrapped 500.
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof RuntimeException re) throw re;
+            throw new RuntimeException(cause.getMessage(), cause);
+        }
+
+        List<String> seenTexts = new ArrayList<>(
+                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
+        List<Bullet> combined = new ArrayList<>();
+        for (RawGeneration gen : results) {
+            combined.addAll(saveDeduped(projectId, gen, seenTexts, progress));
         }
         progress.emit("Done — generated " + combined.size() + " bullets across " + total + " categories.");
         return combined;
+    }
+
+    private static ProgressLog tagged(ProgressLog progress, String category) {
+        return msg -> progress.emit("[" + category + "] " + msg);
     }
 }

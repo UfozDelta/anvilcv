@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Provider-agnostic half of an {@link LlmClient} implementation. Owns the four
@@ -41,6 +42,29 @@ public abstract class BaseLlmClient implements LlmClient {
     protected abstract String callJson(String model, String prompt, SchemaSpec schema,
                                        double temperature, ProgressLog progress,
                                        TokenAccumulator tokens, boolean stream, String label);
+
+    // Transient-failure safety net around callJson: one retry after a short pause. Deliberately
+    // NOT stacked with the word-count-filter retry in generateBullets below (that's a separate,
+    // content-quality retry layer) and does not retry timeouts, which are already expensive.
+    private String callJsonWithRetry(String model, String prompt, SchemaSpec schema, double temperature,
+                                     ProgressLog progress, TokenAccumulator tokens, boolean stream, String label) {
+        try {
+            return callJson(model, prompt, schema, temperature, progress, tokens, stream, label);
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof TimeoutException) {
+                throw e;
+            }
+            log.warn("{}: LLM call failed ({}), retrying once...", label, e.getMessage());
+            progress.emit(label + ": call failed, retrying...");
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw e;
+            }
+            return callJson(model, prompt, schema, temperature, progress, tokens, stream, label);
+        }
+    }
 
     // -------- provider-agnostic schema model --------
 
@@ -253,7 +277,7 @@ public abstract class BaseLlmClient implements LlmClient {
     private List<GeneratedBullet> callAndFilter(String prompt, SchemaSpec schema,
                                                 int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens,
                                                 String sourceContext) {
-        String json = callJson(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Bullets");
+        String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Bullets");
         BulletsEnvelope env;
         try {
             env = mapper.readValue(json, BulletsEnvelope.class);
@@ -341,7 +365,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 "keywords", SchemaSpec.array(SchemaSpec.string())
         )), List.of("cleanJd", "company", "role", "keywords"));
 
-        String json = callJson(cleanJdModel(), prompt, schema, 1.0, progress, tokens, false, "JD clean");
+        String json = callJsonWithRetry(cleanJdModel(), prompt, schema, 1.0, progress, tokens, false, "JD clean");
         try {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
             List<String> kws = env.keywords == null ? List.of() : env.keywords;
@@ -440,7 +464,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 "selectedSkills",  selectedSkillsSchema
         )), List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses", "selectedSkills"));
 
-        String json = callJson(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Ranking");
+        String json = callJsonWithRetry(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Ranking");
         try {
             RankEnvelope env = mapper.readValue(json, RankEnvelope.class);
             List<RankedBullet> ranked = env.rankedBullets.stream()
@@ -517,7 +541,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 "coverLetter", SchemaSpec.string()
         )), List.of("coverLetter"));
 
-        String json = callJson(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Cover letter");
+        String json = callJsonWithRetry(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Cover letter");
         try {
             CoverLetterEnvelope env = mapper.readValue(json, CoverLetterEnvelope.class);
             progress.emit("Cover letter generated.");
