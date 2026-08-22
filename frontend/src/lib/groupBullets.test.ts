@@ -9,7 +9,7 @@ function project(id: string, kind: Project['kind'], name = id): Project {
 }
 
 function bullet(id: string, projectId: string): Bullet {
-  return { id, projectId, text: `text-${id}`, tags: [], category: 'general',
+  return { id, projectId, text: `text-${id}`, tags: [], category: 'general', status: 'PENDING',
            createdAt: '2026-01-01', updatedAt: '2026-01-01' };
 }
 

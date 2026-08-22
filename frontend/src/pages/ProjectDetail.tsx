@@ -3,7 +3,6 @@ import { AnimatePresence } from 'framer-motion';
 import { CATEGORIES } from '../lib/api';
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
-import { markdownBoldToHtml } from '../lib/markdown';
 import { useProjectDetail } from '../hooks/useProjectDetail';
 import { AddBullet } from '../components/ProjectDetail/AddBullet';
 import { BulletRow } from '../components/ProjectDetail/BulletRow';
@@ -119,8 +118,21 @@ export function ProjectDetail() {
         )}
       </AnimatePresence>
 
+      <div className="row" style={{ gap: 0, marginBottom: 10 }}>
+        <button
+          className="btn btn--sm"
+          onClick={() => s.setStatusTab('bank')}
+          style={{ background: s.statusTab === 'bank' ? 'var(--ink)' : 'var(--paper)', color: s.statusTab === 'bank' ? 'var(--paper)' : 'var(--ink)' }}
+        >AI BULLET BANK <span style={{ opacity: 0.6, marginLeft: 4 }}>{s.bullets.filter(b => b.status !== 'APPROVED').length}</span></button>
+        <button
+          className="btn btn--sm"
+          onClick={() => s.setStatusTab('approved')}
+          style={{ background: s.statusTab === 'approved' ? 'var(--ink)' : 'var(--paper)', color: s.statusTab === 'approved' ? 'var(--paper)' : 'var(--ink)', marginLeft: -2 }}
+        >APPROVED <span style={{ opacity: 0.6, marginLeft: 4 }}>{s.bullets.filter(b => b.status === 'APPROVED').length}</span></button>
+      </div>
+
       <div className="row row--between row--centered" style={{ marginBottom: 10 }}>
-        <Section num="01.A" title="Bullet Bank" count={s.bullets.length} />
+        <Section num="01.A" title={s.statusTab === 'approved' ? 'Approved Bullets' : 'AI Bullet Bank'} count={s.grouped.reduce((n, g) => n + g.rows.length, 0)} />
         <div className="row" style={{ gap: 0 }}>
           <button
             className="btn btn--sm"
@@ -227,9 +239,9 @@ export function ProjectDetail() {
 
       {s.err && <div className="err" style={{ marginBottom: 16 }}>{s.err}</div>}
 
-      {s.bullets.length === 0 && !s.generating && (
+      {s.grouped.length === 0 && !s.generating && (
         <div className="editorial muted" style={{ padding: '40px 0' }}>
-          Empty bank. Pick lenses above and generate.
+          {s.statusTab === 'approved' ? 'No approved bullets yet.' : 'Empty bank. Pick lenses above and generate.'}
         </div>
       )}
 
@@ -250,7 +262,8 @@ export function ProjectDetail() {
           {g.rows.map((b, i) => s.editing === b.id ? (
             <EditBullet key={b.id} bullet={b} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
           ) : (
-            <BulletRow key={b.id} bullet={b} index={i} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)} />
+            <BulletRow key={b.id} bullet={b} index={i} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+              onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')} />
           ))}
         </div>
       ))}
@@ -263,24 +276,9 @@ export function ProjectDetail() {
             return s.editing === b.id ? (
               <EditBullet key={b.id} bullet={b} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
             ) : (
-              <div key={b.id} className="bullet">
-                <div className="bullet__rank">#{String(i + 1).padStart(2, '0')}</div>
-                <div style={{ width: '100%' }}>
-                  <div className="bullet__text" dangerouslySetInnerHTML={{ __html: markdownBoldToHtml(b.text) }} />
-                  {cat && (
-                    <div style={{ marginTop: 6, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                      {cat.label} — <span style={{ textTransform: 'none', letterSpacing: '0.04em' }}>{cat.blurb}</span>
-                    </div>
-                  )}
-                  <div className="bullet__tags" style={{ marginTop: 6 }}>
-                    {b.tags.map(t => <span key={t} className="tag">{t}</span>)}
-                  </div>
-                  <div className="row" style={{ marginTop: 8 }}>
-                    <button className="btn btn--ghost btn--sm" onClick={() => s.setEditing(b.id)}>EDIT</button>
-                    <button className="btn btn--ghost btn--sm btn--rust" onClick={() => s.delBullet(b)}>DELETE</button>
-                  </div>
-                </div>
-              </div>
+              <BulletRow key={b.id} bullet={b} index={i} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+                onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')}
+                categoryLabel={cat} />
             );
           })}
         </div>

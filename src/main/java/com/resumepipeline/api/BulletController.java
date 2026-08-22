@@ -3,6 +3,7 @@ package com.resumepipeline.api;
 import com.resumepipeline.api.dto.BulletDtos.BulletResponse;
 import com.resumepipeline.api.dto.BulletDtos.CreateBulletRequest;
 import com.resumepipeline.api.dto.BulletDtos.UpdateBulletRequest;
+import com.resumepipeline.api.dto.BulletDtos.UpdateStatusRequest;
 import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.bullet.BulletService;
 import jakarta.validation.Valid;
@@ -39,6 +40,12 @@ public class BulletController {
                                  @RequestBody UpdateBulletRequest req) {
         String[] tags = req.tags() == null ? null : req.tags().toArray(new String[0]);
         return BulletResponse.from(bullets.update(AuthUtils.userId(auth), id, req.text(), tags));
+    }
+
+    @PatchMapping("/bullets/{id}/status")
+    public BulletResponse updateStatus(Authentication auth, @PathVariable UUID id,
+                                       @RequestBody @Valid UpdateStatusRequest req) {
+        return BulletResponse.from(bullets.updateStatus(AuthUtils.userId(auth), id, req.status()));
     }
 
     @DeleteMapping("/bullets/{id}")

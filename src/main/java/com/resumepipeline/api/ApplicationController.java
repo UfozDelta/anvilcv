@@ -39,6 +39,11 @@ public class ApplicationController {
         return service.list(AuthUtils.userId(auth), outcome).stream().map(ApplicationSummary::from).toList();
     }
 
+    @GetMapping("/outcome-history")
+    public List<OutcomeHistoryEntry> outcomeHistory(Authentication auth) {
+        return service.outcomeHistory(AuthUtils.userId(auth)).stream().map(OutcomeHistoryEntry::from).toList();
+    }
+
     @PostMapping("/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public SubmitResponse submit(Authentication auth, @RequestBody @Valid CreateApplicationRequest req) {

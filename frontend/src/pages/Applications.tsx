@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type ApplicationSummary } from '../lib/api';
+import { api, type ApplicationSummary, type OutcomeHistoryEntry } from '../lib/api';
 import { Section } from '../components/Section';
+import { OutcomeSankey } from '../components/OutcomeSankey';
 
 const OUTCOMES = ['', 'applied', 'interview', 'offer', 'rejected'];
 
 export function Applications() {
   const [apps, setApps] = useState<ApplicationSummary[]>([]);
+  const [history, setHistory] = useState<OutcomeHistoryEntry[]>([]);
   const [outcome, setOutcome] = useState('');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get<OutcomeHistoryEntry[]>('/api/applications/outcome-history').then(setHistory);
+  }, []);
 
   async function deleteApp(id: string, label: string) {
     if (!window.confirm(`Delete application for "${label}"?`)) return;
@@ -28,6 +34,11 @@ export function Applications() {
   return (
     <div className="shell">
       <Section num="02" title="Applications" count={apps.length} />
+
+      <Section num="02.A" title="Outcome Flow" />
+      <div style={{ marginBottom: 24 }}>
+        <OutcomeSankey history={history} />
+      </div>
 
       <div className="row" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 6 }}>
         {OUTCOMES.map(o => (

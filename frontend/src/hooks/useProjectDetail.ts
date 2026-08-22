@@ -13,6 +13,7 @@ export function useProjectDetail(id: string | undefined) {
   const [picked, setPicked] = useState<Set<string>>(new Set(['ai-ml', 'backend']));
   const [sortMode, setSortMode] = useState<'category' | 'date'>('category');
   const [filterCat, setFilterCat] = useState<string | null>(null);
+  const [statusTab, setStatusTab] = useState<'bank' | 'approved'>('bank');
   const [enrichOpen, setEnrichOpen] = useState(false);
   const [enrichSaving, setEnrichSaving] = useState(false);
   const [enrichErr, setEnrichErr] = useState<string | null>(null);
@@ -125,6 +126,10 @@ export function useProjectDetail(id: string | undefined) {
     await api.del(`/api/bullets/${b.id}`);
     await load();
   }
+  async function setBulletStatus(b: Bullet, status: Bullet['status']) {
+    await api.patch<Bullet>(`/api/bullets/${b.id}/status`, { status });
+    await load();
+  }
 
   const categoryMap = useMemo(() => {
     const m = new Map<string, { label: string; blurb: string }>();
@@ -132,9 +137,15 @@ export function useProjectDetail(id: string | undefined) {
     return m;
   }, []);
 
+  const tabBullets = useMemo(() =>
+    statusTab === 'approved'
+      ? bullets.filter(b => b.status === 'APPROVED')
+      : bullets.filter(b => b.status !== 'APPROVED'),
+  [bullets, statusTab]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, Bullet[]>();
-    for (const b of bullets) {
+    for (const b of tabBullets) {
       const k = b.category || 'general';
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(b);
@@ -150,16 +161,16 @@ export function useProjectDetail(id: string | undefined) {
       ordered.push({ slug, label: slug.toUpperCase(), blurb: '', rows });
     }
     return ordered;
-  }, [bullets]);
+  }, [tabBullets]);
 
   const visibleGroups = useMemo(() =>
     filterCat ? grouped.filter(g => g.slug === filterCat) : grouped,
   [grouped, filterCat]);
 
   const flatByDate = useMemo(() => {
-    const src = filterCat ? bullets.filter(b => (b.category || 'general') === filterCat) : bullets;
+    const src = filterCat ? tabBullets.filter(b => (b.category || 'general') === filterCat) : tabBullets;
     return [...src].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [bullets, filterCat]);
+  }, [tabBullets, filterCat]);
 
   const presentCats = useMemo(() => grouped.map(g => g.slug), [grouped]);
 
@@ -175,6 +186,7 @@ export function useProjectDetail(id: string | undefined) {
     project, bullets, loading, generating, setGenerating, err,
     editing, setEditing, adding, setAdding, picked, togglePick,
     sortMode, setSortMode, filterCat, setFilterCat,
+    statusTab, setStatusTab,
     enrichOpen, setEnrichOpen, enrichSaving, enrichErr, saveEnrich,
     techStack, setTechStack, yourRole, setYourRole, ownership, setOwnership,
     scaleImpact, setScaleImpact, hardestProblem, setHardestProblem,
@@ -183,7 +195,7 @@ export function useProjectDetail(id: string | undefined) {
     editTitle, setEditTitle, editCompany, setEditCompany,
     editLocation, setEditLocation, editDates, setEditDates,
     editDescription, setEditDescription,
-    load, generateBank, addBullet, saveBullet, delBullet,
+    load, generateBank, addBullet, saveBullet, delBullet, setBulletStatus,
     categoryMap, grouped, visibleGroups, flatByDate, presentCats,
   };
 }
