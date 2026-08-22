@@ -36,10 +36,31 @@ class BulletTextRulesTest {
     @Test void periodKeptBang()   { assertEquals("Built it!", BulletTextRules.ensureTerminalPeriod("Built it!")); }
     @Test void periodKeptQ()      { assertEquals("Why?", BulletTextRules.ensureTerminalPeriod("Why?")); }
 
+    // ---- charCount ----
+
+    @Test void charCountNull()  { assertEquals(0, BulletTextRules.charCount(null)); }
+    @Test void charCountBlank() { assertEquals(0, BulletTextRules.charCount("   ")); }
+    @Test void charCountPlain() { assertEquals(11, BulletTextRules.charCount("Built a RAG")); }
+
+    @Test void charCountStripsBoldMarkers() {
+        // The ** markers compile to \textbf{} and take no width on the page.
+        assertEquals(11, BulletTextRules.charCount("Built a **RAG**"));
+    }
+
+    @Test void charCountSeparatesWhatWordCountConflates() {
+        // The whole point of the switch: one "word" each, wildly different line fill.
+        assertEquals(1, BulletTextRules.wordCount("**a**"));
+        assertEquals(1, BulletTextRules.wordCount("**Kubernetes**"));
+        assertEquals(1, BulletTextRules.charCount("**a**"));
+        assertEquals(10, BulletTextRules.charCount("**Kubernetes**"));
+    }
+
     // ---- decide ----
 
+    // Bands are configured in words and converted at CHARS_PER_WORD = 5.4, so the
+    // defaults below land at: dead zone 146-216c, floor 65c, single 119-140c,
+    // double 227-270c.
     private static GenerationConfig cfg() {
-        // Defaults: deadZone 27-40, minWordFloor 12, filter enabled.
         return new GenerationConfig();
     }
 
@@ -47,28 +68,29 @@ class BulletTextRulesTest {
         GenerationConfig c = cfg();
         c.setWordFilterEnabled(false);
         assertEquals(Decision.KEPT, BulletTextRules.decide(1, c));    // would be too short
-        assertEquals(Decision.KEPT, BulletTextRules.decide(30, c));   // would be dead zone
+        assertEquals(Decision.KEPT, BulletTextRules.decide(180, c));  // would be dead zone
     }
 
-    @Test void decideDeadZoneLowBoundary()  { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(27, cfg())); }
-    @Test void decideDeadZoneHighBoundary() { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(40, cfg())); }
-    @Test void decideDeadZoneMiddle()       { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(33, cfg())); }
+    @Test void decideDeadZoneLowBoundary()  { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(146, cfg())); }
+    @Test void decideDeadZoneHighBoundary() { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(216, cfg())); }
+    @Test void decideDeadZoneMiddle()       { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(180, cfg())); }
 
-    @Test void decideTooShort()             { assertEquals(Decision.TOO_SHORT, BulletTextRules.decide(11, cfg())); }
-    @Test void decideFloorBoundaryKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(12, cfg())); }
+    @Test void decideTooShort()             { assertEquals(Decision.TOO_SHORT, BulletTextRules.decide(64, cfg())); }
+    @Test void decideFloorBoundaryKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(65, cfg())); }
 
-    @Test void decideSingleLineKept()  { assertEquals(Decision.KEPT, BulletTextRules.decide(24, cfg())); } // below dead zone
-    @Test void decideJustBelowDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(26, cfg())); }
-    @Test void decideJustAboveDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(41, cfg())); }
-    @Test void decideDoubleLineKept()  { assertEquals(Decision.KEPT, BulletTextRules.decide(46, cfg())); }
+    @Test void decideSingleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(130, cfg())); }
+    @Test void decideJustBelowDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(145, cfg())); }
+    @Test void decideJustAboveDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(217, cfg())); }
+    @Test void decideDoubleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(248, cfg())); }
 
     @Test void decideDeadZoneTakesPrecedenceOverFloor() {
         // A weird config where dead zone overlaps below the floor: dead-zone check runs first.
+        // 5-20 words is 27-108 chars, floor 15 words is 81 chars; 54 chars sits in both.
         GenerationConfig c = cfg();
         c.setDeadZoneLow(5);
         c.setDeadZoneHigh(20);
         c.setMinWordFloor(15);
-        assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(10, c));
+        assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(54, c));
     }
 
     // ---- fabricatedNumbers ----

@@ -1,4 +1,4 @@
-package com.resumepipeline.application;
+package com.resumepipeline.llm;
 
 import com.resumepipeline.bullet.Bullet;
 
@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  * back together in runs of up to {@link #MAX_NGRAM}, then map each result through the
  * alias table. A keyword matches when its normalised form is one of those runs.
  */
-final class KeywordScorer {
+public final class KeywordScorer {
 
     private KeywordScorer() {}
 
@@ -76,7 +76,7 @@ final class KeywordScorer {
             .filter(e -> !e.getKey().chars().allMatch(Character::isLetterOrDigit))
             .toList();
 
-    static ToLongFunction<Bullet> score(Set<String> keywordsLower) {
+    public static ToLongFunction<Bullet> score(Set<String> keywordsLower) {
         // Canonicalised once here rather than per bullet — score() is handed to comparators
         // that call it repeatedly during sorting.
         Set<String> wanted = keywordsLower.stream()
@@ -93,6 +93,16 @@ final class KeywordScorer {
                     .count();
             return textHits * 2 + tagHits; // text match is the stronger signal
         };
+    }
+
+    /**
+     * True when {@code text} actually mentions {@code term}, using the same normalisation
+     * as scoring — so a bullet saying "K8s" mentions "kubernetes". Used to check that the
+     * tags an LLM attaches to a bullet are things it really wrote about.
+     */
+    public static boolean mentions(String text, String term) {
+        String canonical = canonical(term);
+        return !canonical.isBlank() && forms(text).contains(canonical);
     }
 
     /**

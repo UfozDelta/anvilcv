@@ -3,6 +3,7 @@ package com.resumepipeline.llm;
 import com.resumepipeline.config.GenerationConfig;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -12,8 +13,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Pure text rules for generated bullets: word counting, terminal-period
- * normalisation, the word-count keep/drop filter, forbidden-opener and
+ * Pure text rules for generated bullets: length measurement, terminal-period
+ * normalisation, the character-count keep/drop filter, forbidden-opener and
  * fabricated-metric checks, and bullet-similarity scoring for dedup.
  * Extracted from {@link GoogleLlmClient} so the logic can be unit-tested
  * without a live LLM.
@@ -113,6 +114,18 @@ public final class BulletTextRules {
     }
 
     /**
+     * Jaccard word-overlap at or above which two bullets are treated as the same bullet.
+     * Shared so the generation recovery pass and the persist-time dedup agree on what a
+     * duplicate is.
+     */
+    public static final double NEAR_DUPLICATE_THRESHOLD = 0.6;
+
+    /** True when {@code text} is a near-duplicate of anything already in {@code existing}. */
+    public static boolean isNearDuplicate(String text, Collection<String> existing) {
+        return existing.stream().anyMatch(t -> similarity(t, text) >= NEAR_DUPLICATE_THRESHOLD);
+    }
+
+    /**
      * Jaccard similarity of two bullets' word sets (bold markup stripped, lowercased,
      * punctuation dropped). 0 = disjoint, 1 = identical bag of words. Used to catch
      * near-duplicate bullets across generations.
@@ -136,17 +149,50 @@ public final class BulletTextRules {
                 .collect(Collectors.toSet());
     }
 
-    /** Why a bullet was kept or dropped by the word-count filter. */
+    /** Why a bullet was kept or dropped by the length filter. */
     public enum Decision { KEPT, DEAD_ZONE, TOO_SHORT }
+
+    /**
+     * Ratio used to read the word-based {@link GenerationConfig} bands as character
+     * bands. The configured defaults are already self-consistent at this ratio — 22-26
+     * words is the "≈130 chars" single line the prompt asks for, 42-50 the "≈250 chars"
+     * double line — so the conversion changes no existing tuning.
+     *
+     * <p>ponytail: one global constant rather than six new config columns. If per-user
+     * tuning drifts (very terse or very verbose writing), promote the character bands to
+     * their own columns instead of adjusting this.
+     */
+    static final double CHARS_PER_WORD = 5.4;
+
+    /** The configured word band expressed in characters. */
+    private static int chars(int words) {
+        return (int) Math.round(words * CHARS_PER_WORD);
+    }
 
     /**
      * Word count after stripping markdown bolds, so {@code **64K**} counts as one
      * word rather than three tokens. Null/blank counts as 0.
+     *
+     * <p>Retained for progress/diagnostic output. The length filter itself measures
+     * characters — see {@link #charCount}.
      */
     public static int wordCount(String s) {
         if (s == null || s.isBlank()) return 0;
         String stripped = s.replace("**", "");
         return stripped.trim().split("\\s+").length;
+    }
+
+    /**
+     * Rendered length in characters, with the {@code **} bold markers removed — they
+     * compile to {@code \textbf{}} and take no width on the page.
+     *
+     * <p>This, not {@link #wordCount}, is what decides line fill: a word count treats
+     * {@code **Kubernetes**} and {@code **a**} as one apiece, while the LaTeX line they
+     * have to fill does not.
+     */
+    public static int charCount(String s) {
+        if (s == null || s.isBlank()) return 0;
+        return s.replace("**", "").trim().length();
     }
 
     /**
@@ -163,18 +209,30 @@ public final class BulletTextRules {
     }
 
     /**
-     * Decide whether a bullet of the given word count survives the filter.
+     * Decide whether a bullet of the given character count survives the filter.
      * When the filter is disabled in config, everything is {@link Decision#KEPT}.
      * Otherwise a bullet in the dead zone is dropped, then one below the floor.
+     *
+     * <p>The config bands are stored in words and converted here — see
+     * {@link #CHARS_PER_WORD}.
      */
-    public static Decision decide(int wordCount, GenerationConfig cfg) {
+    public static Decision decide(int charCount, GenerationConfig cfg) {
         if (!cfg.isWordFilterEnabled()) return Decision.KEPT;
-        if (wordCount >= cfg.getDeadZoneLow() && wordCount <= cfg.getDeadZoneHigh()) {
+        if (charCount >= chars(cfg.getDeadZoneLow()) && charCount <= chars(cfg.getDeadZoneHigh())) {
             return Decision.DEAD_ZONE;
         }
-        if (wordCount < cfg.getMinWordFloor()) {
+        if (charCount < chars(cfg.getMinWordFloor())) {
             return Decision.TOO_SHORT;
         }
         return Decision.KEPT;
     }
+
+    /** The configured band boundaries in characters, for prompts and progress messages. */
+    public static int deadZoneLowChars(GenerationConfig cfg)  { return chars(cfg.getDeadZoneLow()); }
+    public static int deadZoneHighChars(GenerationConfig cfg) { return chars(cfg.getDeadZoneHigh()); }
+    public static int singleLowChars(GenerationConfig cfg)    { return chars(cfg.getSingleLineLow()); }
+    public static int singleHighChars(GenerationConfig cfg)   { return chars(cfg.getSingleLineHigh()); }
+    public static int doubleLowChars(GenerationConfig cfg)    { return chars(cfg.getDoubleLineLow()); }
+    public static int doubleHighChars(GenerationConfig cfg)   { return chars(cfg.getDoubleLineHigh()); }
+    public static int minFloorChars(GenerationConfig cfg)     { return chars(cfg.getMinWordFloor()); }
 }

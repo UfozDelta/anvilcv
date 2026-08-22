@@ -1,4 +1,4 @@
-package com.resumepipeline.application;
+package com.resumepipeline.llm;
 
 import com.resumepipeline.bullet.Bullet;
 import org.junit.jupiter.api.Nested;
@@ -135,6 +135,32 @@ class KeywordScorerTest {
         @Test
         void hyphenatedTextStillMatchesTheBareTerm() {
             assertEquals(2, score(withText("Used React-Leaflet for maps."), "React"));
+        }
+    }
+
+    @Nested
+    class Mentions {
+
+        @Test
+        void tagNamedInTextIsMentioned() {
+            assertTrue(KeywordScorer.mentions("Built a React frontend.", "react"));
+        }
+
+        @Test
+        void tagAbsentFromTextIsNotMentioned() {
+            assertTrue(!KeywordScorer.mentions("Built a React frontend.", "kubernetes"));
+        }
+
+        @Test
+        void mentionsUsesTheSameAliasing() {
+            assertTrue(KeywordScorer.mentions("Deployed on K8s.", "kubernetes"));
+            assertTrue(KeywordScorer.mentions("Owned the CI/CD pipeline.", "ci/cd"));
+        }
+
+        @Test
+        void blankAndNullAreNotMentions() {
+            assertTrue(!KeywordScorer.mentions("Built a React frontend.", ""));
+            assertTrue(!KeywordScorer.mentions(null, "react"));
         }
     }
 

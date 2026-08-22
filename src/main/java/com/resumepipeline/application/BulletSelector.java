@@ -1,6 +1,7 @@
 package com.resumepipeline.application;
 
 import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.project.Project;
 
