@@ -11,9 +11,6 @@ import com.resumepipeline.progress.PipelineTimer;
 import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,9 +25,10 @@ import java.util.concurrent.TimeoutException;
  * word-count filter, and response parsing lives in {@link BaseLlmClient}; this
  * class only translates the provider-agnostic {@link SchemaSpec} into a Gemini
  * response schema and performs the SDK calls.
+ *
+ * Not a Spring bean: {@link RoutingLlmClient} constructs it from the admin-managed
+ * settings row so the provider can be switched without a redeploy.
  */
-@Component
-@ConditionalOnProperty(name = "llm.provider", havingValue = "gemini", matchIfMissing = true)
 public class GoogleLlmClient extends BaseLlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(GoogleLlmClient.class);
@@ -46,10 +44,10 @@ public class GoogleLlmClient extends BaseLlmClient {
     private final String cleanJdModel;
 
     public GoogleLlmClient(
-            @Value("${llm.gemini.api-key}") String apiKey,
-            @Value("${llm.gemini.model.generate}") String generateModel,
-            @Value("${llm.gemini.model.match}") String matchModel,
-            @Value("${llm.gemini.model.clean-jd}") String cleanJdModel,
+            String apiKey,
+            String generateModel,
+            String matchModel,
+            String cleanJdModel,
             GenerationConfigService configService) {
         super(configService);
         this.client = Client.builder().apiKey(apiKey).build();

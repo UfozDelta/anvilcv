@@ -2,8 +2,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api, UnauthorizedError } from './api';
 
+interface Identity { username: string; isAdmin: boolean }
+
 interface AuthState {
   username: string | null;
+  isAdmin: boolean;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -14,32 +17,36 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [username, setUsername] = useState<string | null>(null);
+  // Gates the admin nav link and route only. The server enforces ROLE_ADMIN on
+  // /api/admin/** independently, so flipping this in devtools buys nothing.
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const clear = () => { setUsername(null); setIsAdmin(false); };
+  const accept = (r: Identity) => { setUsername(r.username); setIsAdmin(!!r.isAdmin); };
+
   useEffect(() => {
-    api.get<{ username: string }>('/api/me')
-      .then(r => setUsername(r.username))
-      .catch(() => setUsername(null))
+    api.get<Identity>('/api/me')
+      .then(accept)
+      .catch(clear)
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (u: string, p: string) => {
-    const r = await api.post<{ username: string }>('/api/login', { username: u, password: p });
-    setUsername(r.username);
+    accept(await api.post<Identity>('/api/login', { username: u, password: p }));
   };
 
   const logout = async () => {
     try { await api.post('/api/logout'); } catch { /* ignore */ }
-    setUsername(null);
+    clear();
   };
 
   const register = async (u: string, email: string, p: string) => {
-    const r = await api.post<{ username: string }>('/api/register', { username: u, email, password: p });
-    setUsername(r.username);
+    accept(await api.post<Identity>('/api/register', { username: u, email, password: p }));
   };
 
   return (
-    <AuthContext.Provider value={{ username, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ username, isAdmin, loading, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );

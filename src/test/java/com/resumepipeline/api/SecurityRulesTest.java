@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static com.resumepipeline.api.WebTestSecurity.admin;
 import static com.resumepipeline.api.WebTestSecurity.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,5 +42,28 @@ class SecurityRulesTest {
     void protectedRouteSucceedsWhenAuthenticated() throws Exception {
         mvc.perform(get("/api/ping").with(user(UUID.randomUUID())))
                 .andExpect(status().isOk());
+    }
+
+    // /api/admin/** used to be .authenticated(), so anyone who registered could read
+    // every user's email and spend. These three pin the rule that closed that.
+
+    @Test
+    void adminRouteRejectsNonAdmin() throws Exception {
+        mvc.perform(get("/api/admin/llm").with(user(UUID.randomUUID())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminRouteRejectsAnonymous() throws Exception {
+        mvc.perform(get("/api/admin/llm"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void adminRoutePassesAuthorizationForAdmin() throws Exception {
+        // 404, not 403: authorization allowed the request through and only then did
+        // handler mapping fail, because this slice registers PingController alone.
+        mvc.perform(get("/api/admin/llm").with(admin(UUID.randomUUID())))
+                .andExpect(status().isNotFound());
     }
 }

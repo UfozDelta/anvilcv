@@ -53,11 +53,13 @@ public class SeedUserRunner implements ApplicationRunner {
                     user.setUsername(username);
                     user.setEmail(email);
                     user.setPasswordHash(hash);
+                    user.setAdmin(true);
                     userRepository.save(user);
                     log.info("Seed user ready — username: {}", username);
                 },
                 () -> {
                     AppUser u = new AppUser(username, email, hash);
+                    u.setAdmin(true);
                     userRepository.save(u);
                 }
         );

@@ -31,9 +31,15 @@ spring:
     out-of-order: true
 
 llm:
-  # The only switch. Each provider keeps its own key and models below, so all can
-  # stay configured and flipping providers is this one line.
+  # Fallback only. The live provider and models come from the admin-managed llm_settings
+  # row; a blank column there falls back to the value here, so an untouched deploy keeps
+  # running exactly as before and env stays a backstop if a bad save locks you out.
   provider: ${LLM_PROVIDER:gemini}   # gemini | opencode | openai
+
+  # AES-256 key (base64, 32 bytes) encrypting the provider API keys stored in the DB.
+  # Generate with: openssl rand -base64 32
+  # Unset means the app still runs on the env keys below but refuses to save new ones.
+  secret-key: ${LLM_SECRET_KEY:}
 
   gemini:
     api-key: ${GEMINI_API_KEY:}
