@@ -33,11 +33,9 @@ public final class BulletSelector {
     private static final int MIN_EXPERIENCE_PROJECTS = 2;
     private static final int MIN_PROJECT_ENTRIES = 3;
 
-    /** Tag-overlap score for a bullet against the (lower-cased) JD keyword set. */
+    /** Keyword-in-text score for a bullet against the (lower-cased) JD keyword set. */
     static ToLongFunction<Bullet> tagScore(Set<String> keywordsLower) {
-        return b -> Arrays.stream(b.getTags() == null ? new String[0] : b.getTags())
-                .filter(t -> keywordsLower.contains(t.toLowerCase()))
-                .count();
+        return KeywordScorer.score(keywordsLower);
     }
 
     /**

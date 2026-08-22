@@ -173,8 +173,10 @@ public abstract class BaseLlmClient implements LlmClient {
                     Those belong in interview answers, not on a resume.
                   • Each bullet stands alone — a recruiter must understand it in 5 seconds without
                     reading neighbors.
-                  • Tag each bullet with 1 to 3 tags from this allowlist only:
-                      backend, frontend, ai-ml, devops, data, systems, communication, mobile, security
+                  • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
+                    explicitly named in the bullet text itself (e.g. "react", "kubernetes",
+                    "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.
+                    Do not invent tags for things not mentioned in the bullet.
 
                 ─────────────────────────────────────────────────────────────
                 ## EXAMPLES (study these — match this length, bold density, and ending punctuation)
@@ -218,7 +220,8 @@ public abstract class BaseLlmClient implements LlmClient {
 
         progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
-        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress, tokens);
+        String sourceContext = contextBlock + repoBlock;
+        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress, tokens, sourceContext);
 
         // If we lost too many bullets to the word-count filter, retry once with sharper instructions.
         if (cfg.isWordFilterEnabled() && kept.size() < target) {
@@ -233,7 +236,7 @@ public abstract class BaseLlmClient implements LlmClient {
                     cfg.getDoubleLineLow(), cfg.getDoubleLineHigh());
             log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
             progress.emit("Retry: only " + firstPassCount + "/" + target + " passed filter, calling LLM again with stricter length rules...");
-            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress, tokens);
+            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress, tokens, sourceContext);
             if (retry.size() > kept.size()) {
                 progress.emit("Retry result: " + retry.size() + "/" + target + " passed (was " + firstPassCount + "/" + target + ")");
                 kept = retry;
@@ -248,7 +251,8 @@ public abstract class BaseLlmClient implements LlmClient {
 
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private List<GeneratedBullet> callAndFilter(String prompt, SchemaSpec schema,
-                                                int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens) {
+                                                int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens,
+                                                String sourceContext) {
         String json = callJson(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Bullets");
         BulletsEnvelope env;
         try {
@@ -267,6 +271,21 @@ public abstract class BaseLlmClient implements LlmClient {
         int dropped = 0;
         for (BulletJson b : env.bullets) {
             String text = BulletTextRules.ensureTerminalPeriod(b.text);
+
+            if (BulletTextRules.hasForbiddenOpener(text)) {
+                log.info("Dropped bullet (forbidden opener): {}", abbreviate(text));
+                progress.emit("Cut: weak/passive opener");
+                dropped++;
+                continue;
+            }
+            List<String> fabricated = BulletTextRules.fabricatedNumbers(text, sourceContext);
+            if (!fabricated.isEmpty()) {
+                log.info("Dropped bullet (fabricated metric {}): {}", fabricated, abbreviate(text));
+                progress.emit("Cut: fabricated metric not in source (" + String.join(", ", fabricated) + ")");
+                dropped++;
+                continue;
+            }
+
             int wc = BulletTextRules.wordCount(text);
             BulletTextRules.Decision decision = BulletTextRules.decide(wc, cfg);
             switch (decision) {
