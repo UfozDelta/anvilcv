@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../lib/auth';
 
 export function Masthead() {
-  const { username, logout } = useAuth();
+  const { username, isAdmin, logout } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
@@ -60,6 +60,9 @@ export function Masthead() {
         <NavLink to="/new"          className={({ isActive }) => isActive ? 'active' : ''}>04 — NEW APPLICATION</NavLink>
         <NavLink to="/flow"         className={({ isActive }) => isActive ? 'active' : ''}>05 — OUTCOME FLOW</NavLink>
         <NavLink to="/settings"     className={({ isActive }) => isActive ? 'active' : ''}>06 — SETTINGS</NavLink>
+        {isAdmin && (
+          <NavLink to="/admin"      className={({ isActive }) => isActive ? 'active' : ''}>07 — ADMIN</NavLink>
+        )}
       </nav>
     </>
   );

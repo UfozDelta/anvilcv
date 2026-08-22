@@ -24,6 +24,9 @@ public class AppUser {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
+    @Column(name = "is_admin", nullable = false)
+    private boolean admin = false;
+
     protected AppUser() {}
 
     public AppUser(String username, String email, String passwordHash) {
@@ -37,8 +40,10 @@ public class AppUser {
     public String getEmail() { return email; }
     public String getPasswordHash() { return passwordHash; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
+    public boolean isAdmin() { return admin; }
 
     public void setUsername(String username) { this.username = username; }
     public void setEmail(String email) { this.email = email; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public void setAdmin(boolean admin) { this.admin = admin; }
 }

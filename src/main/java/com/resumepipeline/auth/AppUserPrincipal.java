@@ -13,19 +13,24 @@ public class AppUserPrincipal implements UserDetails {
     private final UUID userId;
     private final String username;
     private final String passwordHash;
+    private final boolean admin;
 
     public AppUserPrincipal(AppUser user) {
         this.userId = user.getId();
         this.username = user.getUsername();
         this.passwordHash = user.getPasswordHash();
+        this.admin = user.isAdmin();
     }
 
     public UUID getUserId() { return userId; }
+    public boolean isAdmin() { return admin; }
 
     @Override public String getUsername() { return username; }
     @Override public String getPassword() { return passwordHash; }
     @Override public Collection<? extends org.springframework.security.core.GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        return admin
+                ? List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("ROLE_ADMIN"))
+                : List.of(new SimpleGrantedAuthority("ROLE_USER"));
     }
     @Override public boolean isAccountNonExpired() { return true; }
     @Override public boolean isAccountNonLocked() { return true; }

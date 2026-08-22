@@ -49,7 +49,7 @@ public class AuthController {
     ) {}
 
     @PostMapping("/login")
-    public Map<String, String> login(@RequestBody LoginRequest req,
+    public Map<String, Object> login(@RequestBody LoginRequest req,
                                      HttpServletRequest httpReq, HttpServletResponse httpResp) {
         try {
             Authentication auth = authManager.authenticate(
@@ -61,7 +61,7 @@ public class AuthController {
             ctx.setAuthentication(auth);
             SecurityContextHolder.setContext(ctx);
             contextRepo.saveContext(ctx, httpReq, httpResp);
-            return Map.of("username", auth.getName());
+            return identity(auth);
         } catch (BadCredentialsException e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         } catch (Exception e) {
@@ -71,7 +71,7 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, String> register(@RequestBody RegisterRequest req,
+    public Map<String, Object> register(@RequestBody RegisterRequest req,
                                         HttpServletRequest httpReq, HttpServletResponse httpResp) {
         String ip = httpReq.getRemoteAddr();
         if (!rateLimiter.tryConsume(ip)) {
@@ -97,7 +97,7 @@ public class AuthController {
         SecurityContextHolder.setContext(ctx);
         contextRepo.saveContext(ctx, httpReq, httpResp);
 
-        return Map.of("username", auth.getName());
+        return identity(auth);
     }
 
     @GetMapping("/me")
@@ -105,6 +105,16 @@ public class AuthController {
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
-        return Map.of("username", auth.getName());
+        return identity(auth);
+    }
+
+    /**
+     * Shape returned by every endpoint the frontend uses to learn who it is talking as.
+     * {@code isAdmin} gates the admin nav link and route client-side; the server still
+     * enforces the role on {@code /api/admin/**} independently.
+     */
+    private static Map<String, Object> identity(Authentication auth) {
+        boolean admin = auth.getPrincipal() instanceof AppUserPrincipal p && p.isAdmin();
+        return Map.of("username", auth.getName(), "isAdmin", admin);
     }
 }

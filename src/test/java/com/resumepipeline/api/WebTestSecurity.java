@@ -22,8 +22,18 @@ final class WebTestSecurity {
 
     /** A MockMvc post-processor that authenticates the request as the given user id. */
     static RequestPostProcessor user(UUID userId) {
+        return as(userId, false);
+    }
+
+    /** Same, but the principal carries ROLE_ADMIN. */
+    static RequestPostProcessor admin(UUID userId) {
+        return as(userId, true);
+    }
+
+    private static RequestPostProcessor as(UUID userId, boolean admin) {
         AppUser u = new AppUser("tester", "tester@x.com", "hash");
         setId(u, userId);
+        u.setAdmin(admin);
         AppUserPrincipal principal = new AppUserPrincipal(u);
         Authentication auth = new UsernamePasswordAuthenticationToken(
                 principal, "hash", principal.getAuthorities());
