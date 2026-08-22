@@ -33,6 +33,9 @@ public final class BulletTextRules {
 
     private static final Pattern BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
     private static final Pattern DIGITS = Pattern.compile("\\d+");
+    // A number plus an optional magnitude suffix, so "64K" in a bullet can be
+    // matched against a source that spells the same quantity "64,000".
+    private static final Pattern SCALED = Pattern.compile("(\\d+)\\s*([kKmMbB])?");
 
     /** True if the bullet opens with one of the weak/passive phrases the prompt forbids. */
     public static boolean hasForbiddenOpener(String text) {
@@ -49,22 +52,35 @@ public final class BulletTextRules {
      * context (project/role description + repo context) the bullet was generated
      * from. The LLM is instructed to quote metrics verbatim — this catches it when
      * it doesn't. Returns the fabricated bold tokens (empty list if none / no numbers).
+     *
+     * <p>Matching is on whole digit runs, not substrings: a source containing "5" must
+     * not vouch for a bullet claiming "500ms", and a source containing "2024" must not
+     * vouch for "24". Thousands separators are stripped from both sides first, and a
+     * bullet's "64K"/"3M" suffix is expanded, so "64K" still matches a source "64,000".
      */
     public static List<String> fabricatedNumbers(String text, String sourceContext) {
         if (text == null || text.isBlank()) return List.of();
-        String src = sourceContext == null ? "" : sourceContext;
+        // Strip thousands separators so "64,000" reads as one run rather than "64" + "000".
+        String src = stripThousands(sourceContext == null ? "" : sourceContext);
         Set<String> srcNumbers = new HashSet<>();
         Matcher srcMatcher = DIGITS.matcher(src);
-        while (srcMatcher.find()) srcNumbers.add(srcMatcher.group());
+        while (srcMatcher.find()) srcNumbers.add(stripLeadingZeros(srcMatcher.group()));
 
         List<String> fabricated = new ArrayList<>();
         Matcher boldMatcher = BOLD.matcher(text);
         while (boldMatcher.find()) {
             String token = boldMatcher.group(1);
-            Matcher numMatcher = DIGITS.matcher(token);
+            Matcher numMatcher = SCALED.matcher(stripThousands(token));
             while (numMatcher.find()) {
-                String digits = numMatcher.group();
-                boolean found = srcNumbers.stream().anyMatch(n -> n.contains(digits) || digits.contains(n));
+                String digits = stripLeadingZeros(numMatcher.group(1));
+                String suffix = numMatcher.group(2);
+                // The bare digits count as quoted, and so does their scaled expansion —
+                // the source may spell the same quantity either way.
+                // ponytail: the suffix match is naive, so "300ms" reads as "300M". That can
+                // only let a bullet through, never drop a good one (bare digits are checked
+                // first), so a real unit parser is not worth it here.
+                boolean found = srcNumbers.contains(digits)
+                        || (suffix != null && srcNumbers.contains(scale(digits, suffix)));
                 if (!found) {
                     fabricated.add(token);
                     break;
@@ -72,6 +88,28 @@ public final class BulletTextRules {
             }
         }
         return fabricated;
+    }
+
+    /** Drop thousands separators so "64,000" is one digit run rather than two. */
+    private static String stripThousands(String s) {
+        return s.replaceAll("(?<=\\d),(?=\\d{3})", "");
+    }
+
+    /** Multiply a digit string by its magnitude suffix, e.g. ("64","K") -> "64000". */
+    private static String scale(String digits, String suffix) {
+        int zeros = switch (Character.toLowerCase(suffix.charAt(0))) {
+            case 'k' -> 3;
+            case 'm' -> 6;
+            case 'b' -> 9;
+            default  -> 0;
+        };
+        return digits + "0".repeat(zeros);
+    }
+
+    /** "007" and "7" are the same quantity; normalise so they compare equal. */
+    private static String stripLeadingZeros(String digits) {
+        String t = digits.replaceFirst("^0+(?=\\d)", "");
+        return t.isEmpty() ? "0" : t;
     }
 
     /**

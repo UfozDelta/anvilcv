@@ -284,7 +284,12 @@ public abstract class BaseLlmClient implements LlmClient {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
         }
-        int total = env.bullets == null ? 0 : env.bullets.size();
+        if (env.bullets == null) {
+            log.warn("LLM bullet response had no 'bullets' array: {}", abbreviate(json));
+            progress.emit("LLM returned no bullets array.");
+            return List.of();
+        }
+        int total = env.bullets.size();
         if (cfg.isWordFilterEnabled()) {
             progress.emit("LLM returned " + total + " bullets, filtering by word count (target: " + target + ")...");
         } else {
@@ -465,8 +470,18 @@ public abstract class BaseLlmClient implements LlmClient {
         )), List.of("rankedBullets", "atsMatched", "atsMissing", "selectedCourses", "selectedSkills"));
 
         String json = callJsonWithRetry(matchModel(), prompt, schema, 1.0, progress, tokens, true, "Ranking");
+        RankEnvelope env;
         try {
-            RankEnvelope env = mapper.readValue(json, RankEnvelope.class);
+            env = mapper.readValue(json, RankEnvelope.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM rank response: " + json, e);
+        }
+        // Without a ranking, selection picks nothing and we would render an empty resume
+        // and store it as a successful application. Fail the pipeline instead.
+        if (env.rankedBullets == null || env.rankedBullets.isEmpty()) {
+            throw new RuntimeException("LLM rank response contained no rankedBullets: " + json);
+        }
+        try {
             List<RankedBullet> ranked = env.rankedBullets.stream()
                     .map(r -> new RankedBullet(r.bulletId, r.rank, r.why))
                     .toList();

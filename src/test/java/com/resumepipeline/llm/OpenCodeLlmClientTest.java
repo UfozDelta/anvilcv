@@ -6,6 +6,7 @@ import com.resumepipeline.progress.ProgressLog;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -103,7 +104,9 @@ class OpenCodeLlmClientTest {
     @Test
     void serverErrorBecomesRuntimeException() {
         OpenCodeLlmClient client = client(null);
-        server.expect(anyRequest())
+        // callJsonWithRetry retries a failed call once, so the server sees two requests
+        // and the exception only surfaces after the second one also fails.
+        server.expect(ExpectedCount.twice(), anyRequest())
                 .andRespond(withServerError().body("{\"error\":\"upstream down\"}")
                         .contentType(MediaType.APPLICATION_JSON));
 

@@ -10,6 +10,7 @@ import { ProjectDetail } from './pages/ProjectDetail';
 import { NewApplication } from './pages/NewApplication';
 import { Applications } from './pages/Applications';
 import { ApplicationDetail } from './pages/ApplicationDetail';
+import { OutcomeFlow } from './pages/OutcomeFlow';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { DocsPage } from './pages/DocsPage';
@@ -38,6 +39,7 @@ export function App() {
         <Route path="/new"                  element={<AuthedShell><NewApplication /></AuthedShell>} />
         <Route path="/applications"         element={<AuthedShell><Applications /></AuthedShell>} />
         <Route path="/applications/:id"     element={<AuthedShell><ApplicationDetail /></AuthedShell>} />
+        <Route path="/flow"                 element={<AuthedShell><OutcomeFlow /></AuthedShell>} />
         <Route path="/profile"              element={<AuthedShell><ProfilePage /></AuthedShell>} />
         <Route path="/settings"             element={<AuthedShell><SettingsPage /></AuthedShell>} />
         <Route path="/upload"               element={<AuthedShell><UploadPage /></AuthedShell>} />
