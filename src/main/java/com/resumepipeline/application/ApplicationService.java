@@ -32,6 +32,7 @@ public class ApplicationService {
     private static final ExecutorService PARALLEL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final ApplicationRepository repo;
+    private final OutcomeHistoryRepository outcomeHistoryRepo;
     private final BulletRepository bulletRepo;
     private final ProjectRepository projectRepo;
     private final JdFetcher jdFetcher;
@@ -42,11 +43,13 @@ public class ApplicationService {
     private final LlmUsageService llmUsageService;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public ApplicationService(ApplicationRepository repo, BulletRepository bulletRepo,
+    public ApplicationService(ApplicationRepository repo, OutcomeHistoryRepository outcomeHistoryRepo,
+                              BulletRepository bulletRepo,
                               ProjectRepository projectRepo, JdFetcher jdFetcher, LlmClient llm,
                               ApplicationRenderer renderer, PdfCompiler compiler,
                               ProfileService profileService, LlmUsageService llmUsageService) {
         this.repo = repo;
+        this.outcomeHistoryRepo = outcomeHistoryRepo;
         this.bulletRepo = bulletRepo;
         this.projectRepo = projectRepo;
         this.jdFetcher = jdFetcher;
@@ -76,7 +79,13 @@ public class ApplicationService {
     public Application updateOutcome(UUID userId, UUID id, String outcome) {
         Application a = get(userId, id);
         a.setOutcome(outcome);
-        return repo.save(a);
+        Application saved = repo.save(a);
+        outcomeHistoryRepo.save(new OutcomeHistory(a.getId(), outcome));
+        return saved;
+    }
+
+    public List<OutcomeHistory> outcomeHistory(UUID userId) {
+        return outcomeHistoryRepo.findAllByUserId(userId);
     }
 
     public Application create(UUID userId, String jdText, String jdUrl, String roleEmphasis, boolean includeCoverLetter, ProgressLog progress) {
@@ -298,6 +307,7 @@ public class ApplicationService {
                 + " (" + tokens.getPromptTokens() + " in / " + tokens.getCandidatesTokens() + " out)"
                 + " pipeline: " + a.getPipelineDurationMs() + "ms");
         Application saved = repo.save(a);
+        outcomeHistoryRepo.save(new OutcomeHistory(saved.getId(), saved.getOutcome()));
         llmUsageService.record(userId, "application_pipeline", tokens, saved.getId(), null);
         return saved;
 

@@ -28,6 +28,9 @@ public class Bullet {
     @Column(nullable = false)
     private String category = "general";
 
+    @Column(nullable = false)
+    private String status = "PENDING";
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
@@ -55,6 +58,8 @@ public class Bullet {
     public void setTags(String[] tags) { this.tags = tags == null ? new String[0] : tags; }
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category == null || category.isBlank() ? "general" : category; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

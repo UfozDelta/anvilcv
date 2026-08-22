@@ -81,6 +81,7 @@ export interface Bullet {
   text: string;
   tags: string[];
   category: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +109,12 @@ export interface ApplicationSummary {
   role: string | null;
   outcome: string;
   createdAt: string;
+}
+
+export interface OutcomeHistoryEntry {
+  applicationId: string;
+  outcome: string;
+  changedAt: string;
 }
 
 export type BoldDensity = 'NONE' | 'LIGHT' | 'HEAVY';

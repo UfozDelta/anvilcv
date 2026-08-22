@@ -59,6 +59,19 @@ public class BulletService {
         return repo.save(b);
     }
 
+    private static final java.util.Set<String> VALID_STATUSES = java.util.Set.of("PENDING", "APPROVED", "REJECTED");
+
+    public Bullet updateStatus(UUID userId, UUID bulletId, String status) {
+        if (status == null || !VALID_STATUSES.contains(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + status);
+        }
+        Bullet b = repo.findById(bulletId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bullet not found: " + bulletId));
+        projectService.get(userId, b.getProjectId()); // verify ownership
+        b.setStatus(status);
+        return repo.save(b);
+    }
+
     public void delete(UUID userId, UUID bulletId) {
         Bullet b = repo.findById(bulletId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bullet not found: " + bulletId));

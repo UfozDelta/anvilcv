@@ -1,6 +1,7 @@
 package com.resumepipeline.api.dto;
 
 import com.resumepipeline.application.Application;
+import com.resumepipeline.application.OutcomeHistory;
 import jakarta.validation.constraints.NotBlank;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -28,6 +29,12 @@ public class ApplicationDtos {
     public record UpdateOutcomeRequest(@NotBlank String outcome) {}
 
     public record RerenderRequest(List<UUID> selectedBulletIds) {}
+
+    public record OutcomeHistoryEntry(UUID applicationId, String outcome, Instant changedAt) {
+        public static OutcomeHistoryEntry from(OutcomeHistory h) {
+            return new OutcomeHistoryEntry(h.getApplicationId(), h.getOutcome(), h.getChangedAt());
+        }
+    }
 
     public record ApplicationSummary(
             UUID id, String company, String role, String outcome, Instant createdAt
