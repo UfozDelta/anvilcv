@@ -111,22 +111,19 @@ public class ApplicationService {
         Map<UUID, Project> projectById = projectRepo.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 
-        // Pre-filter: round-robin across projects (top 4 bullets per project by tag overlap),
+        // Pre-filter: round-robin across projects (top 4 bullets per project by keyword score),
         // then global top-25. Prevents bullet-heavy projects from crowding out all other entries.
         Set<String> kwLower = clean.keywords().stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
-        java.util.function.ToLongFunction<Bullet> tagScore = b ->
-                Arrays.stream(b.getTags() == null ? new String[0] : b.getTags())
-                      .filter(t -> kwLower.contains(t.toLowerCase()))
-                      .count();
+        java.util.function.ToLongFunction<Bullet> keywordScore = KeywordScorer.score(kwLower);
         List<Bullet> candidates = allBullets.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId))
                 .values().stream()
                 .flatMap(group -> group.stream()
-                        .sorted(Comparator.comparingLong(tagScore).reversed())
+                        .sorted(Comparator.comparingLong(keywordScore).reversed())
                         .limit(4))
-                .sorted(Comparator.comparingLong(tagScore).reversed())
+                .sorted(Comparator.comparingLong(keywordScore).reversed())
                 .limit(25)
                 .toList();
 

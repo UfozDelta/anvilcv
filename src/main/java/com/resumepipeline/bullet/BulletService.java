@@ -1,5 +1,6 @@
 package com.resumepipeline.bullet;
 
+import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
@@ -21,6 +22,10 @@ import java.util.UUID;
 public class BulletService {
 
     private static final Logger log = LoggerFactory.getLogger(BulletService.class);
+
+    // Jaccard word-overlap threshold above which a newly generated bullet is treated as a
+    // near-duplicate of one already in the bank (or elsewhere in the same batch) and dropped.
+    private static final double DEDUP_SIMILARITY_THRESHOLD = 0.6;
 
     private final BulletRepository repo;
     private final ProjectService projectService;
@@ -91,9 +96,24 @@ public class BulletService {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
         }
 
-        return result.bullets().stream()
-                .map(g -> repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), cat)))
-                .toList();
+        List<String> seenTexts = new ArrayList<>(
+                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
+        List<Bullet> saved = new ArrayList<>();
+        int dupDropped = 0;
+        for (LlmClient.GeneratedBullet g : result.bullets()) {
+            boolean nearDuplicate = seenTexts.stream()
+                    .anyMatch(t -> BulletTextRules.similarity(t, g.text()) >= DEDUP_SIMILARITY_THRESHOLD);
+            if (nearDuplicate) {
+                dupDropped++;
+                continue;
+            }
+            seenTexts.add(g.text());
+            saved.add(repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), cat)));
+        }
+        if (dupDropped > 0) {
+            progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
+        }
+        return saved;
     }
 
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, ProgressLog progress) {
