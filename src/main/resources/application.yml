@@ -31,9 +31,9 @@ spring:
     out-of-order: true
 
 llm:
-  # The only switch. Each provider keeps its own key and models below, so both can
+  # The only switch. Each provider keeps its own key and models below, so all can
   # stay configured and flipping providers is this one line.
-  provider: ${LLM_PROVIDER:gemini}   # gemini | deepseek
+  provider: ${LLM_PROVIDER:gemini}   # gemini | opencode | openai
 
   gemini:
     api-key: ${GEMINI_API_KEY:}
@@ -42,13 +42,23 @@ llm:
       match:    gemini-2.5-flash
       clean-jd: gemini-2.5-flash-lite
 
-  deepseek:
-    api-key:  ${DEEPSEEK_API_KEY:}
-    base-url: ${DEEPSEEK_BASE_URL:https://opencode.ai/zen/v1}
+  opencode:
+    api-key:  ${OPENCODE_API_KEY:}
+    base-url: ${OPENCODE_BASE_URL:https://opencode.ai/zen/v1}
     model:
       generate: deepseek-v4-flash-free
       match:    deepseek-v4-flash-free
       clean-jd: deepseek-v4-flash-free
+
+  # Generic OpenAI-compatible provider. Defaults to OpenAI itself, but base-url can
+  # point at OpenRouter, a local Ollama/LM Studio server, or any compatible endpoint.
+  openai:
+    api-key:  ${OPENAI_API_KEY:}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    model:
+      generate: gpt-4o-mini
+      match:    gpt-4o-mini
+      clean-jd: gpt-4o-mini
 
 tectonic:
   binary: ${TECTONIC_BIN:tectonic}

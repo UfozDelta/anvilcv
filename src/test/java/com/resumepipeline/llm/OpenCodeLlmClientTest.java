@@ -20,18 +20,18 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-class DeepSeekLlmClientTest {
+class OpenCodeLlmClientTest {
 
     private final RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
     private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 
-    private DeepSeekLlmClient client(GenerationConfigService configService) {
-        return new DeepSeekLlmClient(builder, "generate-model", "match-model", "clean-model", configService);
+    private OpenCodeLlmClient client(GenerationConfigService configService) {
+        return new OpenCodeLlmClient(builder, "generate-model", "match-model", "clean-model", configService);
     }
 
     @Test
     void cleanJdPostsExpectedShapeAndMapsUsage() {
-        DeepSeekLlmClient client = client(null);
+        OpenCodeLlmClient client = client(null);
         server.expect(requestTo("http://localhost:8080/chat/completions"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.model").value("clean-model"))
@@ -57,7 +57,7 @@ class DeepSeekLlmClientTest {
 
     @Test
     void cleanJdStripsMarkdownFences() {
-        DeepSeekLlmClient client = client(null);
+        OpenCodeLlmClient client = client(null);
         server.expect(anyRequest())
                 .andRespond(withSuccess("""
                         {"choices":[{"message":{"content":"```json\\n{\\"cleanJd\\":\\"jd\\",\\"company\\":\\"Acme\\",\\"role\\":\\"Eng\\",\\"keywords\\":[]}\\n```"}}],
@@ -81,7 +81,7 @@ class DeepSeekLlmClientTest {
             }
         };
 
-        DeepSeekLlmClient client = client(configService);
+        OpenCodeLlmClient client = client(configService);
         server.expect(anyRequest())
                 .andRespond(withSuccess("""
                         {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Built a thing.\\",\\"tags\\":[\\"backend\\"]},{\\"text\\":\\"Another one.\\",\\"tags\\":[\\"data\\"]}]}"}}],
@@ -102,7 +102,7 @@ class DeepSeekLlmClientTest {
 
     @Test
     void serverErrorBecomesRuntimeException() {
-        DeepSeekLlmClient client = client(null);
+        OpenCodeLlmClient client = client(null);
         server.expect(anyRequest())
                 .andRespond(withServerError().body("{\"error\":\"upstream down\"}")
                         .contentType(MediaType.APPLICATION_JSON));
