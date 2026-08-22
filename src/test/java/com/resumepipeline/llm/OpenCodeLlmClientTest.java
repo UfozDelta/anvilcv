@@ -85,19 +85,50 @@ class OpenCodeLlmClientTest {
         OpenCodeLlmClient client = client(configService);
         server.expect(anyRequest())
                 .andRespond(withSuccess("""
-                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Built a thing.\\",\\"tags\\":[\\"backend\\"]},{\\"text\\":\\"Another one.\\",\\"tags\\":[\\"data\\"]}]}"}}],
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Built a backend service.\\",\\"tags\\":[\\"backend\\"]},{\\"text\\":\\"Shipped a data pipeline.\\",\\"tags\\":[\\"data\\"]}]}"}}],
                          "usage":{"prompt_tokens":10,"completion_tokens":5}}
                         """, MediaType.APPLICATION_JSON));
 
         LlmClient.BulletGenerationResult result = client.generateBullets(
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, "Java", null, null, null, null,
-                        null, null, null, null),
+                        null, null, null, null, List.of()),
                 ProgressLog.noOp(), new TokenAccumulator());
 
         assertEquals(2, result.bullets().size());
-        assertEquals("Built a thing.", result.bullets().get(0).text());
+        assertEquals("Built a backend service.", result.bullets().get(0).text());
         assertEquals(List.of("backend"), result.bullets().get(0).tags());
+        server.verify();
+    }
+
+    @Test
+    void tagsNotMentionedInTheBulletAreDropped() {
+        GenerationConfig cfg = new GenerationConfig();
+        cfg.setWordFilterEnabled(false);
+        GenerationConfigService configService = new GenerationConfigService(null) {
+            @Override
+            public GenerationConfig get(UUID userId) {
+                return cfg;
+            }
+        };
+
+        OpenCodeLlmClient client = client(configService);
+        server.expect(anyRequest())
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Deployed the service on K8s.\\",\\"tags\\":[\\"kubernetes\\",\\"terraform\\"]}]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.BulletGenerationResult result = client.generateBullets(
+                new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
+                        "general", "proj", "desc", null, "Java", null, null, null, null,
+                        null, null, null, null, List.of()),
+                ProgressLog.noOp(), new TokenAccumulator());
+
+        // "kubernetes" survives via the K8s alias; "terraform" is nowhere in the text, and an
+        // invented tag would otherwise feed JD keyword scoring. The bullet itself is kept.
+        assertEquals(1, result.bullets().size());
+        assertEquals(List.of("kubernetes"), result.bullets().get(0).tags());
         server.verify();
     }
 

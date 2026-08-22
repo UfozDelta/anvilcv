@@ -16,7 +16,7 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Provider-agnostic half of an {@link LlmClient} implementation. Owns the four
- * pipeline prompts, the word-count filter / retry logic, and the JSON envelope
+ * pipeline prompts, the length filter / recovery logic, and the JSON envelope
  * parsing. Concrete subclasses only implement {@link #callJson} — turning a
  * prompt + {@link SchemaSpec} into a raw JSON string (plus token accounting)
  * for their specific provider transport (Gemini SDK, OpenAI-compatible REST,
@@ -44,8 +44,8 @@ public abstract class BaseLlmClient implements LlmClient {
                                        TokenAccumulator tokens, boolean stream, String label);
 
     // Transient-failure safety net around callJson: one retry after a short pause. Deliberately
-    // NOT stacked with the word-count-filter retry in generateBullets below (that's a separate,
-    // content-quality retry layer) and does not retry timeouts, which are already expensive.
+    // NOT stacked with the recovery pass in generateBullets below (that's a separate,
+    // content-quality layer) and does not retry timeouts, which are already expensive.
     private String callJsonWithRetry(String model, String prompt, SchemaSpec schema, double temperature,
                                      ProgressLog progress, TokenAccumulator tokens, boolean stream, String label) {
         try {
@@ -108,6 +108,24 @@ public abstract class BaseLlmClient implements LlmClient {
                 ? ""
                 : "\nRepo context (README + file listing):\n" + req.repoContext();
 
+        // Without this the model happily rewrites bullets the bank already holds; the dedup
+        // pass then deletes them, so we pay full output tokens for discarded work.
+        String existingBlock = req.existingBullets() == null || req.existingBullets().isEmpty()
+                ? ""
+                : """
+
+                ─────────────────────────────────────────────────────────────
+                ## ALREADY COVERED — do not repeat these
+
+                The bank already holds the bullets below. Write about DIFFERENT work, or the same
+                work from a genuinely different angle. Do not restate, lightly reword, or merely
+                re-bold any of them — near-duplicates are discarded.
+
+                %s
+                """.formatted(req.existingBullets().stream()
+                        .map(t -> "  - " + t)
+                        .reduce("", (a, b) -> a + b + "\n"));
+
         String countTarget = experience ? "8 to 12" : "4 to 6";
         String sourceWord  = experience ? "ROLE" : "PROJECT";
 
@@ -148,10 +166,14 @@ public abstract class BaseLlmClient implements LlmClient {
                 rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
                 second line — that looks broken.
 
-                Targets (after \\textbf{} expansion):
-                  • 1-line bullet: roughly %d to %d words (≈ 130 chars including spaces).
-                  • 2-line bullet: roughly %d to %d words (≈ 250 chars including spaces).
-                  • NEVER produce a bullet of %d-%d words — that range half-fills line 2.
+                Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
+                (they compile to \\textbf{} and take no width). Word counts are approximate guides;
+                the character range is what actually decides whether a line fills.
+
+                Targets:
+                  • 1-line bullet: %d to %d characters (roughly %d to %d words).
+                  • 2-line bullet: %d to %d characters (roughly %d to %d words).
+                  • NEVER produce a bullet of %d-%d characters — that range half-fills line 2.
 
                 Default to 2-line bullets where the substance warrants it; reserve 1-liners for crisp
                 accomplishments. Aim for a mix.
@@ -219,12 +241,14 @@ public abstract class BaseLlmClient implements LlmClient {
                 ─────────────────────────────────────────────────────────────
                 ## %s CONTEXT
 
-                %s%s
+                %s%s%s
                 """.formatted(sourceWord, countTarget,
+                        BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
                         cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
+                        BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg),
                         cfg.getDoubleLineLow(), cfg.getDoubleLineHigh(),
-                        cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(),
-                        sourceWord, contextBlock, repoBlock);
+                        BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
+                        sourceWord, contextBlock, repoBlock, existingBlock);
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
@@ -245,38 +269,86 @@ public abstract class BaseLlmClient implements LlmClient {
         progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
         String sourceContext = contextBlock + repoBlock;
-        List<GeneratedBullet> kept = callAndFilter(prompt, schema, target, cfg, progress, tokens, sourceContext);
+        FilterResult first = callAndFilter(prompt, schema, target, cfg, progress, tokens, sourceContext);
+        List<GeneratedBullet> kept = new ArrayList<>(first.kept());
 
-        // If we lost too many bullets to the word-count filter, retry once with sharper instructions.
+        // One recovery pass when the length filter left us short: rewrite what it rejected
+        // (right content, wrong length) and top up whatever shortfall remains. The first
+        // pass's survivors are carried through rather than thrown away.
+        //
+        // Capped at one attempt on purpose — this sits above callJsonWithRetry, so stacking
+        // recovery rounds would multiply worst-case latency and spend.
         if (cfg.isWordFilterEnabled() && kept.size() < target) {
-            int firstPassCount = kept.size();
-            String retryPrompt = prompt + ("\n─────────────────────────────────────────────────────────────\n"
-                    + "## RETRY NOTE\n\n"
-                    + "The previous attempt produced too many bullets in the FORBIDDEN %d-%d word range.\n"
-                    + "Every bullet must be EITHER %d-%d words (fits 1 line) OR %d-%d words (fills 2 lines).\n"
-                    + "Count words before emitting. Re-do the entire batch with this constraint enforced.\n"
-            ).formatted(cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(),
-                    cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
-                    cfg.getDoubleLineLow(), cfg.getDoubleLineHigh());
-            log.info("Word-count filter kept only {} bullets, retrying once.", kept.size());
-            progress.emit("Retry: only " + firstPassCount + "/" + target + " passed filter, calling LLM again with stricter length rules...");
-            List<GeneratedBullet> retry = callAndFilter(retryPrompt, schema, target, cfg, progress, tokens, sourceContext);
-            if (retry.size() > kept.size()) {
-                progress.emit("Retry result: " + retry.size() + "/" + target + " passed (was " + firstPassCount + "/" + target + ")");
-                kept = retry;
-            } else {
-                progress.emit("Retry result: no improvement (" + retry.size() + "/" + target + "), keeping first-pass output");
+            int deficit = target - kept.size();
+            int newNeeded = Math.max(0, deficit - first.deadZone().size());
+            log.info("Length filter kept {}/{} bullets, running recovery ({} to rewrite, {} new).",
+                    kept.size(), target, first.deadZone().size(), newNeeded);
+            progress.emit("Recovery: " + kept.size() + "/" + target + " passed - rewriting "
+                    + first.deadZone().size() + " rejected, requesting " + newNeeded + " new...");
+
+            String recoveryPrompt = prompt + recoveryNote(first.deadZone(), kept, newNeeded, cfg);
+            FilterResult second = callAndFilter(recoveryPrompt, schema, deficit, cfg, progress, tokens, sourceContext);
+
+            List<String> keptTexts = new ArrayList<>(kept.stream().map(GeneratedBullet::text).toList());
+            int added = 0;
+            for (GeneratedBullet g : second.kept()) {
+                if (BulletTextRules.isNearDuplicate(g.text(), keptTexts)) continue;
+                keptTexts.add(g.text());
+                kept.add(g);
+                added++;
             }
+            progress.emit("Recovery result: +" + added + " bullet(s), now " + kept.size() + "/" + target);
         }
 
         progress.emit("Saved " + kept.size() + " bullets for category: " + req.category());
         return new BulletGenerationResult(kept);
     }
 
+    /**
+     * Appended to the generation prompt for the recovery pass, so the model keeps every rule
+     * and the source context from the first call and only gains the repair instructions.
+     */
+    private static String recoveryNote(List<String> deadZone, List<GeneratedBullet> kept,
+                                       int newNeeded, GenerationConfig cfg) {
+        StringBuilder sb = new StringBuilder(
+                "\n─────────────────────────────────────────────────────────────\n## RECOVERY PASS\n\n");
+        sb.append(("Bullets must be EITHER %d-%d characters (fills 1 line) OR %d-%d characters (fills\n"
+                 + "2 lines). The %d-%d character range is forbidden — it half-fills line 2.\n\n")
+                .formatted(BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
+                        BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg),
+                        BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg)));
+
+        if (!deadZone.isEmpty()) {
+            sb.append("Rewrite each bullet below so it lands in a valid band. Keep the same facts, metrics\n")
+              .append("and technologies — change only the phrasing and the level of detail. Never invent a\n")
+              .append("number to reach a length.\n\n");
+            for (String t : deadZone) sb.append("  - ").append(t).append("\n");
+            sb.append("\n");
+        }
+        if (newNeeded > 0) {
+            sb.append("Also write ").append(newNeeded)
+              .append(" additional NEW bullet(s) covering work not described above.\n\n");
+        }
+        if (!kept.isEmpty()) {
+            sb.append("Already accepted — do not repeat or rewrite these:\n");
+            for (GeneratedBullet g : kept) sb.append("  - ").append(g.text()).append("\n");
+            sb.append("\n");
+        }
+        sb.append("Return the rewritten bullets and any new bullets together in the bullets array.\n");
+        return sb.toString();
+    }
+
+    /**
+     * What one filtered LLM call produced: the bullets that passed, plus the ones rejected
+     * only for sitting in the length dead zone — those are good content at the wrong length,
+     * so the recovery pass sends them back to be rewritten rather than discarding them.
+     */
+    private record FilterResult(List<GeneratedBullet> kept, List<String> deadZone) {}
+
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
-    private List<GeneratedBullet> callAndFilter(String prompt, SchemaSpec schema,
-                                                int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens,
-                                                String sourceContext) {
+    private FilterResult callAndFilter(String prompt, SchemaSpec schema,
+                                       int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens,
+                                       String sourceContext) {
         String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Bullets");
         BulletsEnvelope env;
         try {
@@ -287,7 +359,7 @@ public abstract class BaseLlmClient implements LlmClient {
         if (env.bullets == null) {
             log.warn("LLM bullet response had no 'bullets' array: {}", abbreviate(json));
             progress.emit("LLM returned no bullets array.");
-            return List.of();
+            return new FilterResult(List.of(), List.of());
         }
         int total = env.bullets.size();
         if (cfg.isWordFilterEnabled()) {
@@ -297,6 +369,7 @@ public abstract class BaseLlmClient implements LlmClient {
         }
 
         List<GeneratedBullet> kept = new ArrayList<>();
+        List<String> deadZone = new ArrayList<>();
         int dropped = 0;
         for (BulletJson b : env.bullets) {
             String text = BulletTextRules.ensureTerminalPeriod(b.text);
@@ -315,31 +388,42 @@ public abstract class BaseLlmClient implements LlmClient {
                 continue;
             }
 
-            int wc = BulletTextRules.wordCount(text);
-            BulletTextRules.Decision decision = BulletTextRules.decide(wc, cfg);
+            int cc = BulletTextRules.charCount(text);
+            BulletTextRules.Decision decision = BulletTextRules.decide(cc, cfg);
             switch (decision) {
                 case DEAD_ZONE -> {
-                    log.info("Dropped bullet (word count {} in dead zone {}-{}): {}", wc,
-                            cfg.getDeadZoneLow(), cfg.getDeadZoneHigh(), abbreviate(text));
-                    progress.emit("Cut: " + wc + "w - dead zone (" + cfg.getDeadZoneLow() + "-" + cfg.getDeadZoneHigh()
-                            + "), needs " + cfg.getSingleLineLow() + "-" + cfg.getSingleLineHigh()
-                            + " or " + cfg.getDoubleLineLow() + "-" + cfg.getDoubleLineHigh());
+                    log.info("Dropped bullet (char count {} in dead zone {}-{}): {}", cc,
+                            BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg), abbreviate(text));
+                    progress.emit("Cut: " + cc + "c - dead zone ("
+                            + BulletTextRules.deadZoneLowChars(cfg) + "-" + BulletTextRules.deadZoneHighChars(cfg)
+                            + "), needs " + BulletTextRules.singleLowChars(cfg) + "-" + BulletTextRules.singleHighChars(cfg)
+                            + " or " + BulletTextRules.doubleLowChars(cfg) + "-" + BulletTextRules.doubleHighChars(cfg));
+                    deadZone.add(text);
                     dropped++;
                 }
                 case TOO_SHORT -> {
-                    log.info("Dropped bullet (word count {} too short, floor {}): {}", wc, cfg.getMinWordFloor(), abbreviate(text));
-                    progress.emit("Cut: " + wc + "w - too short (min " + cfg.getMinWordFloor() + ")");
+                    log.info("Dropped bullet (char count {} too short, floor {}): {}", cc,
+                            BulletTextRules.minFloorChars(cfg), abbreviate(text));
+                    progress.emit("Cut: " + cc + "c - too short (min " + BulletTextRules.minFloorChars(cfg) + ")");
                     dropped++;
                 }
                 case KEPT -> {
-                    List<String> tags = b.tags == null ? List.of() : b.tags;
-                    progress.emit("Kept: " + wc + "w [" + String.join(", ", tags) + "]");
+                    // The prompt says to tag only what the bullet actually names, but the model
+                    // invents tags anyway — and tags feed JD keyword scoring, so junk here
+                    // quietly degrades matching. Drop the bad tag, not the bullet.
+                    List<String> rawTags = b.tags == null ? List.of() : b.tags;
+                    List<String> tags = rawTags.stream()
+                            .filter(t -> KeywordScorer.mentions(text, t))
+                            .toList();
+                    int droppedTags = rawTags.size() - tags.size();
+                    String tagNote = droppedTags == 0 ? "" : " (" + droppedTags + " unmentioned tag(s) dropped)";
+                    progress.emit("Kept: " + cc + "c [" + String.join(", ", tags) + "]" + tagNote);
                     kept.add(new GeneratedBullet(text, tags));
                 }
             }
         }
         log.info("Generation kept {} bullets, dropped {}.", kept.size(), dropped);
-        return kept;
+        return new FilterResult(kept, deadZone);
     }
 
     private static String abbreviate(String s) {

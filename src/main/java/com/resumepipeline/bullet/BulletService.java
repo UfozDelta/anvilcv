@@ -27,10 +27,6 @@ public class BulletService {
 
     private static final Logger log = LoggerFactory.getLogger(BulletService.class);
 
-    // Jaccard word-overlap threshold above which a newly generated bullet is treated as a
-    // near-duplicate of one already in the bank (or elsewhere in the same batch) and dropped.
-    private static final double DEDUP_SIMILARITY_THRESHOLD = 0.6;
-
     // Fans out per-category LLM calls in generateBank; blocking I/O, so virtual threads.
     private static final ExecutorService PARALLEL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -103,6 +99,14 @@ public class BulletService {
 
         String cat = (category == null || category.isBlank()) ? "general" : category;
 
+        // Shown to the model so it writes something new instead of re-deriving what the bank
+        // already holds and losing it to saveDeduped afterwards. In a generateBank run the
+        // categories are in flight together, so each one sees only what was already persisted,
+        // never its siblings' output — dedup still backstops that overlap.
+        List<String> existing = repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .map(Bullet::getText)
+                .toList();
+
         TokenAccumulator tokens = new TokenAccumulator();
         LlmClient.BulletGenerationResult result;
         try {
@@ -112,7 +116,8 @@ public class BulletService {
                             p.getName(), p.getDescription(), p.getRepoContext(),
                             p.getTechStack(), p.getYourRole(), p.getOwnership(),
                             p.getScaleImpact(), p.getHardestProblem(),
-                            p.getTitle(), p.getCompany(), p.getLocation(), p.getDates()),
+                            p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
+                            existing),
                     progress, tokens);
         } finally {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
@@ -129,9 +134,7 @@ public class BulletService {
         List<Bullet> saved = new ArrayList<>();
         int dupDropped = 0;
         for (LlmClient.GeneratedBullet g : gen.result().bullets()) {
-            boolean nearDuplicate = seenTexts.stream()
-                    .anyMatch(t -> BulletTextRules.similarity(t, g.text()) >= DEDUP_SIMILARITY_THRESHOLD);
-            if (nearDuplicate) {
+            if (BulletTextRules.isNearDuplicate(g.text(), seenTexts)) {
                 dupDropped++;
                 continue;
             }

@@ -34,7 +34,9 @@ public interface LlmClient {
             String ownership,
             String scaleImpact,
             String hardestProblem,
-            String title, String company, String location, String dates
+            String title, String company, String location, String dates,
+            /** Bullets already in the bank for this project — the prompt is told to avoid repeating them. */
+            List<String> existingBullets
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     record GeneratedBullet(String text, List<String> tags) {}

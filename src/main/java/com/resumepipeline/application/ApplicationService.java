@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.jd.JdFetcher;
+import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
