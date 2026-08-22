@@ -29,6 +29,10 @@ public class TokenAccumulator {
         promptTokens.addAndGet(prompt);
         candidatesTokens.addAndGet(candidates);
 
+        // Zen's free tier costs nothing, so pricing it at Gemini rates would inflate
+        // every dashboard total. Tokens still count; only the money is zero.
+        if (model != null && model.endsWith("-free")) return;
+
         boolean isLite = model != null && model.contains("lite");
         BigDecimal inRate  = isLite ? LITE_IN_PER_TOKEN  : FLASH_IN_PER_TOKEN;
         BigDecimal outRate = isLite ? LITE_OUT_PER_TOKEN : FLASH_OUT_PER_TOKEN;

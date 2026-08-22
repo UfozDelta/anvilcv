@@ -45,10 +45,16 @@ llm:
   opencode:
     api-key:  ${OPENCODE_API_KEY:}
     base-url: ${OPENCODE_BASE_URL:https://opencode.ai/zen/v1}
+    # Model ids come from GET https://opencode.ai/zen/v1/models — the docs page
+    # disagrees with it, the API wins. Env-overridable because Zen's free tier
+    # rotates: x-preview-f-free ("Ox Alpha Free") is a limited preview and will
+    # 404 once it ends, and swapping back is then one env var, not a rebuild.
+    # clean-jd stays on deepseek: JD cleanup is cheap work that does not need a
+    # reasoning model's latency.
     model:
-      generate: deepseek-v4-flash-free
-      match:    deepseek-v4-flash-free
-      clean-jd: deepseek-v4-flash-free
+      generate: ${OPENCODE_MODEL_GENERATE:x-preview-f-free}
+      match:    ${OPENCODE_MODEL_MATCH:x-preview-f-free}
+      clean-jd: ${OPENCODE_MODEL_CLEAN_JD:deepseek-v4-flash-free}
 
   # Generic OpenAI-compatible provider. Defaults to OpenAI itself, but base-url can
   # point at OpenRouter, a local Ollama/LM Studio server, or any compatible endpoint.
