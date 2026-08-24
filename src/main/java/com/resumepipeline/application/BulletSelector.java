@@ -31,6 +31,9 @@ public final class BulletSelector {
     static final int MAX_TOTAL = 15;
     static final int MAX_PER_PROJECT = 3; // also the per-project minimum-fill target
 
+    /** Soft page-budget warning threshold — above this a one-page PDF is at risk. Must stay &lt;= MAX_TOTAL. */
+    static final int PAGE_WARN_THRESHOLD = 12;
+
     private static final int MIN_EXPERIENCE_PROJECTS = 2;
     private static final int MIN_PROJECT_ENTRIES = 3;
 
@@ -87,13 +90,16 @@ public final class BulletSelector {
                 if (b == null) continue;
                 Project p = projectById.get(b.getProjectId());
                 if (p == null || selectedProjects.contains(b.getProjectId())) continue;
-                if (p.getKind() == Project.Kind.EXPERIENCE && expDistinct < MIN_EXPERIENCE_PROJECTS) {
-                    selected.add(b); selectedIds.add(bid); selectedProjects.add(b.getProjectId());
-                    expDistinct++;
-                } else if (p.getKind() == Project.Kind.PROJECT && projDistinct < MIN_PROJECT_ENTRIES) {
-                    selected.add(b); selectedIds.add(bid); selectedProjects.add(b.getProjectId());
-                    projDistinct++;
-                }
+                boolean wanted = (p.getKind() == Project.Kind.EXPERIENCE && expDistinct < MIN_EXPERIENCE_PROJECTS)
+                        || (p.getKind() == Project.Kind.PROJECT && projDistinct < MIN_PROJECT_ENTRIES);
+                if (!wanted) continue;
+                // At the cap, this pass used to add anyway — up to 5 bullets past MAX_TOTAL, which
+                // is a two-page PDF. Breaking instead would silently abandon the diversity floor
+                // this pass exists to guarantee, so make room rather than choosing between them:
+                // drop the weakest bullet of whichever project is most over-represented.
+                if (selected.size() >= MAX_TOTAL && !evictWeakestFromFullestProject(selected)) break;
+                selected.add(b); selectedIds.add(bid); selectedProjects.add(b.getProjectId());
+                if (p.getKind() == Project.Kind.EXPERIENCE) expDistinct++; else projDistinct++;
             }
         }
 
@@ -104,12 +110,13 @@ public final class BulletSelector {
                 .collect(Collectors.toCollection(HashSet::new));
 
         for (UUID pid : new ArrayList<>(selectedProjectIds)) {
+            if (selected.size() >= MAX_TOTAL) break;
             int have = (int) selected.stream().filter(b -> b.getProjectId().equals(pid)).count();
             if (have >= MAX_PER_PROJECT) continue;
 
             // Source 1: remaining LLM-ranked candidates for this project (respect LLM signal).
             for (LlmClient.RankedBullet rb : rankedSorted) {
-                if (have >= MAX_PER_PROJECT) break;
+                if (have >= MAX_PER_PROJECT || selected.size() >= MAX_TOTAL) break;
                 UUID bid = parseUuid(rb.bulletId());
                 if (bid == null || selectedIds.contains(bid)) continue;
                 Bullet b = bulletById.get(bid);
@@ -118,13 +125,13 @@ public final class BulletSelector {
             }
 
             // Source 2: raw bank fallback for thin banks, sorted by tag score.
-            if (have < MAX_PER_PROJECT) {
+            if (have < MAX_PER_PROJECT && selected.size() < MAX_TOTAL) {
                 List<Bullet> bank = allByProject.getOrDefault(pid, List.of()).stream()
                         .filter(b -> !selectedIds.contains(b.getId()))
                         .sorted(Comparator.comparingLong(tagScore).reversed())
                         .toList();
                 for (Bullet b : bank) {
-                    if (have >= MAX_PER_PROJECT) break;
+                    if (have >= MAX_PER_PROJECT || selected.size() >= MAX_TOTAL) break;
                     selected.add(b); selectedIds.add(b.getId()); have++;
                 }
             }
@@ -159,6 +166,36 @@ public final class BulletSelector {
             filled.put(key, sel);
         }
         return filled;
+    }
+
+    /**
+     * Remove the lowest-ranked bullet of the project holding the most slots, freeing one for a
+     * diversity pick. {@code selected} is in rank order, so the last entry for a project is its
+     * weakest. Projects down to their final bullet are never raided — evicting those would undo
+     * the very diversity this is making room for.
+     *
+     * <p>The evicted bullet's id deliberately stays in the caller's {@code selectedIds}: it has
+     * been considered and passed over, and letting pass 3 pick it straight back up would just
+     * churn the selection without changing its size.
+     *
+     * @return true if a slot was freed; false when no project has a spare bullet to give up
+     */
+    private static boolean evictWeakestFromFullestProject(List<Bullet> selected) {
+        Map<UUID, Long> counts = selected.stream()
+                .collect(Collectors.groupingBy(Bullet::getProjectId, Collectors.counting()));
+        UUID fullest = counts.entrySet().stream()
+                .filter(e -> e.getValue() > 1)
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+        if (fullest == null) return false;
+        for (int i = selected.size() - 1; i >= 0; i--) {
+            if (selected.get(i).getProjectId().equals(fullest)) {
+                selected.remove(i);
+                return true;
+            }
+        }
+        return false;
     }
 
     private static long distinctProjectsOfKind(List<Bullet> selected, Map<UUID, Project> projectById,

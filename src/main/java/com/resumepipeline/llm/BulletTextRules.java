@@ -32,11 +32,23 @@ public final class BulletTextRules {
             "contributed to", "collaborated on"
     };
 
-    private static final Pattern BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
     private static final Pattern DIGITS = Pattern.compile("\\d+");
-    // A number plus an optional magnitude suffix, so "64K" in a bullet can be
-    // matched against a source that spells the same quantity "64,000".
-    private static final Pattern SCALED = Pattern.compile("(\\d+)\\s*([kKmMbB])?");
+    // What turns a digit run into a claimed quantity rather than a version or product
+    // number: a currency/percent/plus marker, a time unit, a multiplier, or a magnitude
+    // suffix. "s"/"ms"/"x" and the magnitudes need a word boundary, so "64K" and "3 x"
+    // read as quantities while "S3 buckets", "2dsphere" and "Java 17 stack" do not.
+    private static final String UNIT = "(?:%|\\+|(?:ms|s|[xXkKmMbB])\\b)";
+    // $-prefixed or unit-bearing digit run. The unit may be glued on (group 3) or one
+    // space away (group 4, matched inside a lookahead so it stays out of the reported
+    // token). Everything else is skipped — see fabricatedNumbers.
+    //
+    // The leading lookbehind is load-bearing: a digit welded to a preceding letter belongs
+    // to a product name, never to a claim. Without it "K8s" parses as "8" + the "s" time
+    // unit, and a clean bullet mentioning Kubernetes is thrown out as a fabricated metric.
+    // Same for "P95", "EC2", "ES2022". "$200K" is unaffected — the lookbehind sits before
+    // the "$", and the character preceding that is whitespace.
+    private static final Pattern QUANTITY =
+            Pattern.compile("(?<![A-Za-z])(\\$)?(\\d+)(?:(" + UNIT + ")|(?=\\s(" + UNIT + ")))?");
 
     /** True if the bullet opens with one of the weak/passive phrases the prompt forbids. */
     public static boolean hasForbiddenOpener(String text) {
@@ -49,14 +61,25 @@ public final class BulletTextRules {
     }
 
     /**
-     * Bolded tokens containing a number that doesn't appear anywhere in the source
-     * context (project/role description + repo context) the bullet was generated
-     * from. The LLM is instructed to quote metrics verbatim — this catches it when
-     * it doesn't. Returns the fabricated bold tokens (empty list if none / no numbers).
+     * Quantities claimed anywhere in the bullet that don't appear in the source context
+     * (project/role description + repo context) the bullet was generated from. The LLM is
+     * instructed to quote metrics verbatim — this catches it when it doesn't. Returns the
+     * offending quantity substrings, e.g. "180", "200ms", "95%" (empty list if none).
+     *
+     * <p>The whole bullet is scanned, not just its {@code **bold**} spans: bolding is
+     * style-configurable, so a bold-only gate reported nothing at all under
+     * {@code boldDensity=NONE} and missed any un-bolded invented metric otherwise.
+     *
+     * <p>Only unit-bearing quantities are checked — a digit run preceded by {@code $} or
+     * followed (at most one space away) by {@code %}, {@code +}, {@code x}, {@code ms},
+     * {@code s} or a {@code k}/{@code m}/{@code b} magnitude. A bare or letter-glued
+     * number is a version or product identifier, not a claim: {@code S3}, {@code EC2},
+     * {@code P95}, {@code AES-256-GCM}, {@code Java 17}, {@code HTTP/2}, {@code 24/7},
+     * {@code 3-tier}. Scanning every digit would reject those wholesale.
      *
      * <p>Matching is on whole digit runs, not substrings: a source containing "5" must
      * not vouch for a bullet claiming "500ms", and a source containing "2024" must not
-     * vouch for "24". Thousands separators are stripped from both sides first, and a
+     * vouch for "24K". Thousands separators are stripped from both sides first, and a
      * bullet's "64K"/"3M" suffix is expanded, so "64K" still matches a source "64,000".
      */
     public static List<String> fabricatedNumbers(String text, String sourceContext) {
@@ -68,25 +91,19 @@ public final class BulletTextRules {
         while (srcMatcher.find()) srcNumbers.add(stripLeadingZeros(srcMatcher.group()));
 
         List<String> fabricated = new ArrayList<>();
-        Matcher boldMatcher = BOLD.matcher(text);
-        while (boldMatcher.find()) {
-            String token = boldMatcher.group(1);
-            Matcher numMatcher = SCALED.matcher(stripThousands(token));
-            while (numMatcher.find()) {
-                String digits = stripLeadingZeros(numMatcher.group(1));
-                String suffix = numMatcher.group(2);
-                // The bare digits count as quoted, and so does their scaled expansion —
-                // the source may spell the same quantity either way.
-                // ponytail: the suffix match is naive, so "300ms" reads as "300M". That can
-                // only let a bullet through, never drop a good one (bare digits are checked
-                // first), so a real unit parser is not worth it here.
-                boolean found = srcNumbers.contains(digits)
-                        || (suffix != null && srcNumbers.contains(scale(digits, suffix)));
-                if (!found) {
-                    fabricated.add(token);
-                    break;
-                }
-            }
+        // Bold markers are dropped so "**64K**" and "**3 to 180** ms" read as plain text.
+        Matcher m = QUANTITY.matcher(stripThousands(text.replace("**", "")));
+        while (m.find()) {
+            String unit = m.group(3) != null ? m.group(3) : m.group(4);
+            if (m.group(1) == null && unit == null) continue;   // bare number, not a claim
+            String digits = stripLeadingZeros(m.group(2));
+            // The bare digits count as quoted, and so does their scaled expansion —
+            // the source may spell the same quantity either way.
+            boolean magnitude = unit != null && unit.length() == 1
+                    && "kKmMbB".indexOf(unit.charAt(0)) >= 0;
+            boolean found = srcNumbers.contains(digits)
+                    || (magnitude && srcNumbers.contains(scale(digits, unit)));
+            if (!found) fabricated.add(m.group());
         }
         return fabricated;
     }
@@ -150,7 +167,7 @@ public final class BulletTextRules {
     }
 
     /** Why a bullet was kept or dropped by the length filter. */
-    public enum Decision { KEPT, DEAD_ZONE, TOO_SHORT }
+    public enum Decision { KEPT, DEAD_ZONE, TOO_SHORT, TOO_LONG }
 
     /**
      * Ratio used to read the word-based {@link GenerationConfig} bands as character
@@ -211,7 +228,13 @@ public final class BulletTextRules {
     /**
      * Decide whether a bullet of the given character count survives the filter.
      * When the filter is disabled in config, everything is {@link Decision#KEPT}.
-     * Otherwise a bullet in the dead zone is dropped, then one below the floor.
+     * Otherwise a bullet in the dead zone is dropped, then one past the two-line
+     * ceiling, then one below the floor.
+     *
+     * <p>The ceiling is what stops a bullet from silently spilling onto a third
+     * line: the dead zone only guards the gap between a full first line and a full
+     * second one, so without an upper bound anything past the two-line band — 300
+     * chars, 400, no limit — counted as {@link Decision#KEPT} and shipped to the PDF.
      *
      * <p>The config bands are stored in words and converted here — see
      * {@link #CHARS_PER_WORD}.
@@ -220,6 +243,9 @@ public final class BulletTextRules {
         if (!cfg.isWordFilterEnabled()) return Decision.KEPT;
         if (charCount >= chars(cfg.getDeadZoneLow()) && charCount <= chars(cfg.getDeadZoneHigh())) {
             return Decision.DEAD_ZONE;
+        }
+        if (charCount > chars(cfg.getDoubleLineHigh())) {
+            return Decision.TOO_LONG;
         }
         if (charCount < chars(cfg.getMinWordFloor())) {
             return Decision.TOO_SHORT;

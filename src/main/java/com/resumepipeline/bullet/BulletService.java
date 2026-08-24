@@ -90,7 +90,8 @@ public class BulletService {
     private record RawGeneration(String category, LlmClient.BulletGenerationResult result) {}
 
     /** Call the LLM for one project/category. No shared state — safe to run concurrently. */
-    private RawGeneration generateBulletsOnly(UUID userId, UUID projectId, String category, ProgressLog progress) {
+    private RawGeneration generateBulletsOnly(UUID userId, UUID projectId, String category,
+                                              List<String> siblingCategories, ProgressLog progress) {
         Project p = projectService.get(userId, projectId);
 
         LlmClient.SourceKind sk = p.getKind() == Project.Kind.EXPERIENCE
@@ -117,7 +118,7 @@ public class BulletService {
                             p.getTechStack(), p.getYourRole(), p.getOwnership(),
                             p.getScaleImpact(), p.getHardestProblem(),
                             p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
-                            existing),
+                            existing, siblingCategories),
                     progress, tokens);
         } finally {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
@@ -144,12 +145,20 @@ public class BulletService {
         if (dupDropped > 0) {
             progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
         }
+        // The companion to BULLET_GEN in BaseLlmClient: that line reports what survived the
+        // filter, this one what survived dedup against the bank and its sibling categories.
+        // dup_dropped is the number that decides whether the parallel-category collision is
+        // worth restructuring generateBank for — it is bullets we paid full output tokens to
+        // generate and then binned.
+        log.info("BULLET_PERSIST project={} category={} generated={} saved={} dup_dropped={}",
+                projectId, gen.category(), gen.result().bullets().size(), saved.size(), dupDropped);
         return saved;
     }
 
     /** Generate bullets for one project and one category lens. */
     public List<Bullet> generateForProjectAndCategory(UUID userId, UUID projectId, String category, ProgressLog progress) {
-        RawGeneration gen = generateBulletsOnly(userId, projectId, category, progress);
+        // No siblings: a standalone generation is the only call in flight.
+        RawGeneration gen = generateBulletsOnly(userId, projectId, category, List.of(), progress);
         // Fetched fresh here (not passed in) so this standalone entry point still sees any
         // bullets saved by other calls in the meantime — same behavior as before the split.
         List<String> seenTexts = new ArrayList<>(
@@ -174,7 +183,9 @@ public class BulletService {
 
         List<CompletableFuture<RawGeneration>> futures = categories.stream()
                 .map(c -> CompletableFuture.supplyAsync(
-                        () -> generateBulletsOnly(userId, projectId, c, tagged(progress, c)), PARALLEL_EXECUTOR))
+                        () -> generateBulletsOnly(userId, projectId, c,
+                                categories.stream().filter(o -> !o.equals(c)).toList(),
+                                tagged(progress, c)), PARALLEL_EXECUTOR))
                 .toList();
 
         List<RawGeneration> results;

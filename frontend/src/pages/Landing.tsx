@@ -27,7 +27,7 @@ const STEPS = [
   {
     num: '03',
     title: 'AI ranks\nevery bullet',
-    body: 'Every bullet scored against the JD. Top 8 auto-selected (max 3 per project). Override anything. See exactly why each bullet ranked.',
+    body: 'Every bullet scored against the JD. The strongest are auto-selected (max 3 per project). Override anything. See exactly why each bullet ranked.',
     tag: 'RANKED MATCHING',
   },
   {

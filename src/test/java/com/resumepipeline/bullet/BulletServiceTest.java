@@ -158,4 +158,24 @@ class BulletServiceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.generateBank(user, proj, List.of("not-a-real-lens"), ProgressLog.noOp()));
     }
+
+    @Test
+    void generateBankTellsEachCategoryAboutItsSiblings() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(llm.generateBullets(any(), any(), any())).thenReturn(
+                new LlmClient.BulletGenerationResult(List.of()));
+
+        List<String> cats = List.of("backend", "data", "security");
+        service.generateBank(user, proj, cats, ProgressLog.noOp());
+
+        ArgumentCaptor<LlmClient.GenerateBulletsRequest> req =
+                ArgumentCaptor.forClass(LlmClient.GenerateBulletsRequest.class);
+        verify(llm, times(3)).generateBullets(req.capture(), any(), any());
+        for (LlmClient.GenerateBulletsRequest r : req.getAllValues()) {
+            assertFalse(r.siblingCategories().contains(r.category()));
+            assertEquals(cats.stream().filter(c -> !c.equals(r.category())).toList(),
+                    r.siblingCategories());
+        }
+    }
 }

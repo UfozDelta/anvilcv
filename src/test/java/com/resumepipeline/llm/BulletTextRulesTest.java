@@ -83,6 +83,17 @@ class BulletTextRulesTest {
     @Test void decideJustAboveDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(217, cfg())); }
     @Test void decideDoubleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(248, cfg())); }
 
+    @Test void decideCeilingBoundaryKept()  { assertEquals(Decision.KEPT, BulletTextRules.decide(270, cfg())); }
+    @Test void decideJustOverCeiling()      { assertEquals(Decision.TOO_LONG, BulletTextRules.decide(271, cfg())); }
+    @Test void decideWayOverCeiling()       { assertEquals(Decision.TOO_LONG, BulletTextRules.decide(400, cfg())); }
+
+    @Test void decideFilterDisabledKeepsOverlongBullet() {
+        // The ceiling is part of the filter, so disabling the filter must bypass it too.
+        GenerationConfig c = cfg();
+        c.setWordFilterEnabled(false);
+        assertEquals(Decision.KEPT, BulletTextRules.decide(400, c));
+    }
+
     @Test void decideDeadZoneTakesPrecedenceOverFloor() {
         // A weird config where dead zone overlaps below the floor: dead-zone check runs first.
         // 5-20 words is 27-108 chars, floor 15 words is 81 chars; 54 chars sits in both.
@@ -122,7 +133,7 @@ class BulletTextRulesTest {
 
     // The mirror case: source "2024" used to vouch for "24" and "202".
     @Test void substringOfSourceNumberIsFabricated() {
-        assertEquals(List.of("24"), BulletTextRules.fabricatedNumbers("Ran **24** jobs.", SRC));
+        assertEquals(List.of("24K"), BulletTextRules.fabricatedNumbers("Ran **24K** jobs.", SRC));
     }
 
     @Test void scaledSuffixMatchesSpelledOutSource() {
@@ -131,7 +142,7 @@ class BulletTextRulesTest {
     }
 
     @Test void separatorFormMatchesSource() {
-        assertTrue(BulletTextRules.fabricatedNumbers("Indexed **64,000** listings.", SRC).isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("Indexed **64,000+** listings.", SRC).isEmpty());
     }
 
     @Test void scaledSuffixStillCaughtWhenQuantityAbsent() {
@@ -144,8 +155,9 @@ class BulletTextRulesTest {
     }
 
     @Test void rangeTokenNeedsBothEndsInSource() {
-        // "3" is in the source, "180" is not — one bad end condemns the whole token.
-        assertEquals(List.of("3 to 180"), BulletTextRules.fabricatedNumbers("Went **3 to 180** ms.", SRC));
+        // Only "180" carries a unit (" ms"), so only "180" is checked — and it is absent
+        // from the source. The bare "3" is not a claim and is skipped.
+        assertEquals(List.of("180"), BulletTextRules.fabricatedNumbers("Went **3 to 180** ms.", SRC));
     }
 
     @Test void fabricatedNullAndBlankAreClean() {
@@ -154,6 +166,37 @@ class BulletTextRulesTest {
     }
 
     @Test void nullSourceMakesEveryNumberFabricated() {
-        assertEquals(List.of("5"), BulletTextRules.fabricatedNumbers("Served **5** regions.", null));
+        assertEquals(List.of("5M"), BulletTextRules.fabricatedNumbers("Served **5M** requests.", null));
+    }
+
+    // The hole this check exists to close: bolding is style-configurable, so an invented
+    // metric that was never bolded used to pass untouched.
+    @Test void unboldedFabricatedMetricIsCaught() {
+        assertEquals(List.of("500ms"), BulletTextRules.fabricatedNumbers("Cut latency to 500ms.", SRC));
+        assertEquals(List.of("99%"), BulletTextRules.fabricatedNumbers("Held 99% uptime.", SRC));
+    }
+
+    // Version and product identifiers are not claims, even though none of these digits
+    // appear in the source.
+    @Test void versionAndProductNumbersAreNotQuantities() {
+        assertTrue(BulletTextRules.fabricatedNumbers(
+                "Shipped AES-256-GCM over a 3-tier Java 17 stack running 24/7 on S3.", SRC).isEmpty());
+    }
+
+    // Regression: "K8s" parsed as "8" + the "s" time unit, so a clean Kubernetes bullet was
+    // discarded as a fabricated metric. A digit welded to a preceding letter is a product name.
+    @Test void digitGluedToLeadingLetterIsNotAQuantity() {
+        assertTrue(BulletTextRules.fabricatedNumbers(
+                "Deployed on K8s across EC2 with P95 tracking on ES2022.", "No digits here.").isEmpty());
+    }
+
+    @Test void currencyAmountIsCaught() {
+        assertEquals(List.of("$200K"), BulletTextRules.fabricatedNumbers("Saved $200K yearly.", SRC));
+    }
+
+    // Previously a false positive: "3-tier" was a bold token containing a number, so the
+    // whole token was condemned whenever "3" was missing from the source.
+    @Test void boldedTierCountIsNotAQuantity() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Built a **3-tier** service.", "No digits here.").isEmpty());
     }
 }

@@ -203,7 +203,7 @@ public class ApplicationService {
                 .filter(pid -> { Project p = projectById.get(pid); return p != null && p.getKind() == Project.Kind.PROJECT; })
                 .count();
 
-        if (selected.size() > 12) {
+        if (selected.size() > BulletSelector.PAGE_WARN_THRESHOLD) {
             progress.emit("Warning: " + selected.size() + " bullets selected — PDF may exceed one page.");
         }
 

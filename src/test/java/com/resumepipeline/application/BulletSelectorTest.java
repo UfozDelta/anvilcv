@@ -178,6 +178,108 @@ class BulletSelectorTest {
         }
 
         @Test
+        void minFillCannotExceedTotalCap() {
+            // 8 PROJECT entries, 1 ranked bullet each (pass 1 takes all 8) plus 2 spare
+            // bank bullets each. Unguarded min-fill would pad to 8 * 3 = 24.
+            List<Project> projects = new ArrayList<>();
+            List<Bullet> rankedBullets = new ArrayList<>();
+            List<Bullet> all = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                UUID pid = UUID.randomUUID();
+                projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "P" + i));
+                Bullet r = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
+                rankedBullets.add(r);
+                all.add(r);
+                all.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
+                all.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
+            }
+            List<LlmClient.RankedBullet> ranked = IntStream.range(0, 8)
+                    .mapToObj(i -> TestFixtures.ranked(rankedBullets.get(i).getId(), i + 1))
+                    .toList();
+            Map<UUID, Project> projById = projects.stream()
+                    .collect(Collectors.toMap(Project::getId, p -> p));
+
+            List<Bullet> out = BulletSelector.select(ranked, byId(rankedBullets), projById, all, NO_KEYWORDS);
+
+            assertEquals(BulletSelector.MAX_TOTAL, out.size());
+            assertEquals(out.size(), new HashSet<>(ids(out)).size(), "no duplicates");
+        }
+
+        @Test
+        void kindFloorCannotExceedTotalCapAndStillMeetsFloor() {
+            // Pass 1 saturates on PROJECT entries alone: 5 projects * 3 bullets = 15 = MAX_TOTAL,
+            // leaving zero EXPERIENCE entries. Pass 2 must still reach MIN_EXPERIENCE_PROJECTS,
+            // and must do it by evicting rather than by growing past the cap.
+            List<Project> projects = new ArrayList<>();
+            List<Bullet> rankedBullets = new ArrayList<>();
+            List<Bullet> all = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                UUID pid = UUID.randomUUID();
+                projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "P" + i));
+                for (int j = 0; j < 3; j++) {
+                    Bullet b = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
+                    rankedBullets.add(b);
+                    all.add(b);
+                }
+            }
+            // Two EXPERIENCE entries ranked strictly below every project bullet, so only pass 2
+            // can pull them in.
+            for (int i = 0; i < 2; i++) {
+                UUID pid = UUID.randomUUID();
+                projects.add(TestFixtures.project(pid, Project.Kind.EXPERIENCE, "E" + i));
+                Bullet b = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
+                rankedBullets.add(b);
+                all.add(b);
+            }
+            List<LlmClient.RankedBullet> ranked = IntStream.range(0, rankedBullets.size())
+                    .mapToObj(i -> TestFixtures.ranked(rankedBullets.get(i).getId(), i + 1))
+                    .toList();
+            Map<UUID, Project> projById = projects.stream()
+                    .collect(Collectors.toMap(Project::getId, p -> p));
+
+            List<Bullet> out = BulletSelector.select(ranked, byId(rankedBullets), projById, all, NO_KEYWORDS);
+
+            assertTrue(out.size() <= BulletSelector.MAX_TOTAL,
+                    "kind-floor must not push the selection past the cap, got " + out.size());
+            assertEquals(out.size(), new HashSet<>(ids(out)).size(), "no duplicates");
+            long expProjects = out.stream().map(Bullet::getProjectId).distinct()
+                    .filter(pid -> projById.get(pid).getKind() == Project.Kind.EXPERIENCE)
+                    .count();
+            assertTrue(expProjects >= 2, "experience floor still met, got " + expProjects);
+        }
+
+        @Test
+        void minFillStillPadsFullyWhenUnderTotalCap() {
+            // 3 projects * 3 bullets = 9 <= MAX_TOTAL, so the cap guard must not fire.
+            List<Project> projects = new ArrayList<>();
+            List<Bullet> rankedBullets = new ArrayList<>();
+            List<Bullet> all = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                UUID pid = UUID.randomUUID();
+                projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "P" + i));
+                Bullet r = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
+                rankedBullets.add(r);
+                all.add(r);
+                all.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
+                all.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
+            }
+            List<LlmClient.RankedBullet> ranked = IntStream.range(0, 3)
+                    .mapToObj(i -> TestFixtures.ranked(rankedBullets.get(i).getId(), i + 1))
+                    .toList();
+            Map<UUID, Project> projById = projects.stream()
+                    .collect(Collectors.toMap(Project::getId, p -> p));
+
+            List<Bullet> out = BulletSelector.select(ranked, byId(rankedBullets), projById, all, NO_KEYWORDS);
+
+            assertEquals(9, out.size());
+            for (Project p : projects) {
+                assertEquals(BulletSelector.MAX_PER_PROJECT,
+                        out.stream().filter(b -> b.getProjectId().equals(p.getId())).count(),
+                        p.getName() + " padded to the per-project cap");
+            }
+        }
+
+        @Test
         void minFillBankFallbackOrdersByTagScore() {
             UUID proj = UUID.randomUUID();
             Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");

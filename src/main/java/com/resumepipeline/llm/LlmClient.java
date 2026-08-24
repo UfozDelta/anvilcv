@@ -36,7 +36,13 @@ public interface LlmClient {
             String hardestProblem,
             String title, String company, String location, String dates,
             /** Bullets already in the bank for this project — the prompt is told to avoid repeating them. */
-            List<String> existingBullets
+            List<String> existingBullets,
+            /**
+             * The OTHER category slugs generating concurrently in this same batch — not the bank.
+             * Their bullets do not exist yet, so the prompt can only be told to stay off their
+             * angles; empty for a standalone generation with no siblings.
+             */
+            List<String> siblingCategories
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     record GeneratedBullet(String text, List<String> tags) {}

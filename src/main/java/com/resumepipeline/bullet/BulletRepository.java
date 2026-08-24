@@ -16,9 +16,10 @@ public interface BulletRepository extends JpaRepository<Bullet, UUID> {
      * Bullets belonging to projects owned by the given user that are eligible for a resume.
      * REJECTED bullets are excluded — the user triaged them off the bank, so matching must
      * never put them back on a document. PENDING stays eligible so untriaged banks still work.
+     * Ordered newest-first so the caller's stable keyword-score sort is deterministic on ties.
      */
     @Query(value = "SELECT b.* FROM bullet b JOIN project p ON p.id = b.project_id "
-                 + "WHERE p.user_id = :userId AND b.status <> 'REJECTED'", nativeQuery = true)
+                 + "WHERE p.user_id = :userId AND b.status <> 'REJECTED' ORDER BY b.created_at DESC", nativeQuery = true)
     List<Bullet> findSelectableByProjectUserId(@Param("userId") UUID userId);
 
     /** Scoped bulk fetch — only returns bullets whose project belongs to the given user. */

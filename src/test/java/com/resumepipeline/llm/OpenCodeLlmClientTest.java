@@ -92,7 +92,7 @@ class OpenCodeLlmClientTest {
         LlmClient.BulletGenerationResult result = client.generateBullets(
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, "Java", null, null, null, null,
-                        null, null, null, null, List.of()),
+                        null, null, null, null, List.of(), List.of()),
                 ProgressLog.noOp(), new TokenAccumulator());
 
         assertEquals(2, result.bullets().size());
@@ -122,7 +122,7 @@ class OpenCodeLlmClientTest {
         LlmClient.BulletGenerationResult result = client.generateBullets(
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, "Java", null, null, null, null,
-                        null, null, null, null, List.of()),
+                        null, null, null, null, List.of(), List.of()),
                 ProgressLog.noOp(), new TokenAccumulator());
 
         // "kubernetes" survives via the K8s alias; "terraform" is nowhere in the text, and an
