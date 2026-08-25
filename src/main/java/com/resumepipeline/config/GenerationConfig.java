@@ -21,23 +21,32 @@ public class GenerationConfig {
     @Column(name = "word_filter_enabled", nullable = false)
     private boolean wordFilterEnabled = true;
 
+    // Word bands, converted to characters at BulletTextRules.CHARS_PER_WORD (5.4) and
+    // checked against BulletTextRules.CHARS_PER_LINE (105, measured off a compiled
+    // resume.tex PDF). One rendered line holds ~19 words at that ratio, so these bands
+    // are sized so "single line" really is one line and "double line" really is two,
+    // instead of spilling to a second/third line as the old 22-26/42-50 defaults did.
+
+    /** 81-97 chars: fits on one rendered line. */
     @Column(name = "single_line_low", nullable = false)
-    private int singleLineLow = 22;
+    private int singleLineLow = 15;
 
     @Column(name = "single_line_high", nullable = false)
-    private int singleLineHigh = 26;
+    private int singleLineHigh = 18;
 
+    /** 173-200 chars: fills two rendered lines without spilling to a third. */
     @Column(name = "double_line_low", nullable = false)
-    private int doubleLineLow = 42;
+    private int doubleLineLow = 32;
 
     @Column(name = "double_line_high", nullable = false)
-    private int doubleLineHigh = 50;
+    private int doubleLineHigh = 37;
 
+    /** 103-167 chars: the awkward gap between a full first line and a full second one. */
     @Column(name = "dead_zone_low", nullable = false)
-    private int deadZoneLow = 27;
+    private int deadZoneLow = 19;
 
     @Column(name = "dead_zone_high", nullable = false)
-    private int deadZoneHigh = 40;
+    private int deadZoneHigh = 31;
 
     @Column(name = "min_word_floor", nullable = false)
     private int minWordFloor = 12;

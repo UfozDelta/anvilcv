@@ -1,6 +1,7 @@
 package com.resumepipeline.application;
 
 import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.project.Project;
@@ -21,6 +22,11 @@ import java.util.stream.Collectors;
  *       remaining ranked candidates, then from the raw bank by tag score.</li>
  * </ol>
  *
+ * <p>Every pass that adds a bullet first rejects it if {@link BulletTextRules#isNearDuplicate}
+ * says it restates a bullet already on the resume (global across projects — see the pass 1
+ * comment below for why). This is the guard that stops two AI-generated bullets making the
+ * same numeric claim in different words from both landing on the same PDF.
+ *
  * <p>No I/O, no Spring, deterministic. Callers do their own progress logging by
  * inspecting the returned list — this class emits nothing.
  */
@@ -31,8 +37,17 @@ public final class BulletSelector {
     static final int MAX_TOTAL = 15;
     static final int MAX_PER_PROJECT = 3; // also the per-project minimum-fill target
 
-    /** Soft page-budget warning threshold — above this a one-page PDF is at risk. Must stay &lt;= MAX_TOTAL. */
-    static final int PAGE_WARN_THRESHOLD = 12;
+    /**
+     * Usable bullet lines on one rendered page, after heading, education, section
+     * titles, project headings and the skills block eat their share of the page.
+     * Estimate tied to resume.tex's layout — re-check if the template's margins,
+     * heading sizes or section count change materially.
+     *
+     * <p>{@link #MAX_TOTAL} stays as a hard upper bound on bullet count, but a bullet
+     * can render as 1-4+ lines (see {@link BulletTextRules#estimatedLines}), so a
+     * count alone doesn't stop the page from overflowing — this line budget does.
+     */
+    static final int MAX_TOTAL_LINES = 26;
 
     private static final int MIN_EXPERIENCE_PROJECTS = 2;
     private static final int MIN_PROJECT_ENTRIES = 3;
@@ -58,9 +73,21 @@ public final class BulletSelector {
                                       Set<String> keywordsLower) {
         ToLongFunction<Bullet> tagScore = tagScore(keywordsLower);
 
-        // Pass 1: greedy top-N, capped per project.
+        // Pass 1: greedy top-N, capped per project and by rendered-line budget.
+        //
+        // selectedTexts mirrors `selected` (a list, not a set: two selected bullets could in
+        // principle share text pre-dedup, and eviction below removes by value) and is checked
+        // before every add across all three passes, so two bullets describing the same claim
+        // never both land on the resume — see the class javadoc for the shipped-PDF case this
+        // covers. Chosen as a global check, not per-project: the evidence pair happened to share
+        // a project, but the same over-claim duplicated across two *different* projects (e.g. a
+        // "Project" entry and an "Experience" entry describing the same backtester) is equally
+        // bad on a resume, and nothing about the near-duplicate signal (word-set overlap) is
+        // project-scoped.
         LinkedHashMap<UUID, Integer> perProject = new LinkedHashMap<>();
         List<Bullet> selected = new ArrayList<>();
+        List<String> selectedTexts = new ArrayList<>();
+        int lines = 0;
         for (LlmClient.RankedBullet rb : rankedSorted) {
             if (selected.size() >= MAX_TOTAL) break;
             UUID bid = parseUuid(rb.bulletId());
@@ -69,8 +96,14 @@ public final class BulletSelector {
             if (b == null) continue;
             int count = perProject.getOrDefault(b.getProjectId(), 0);
             if (count >= MAX_PER_PROJECT) continue;
+            if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
+            int bLines = BulletTextRules.estimatedLines(b.getText());
+            // A later, shorter bullet may still fit even if this one doesn't — skip, don't stop.
+            if (lines + bLines > MAX_TOTAL_LINES) continue;
             perProject.put(b.getProjectId(), count + 1);
             selected.add(b);
+            selectedTexts.add(b.getText());
+            lines += bLines;
         }
 
         // Pass 2: kind-floor — force EXPERIENCE/PROJECT diversity if greedy missed it.
@@ -93,12 +126,27 @@ public final class BulletSelector {
                 boolean wanted = (p.getKind() == Project.Kind.EXPERIENCE && expDistinct < MIN_EXPERIENCE_PROJECTS)
                         || (p.getKind() == Project.Kind.PROJECT && projDistinct < MIN_PROJECT_ENTRIES);
                 if (!wanted) continue;
+                if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
+                int bLines = BulletTextRules.estimatedLines(b.getText());
                 // At the cap, this pass used to add anyway — up to 5 bullets past MAX_TOTAL, which
                 // is a two-page PDF. Breaking instead would silently abandon the diversity floor
                 // this pass exists to guarantee, so make room rather than choosing between them:
-                // drop the weakest bullet of whichever project is most over-represented.
-                if (selected.size() >= MAX_TOTAL && !evictWeakestFromFullestProject(selected)) break;
+                // drop the weakest bullet of whichever project is most over-represented. The same
+                // applies to the line budget: evict to make room, and if that still doesn't fit
+                // (the evicted bullet was shorter than the one we're trying to add), move on to
+                // the next candidate rather than giving up on the whole pass.
+                if (selected.size() >= MAX_TOTAL || lines + bLines > MAX_TOTAL_LINES) {
+                    Bullet evicted = evictWeakestFromFullestProject(selected);
+                    if (evicted == null) break;
+                    lines -= BulletTextRules.estimatedLines(evicted.getText());
+                    // The evicted bullet no longer renders, so it must stop blocking later
+                    // near-duplicate candidates too — text list mirrors `selected` exactly.
+                    selectedTexts.remove(evicted.getText());
+                    if (selected.size() >= MAX_TOTAL || lines + bLines > MAX_TOTAL_LINES) continue;
+                }
                 selected.add(b); selectedIds.add(bid); selectedProjects.add(b.getProjectId());
+                selectedTexts.add(b.getText());
+                lines += bLines;
                 if (p.getKind() == Project.Kind.EXPERIENCE) expDistinct++; else projDistinct++;
             }
         }
@@ -121,7 +169,11 @@ public final class BulletSelector {
                 if (bid == null || selectedIds.contains(bid)) continue;
                 Bullet b = bulletById.get(bid);
                 if (b == null || !b.getProjectId().equals(pid)) continue;
-                selected.add(b); selectedIds.add(bid); have++;
+                if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
+                int bLines = BulletTextRules.estimatedLines(b.getText());
+                if (lines + bLines > MAX_TOTAL_LINES) continue;
+                selected.add(b); selectedIds.add(bid); selectedTexts.add(b.getText()); have++;
+                lines += bLines;
             }
 
             // Source 2: raw bank fallback for thin banks, sorted by tag score.
@@ -132,7 +184,11 @@ public final class BulletSelector {
                         .toList();
                 for (Bullet b : bank) {
                     if (have >= MAX_PER_PROJECT || selected.size() >= MAX_TOTAL) break;
-                    selected.add(b); selectedIds.add(b.getId()); have++;
+                    if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
+                    int bLines = BulletTextRules.estimatedLines(b.getText());
+                    if (lines + bLines > MAX_TOTAL_LINES) continue;
+                    selected.add(b); selectedIds.add(b.getId()); selectedTexts.add(b.getText()); have++;
+                    lines += bLines;
                 }
             }
         }
@@ -178,9 +234,9 @@ public final class BulletSelector {
      * been considered and passed over, and letting pass 3 pick it straight back up would just
      * churn the selection without changing its size.
      *
-     * @return true if a slot was freed; false when no project has a spare bullet to give up
+     * @return the evicted bullet if a slot was freed; null when no project has a spare bullet to give up
      */
-    private static boolean evictWeakestFromFullestProject(List<Bullet> selected) {
+    private static Bullet evictWeakestFromFullestProject(List<Bullet> selected) {
         Map<UUID, Long> counts = selected.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId, Collectors.counting()));
         UUID fullest = counts.entrySet().stream()
@@ -188,14 +244,13 @@ public final class BulletSelector {
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
                 .orElse(null);
-        if (fullest == null) return false;
+        if (fullest == null) return null;
         for (int i = selected.size() - 1; i >= 0; i--) {
             if (selected.get(i).getProjectId().equals(fullest)) {
-                selected.remove(i);
-                return true;
+                return selected.remove(i);
             }
         }
-        return false;
+        return null;
     }
 
     private static long distinctProjectsOfKind(List<Bullet> selected, Map<UUID, Project> projectById,

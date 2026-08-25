@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.jd.JdFetcher;
+import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
@@ -203,8 +204,13 @@ public class ApplicationService {
                 .filter(pid -> { Project p = projectById.get(pid); return p != null && p.getKind() == Project.Kind.PROJECT; })
                 .count();
 
-        if (selected.size() > BulletSelector.PAGE_WARN_THRESHOLD) {
-            progress.emit("Warning: " + selected.size() + " bullets selected — PDF may exceed one page.");
+        // Bullet count alone doesn't predict page overflow — a bullet can render as 1-4+
+        // lines (BulletTextRules.estimatedLines) — so warn off the same rendered-line
+        // budget BulletSelector selects against, not a raw count threshold.
+        int estimatedLines = selected.stream()
+                .mapToInt(b -> BulletTextRules.estimatedLines(b.getText())).sum();
+        if (estimatedLines > BulletSelector.MAX_TOTAL_LINES) {
+            progress.emit("Warning: ~" + estimatedLines + " bullet lines selected — PDF may exceed one page.");
         }
 
         progress.emit("Selection complete - " + selected.size() + " bullets"

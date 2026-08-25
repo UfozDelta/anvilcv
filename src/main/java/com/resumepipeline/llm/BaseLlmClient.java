@@ -179,7 +179,7 @@ public abstract class BaseLlmClient implements LlmClient {
         };
         String boldInstruction = switch (cfg.getBoldDensity()) {
             case NONE  -> "Do NOT use any **bold** markup in bullets.";
-            case HEAVY -> "Bold aggressively — every metric, every technology, every named system or technique.";
+            case HEAVY -> "Use up to 4 **bold** spans per bullet instead of 2 — prefer the quantified claims.";
             default    -> "";
         };
         String verbInstruction = switch (cfg.getActionVerbStyle()) {
@@ -232,7 +232,10 @@ public abstract class BaseLlmClient implements LlmClient {
 
                 ## 3. BOLD — **double asterisks** (compiles to \\textbf{})
 
-                Aim for **3 to 6 bolds per bullet**. Bold everything in these categories:
+                Use AT MOST 2 bolds per bullet — bold is emphasis, and a bullet that bolds
+                everything emphasizes nothing. Reserve it for the one or two things a recruiter's
+                eye should land on first: usually the biggest quantified claim. Pick from these
+                categories, in priority order:
 
                   (a) Every quantity / scale / metric:
                       **64K**, **500+**, **300ms**, **sub-200ms**, **95%%+**, **$200K**,
@@ -265,11 +268,11 @@ public abstract class BaseLlmClient implements LlmClient {
                 ─────────────────────────────────────────────────────────────
                 ## EXAMPLES (study these — match this length, bold density, and ending punctuation)
 
-                  ✓ Built a **RAG** pipeline over **64K** MLS listings with hybrid full-text + vector search, **RRF-k fusion**, and a semantic cache, cutting query latency under **300ms** and LLM calls by **40%%**.
+                  ✓ Built a RAG pipeline over **64K** MLS listings with hybrid full-text + vector search, RRF-k fusion, and a semantic cache, cutting query latency under **300ms** and LLM calls by 40%%.
 
-                  ✓ Engineered a real-time geospatial pipeline over **64K live listings** using **React-Leaflet**, **Turf.js**, and **MongoDB 2dsphere** queries with viewport-aware fetching and marker diffing, cutting map re-render from **180ms to 70ms**.
+                  ✓ Engineered a real-time geospatial pipeline over **64K live listings** using React-Leaflet, Turf.js, and MongoDB 2dsphere queries with viewport-aware fetching and marker diffing, cutting map re-render from **180ms to 70ms**.
 
-                  ✓ Designed a **sub-cent-precision credit ledger** powering metered billing across AI, voice, and SMS usage, processing **120K transactions/month** through an append-only audit trail and idempotent **Stripe** webhook integration.
+                  ✓ Designed a sub-cent-precision credit ledger powering metered billing across AI, voice, and SMS usage, processing **120K transactions/month** through an append-only audit trail and idempotent **Stripe** webhook integration.
 
                   ✓ Encrypted all third-party OAuth and telephony tokens at rest with **AES-256-GCM**, eliminating plaintext credentials from the database across the multi-tenant platform.
 

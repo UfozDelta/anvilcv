@@ -11,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import com.resumepipeline.config.GenerationConfig;
+import com.resumepipeline.config.GenerationConfigService;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -29,6 +31,7 @@ class BulletServiceTest {
     @Mock ProjectService projectService;
     @Mock LlmClient llm;
     @Mock LlmUsageService llmUsageService;
+    @Mock GenerationConfigService configService;
     @InjectMocks BulletService service;
 
     private static Project project(UUID user, Project.Kind kind) {

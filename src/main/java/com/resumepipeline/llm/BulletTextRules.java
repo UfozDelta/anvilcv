@@ -137,9 +137,65 @@ public final class BulletTextRules {
      */
     public static final double NEAR_DUPLICATE_THRESHOLD = 0.6;
 
-    /** True when {@code text} is a near-duplicate of anything already in {@code existing}. */
+    /**
+     * Minimum distinct shared quantity tokens (see {@link #quantityTokens}) for the
+     * quantity-overlap duplicate signal below. Two bullets restating the same underlying work
+     * tend to carry several identical numbers ("6,062 lines... 9 modules... 14 classes...
+     * 46.44%"); one shared number is common coincidence between unrelated bullets ("3
+     * services" turns up everywhere), so the floor is set at two.
+     */
+    public static final int QUANTITY_OVERLAP_FLOOR = 2;
+
+    /**
+     * Jaccard floor paired with {@link #QUANTITY_OVERLAP_FLOOR}. Deliberately lower than
+     * {@link #NEAR_DUPLICATE_THRESHOLD}: this signal exists precisely because two bullets can
+     * reword a shared claim heavily enough that word-overlap alone drops well under 0.6 — the
+     * real shipped-PDF pair this was added for scores only 0.386 despite asserting the same
+     * four numbers. Requiring the full 0.6 here would defeat the point. 0.3 is not doing the
+     * discriminating on its own, though — it only keeps the pair in the same rough subject
+     * area; {@link #QUANTITY_OVERLAP_FLOOR} is what actually proves they're the same claim.
+     */
+    public static final double QUANTITY_DUPLICATE_THRESHOLD = 0.3;
+
+    /**
+     * True when {@code text} is a near-duplicate of anything already in {@code existing}:
+     * either the classic Jaccard word-overlap test, or (independently) sharing at least
+     * {@link #QUANTITY_OVERLAP_FLOOR} distinct quantities with at least
+     * {@link #QUANTITY_DUPLICATE_THRESHOLD} Jaccard overlap. The second test catches bullets
+     * that restate the same numeric claims in different prose — see {@link #quantityTokens}.
+     */
     public static boolean isNearDuplicate(String text, Collection<String> existing) {
-        return existing.stream().anyMatch(t -> similarity(t, text) >= NEAR_DUPLICATE_THRESHOLD);
+        return existing.stream().anyMatch(t -> isSameClaim(t, text));
+    }
+
+    private static boolean isSameClaim(String a, String b) {
+        double sim = similarity(a, b);
+        if (sim >= NEAR_DUPLICATE_THRESHOLD) return true;
+        if (sim < QUANTITY_DUPLICATE_THRESHOLD) return false;
+        Set<String> shared = new HashSet<>(quantityTokens(a));
+        shared.retainAll(quantityTokens(b));
+        return shared.size() >= QUANTITY_OVERLAP_FLOOR;
+    }
+
+    /**
+     * Distinct normalized quantity tokens in a bullet, extracted with the same {@link
+     * #QUANTITY} pattern and thousands/leading-zero normalization {@link #fabricatedNumbers}
+     * uses to compare a bullet's claims against its source — reused here to compare a
+     * bullet's claims against another bullet's.
+     *
+     * <p>Unlike {@link #fabricatedNumbers}, every digit run counts, not just the
+     * currency/unit-marked ones: "9 modules" and "14 classes" are exactly the kind of bare
+     * counts two bullets about the same work would both restate verbatim, and the "is this a
+     * claim worth sourcing" filter that drops bare numbers there would blind this check to
+     * them. {@code QUANTITY}'s lookbehind still keeps product/version numbers glued to letters
+     * ({@code K8s}, {@code EC2}, {@code ES2022}) out of the token set.
+     */
+    private static Set<String> quantityTokens(String text) {
+        if (text == null || text.isBlank()) return Set.of();
+        Set<String> tokens = new HashSet<>();
+        Matcher m = QUANTITY.matcher(stripThousands(text.replace("**", "")));
+        while (m.find()) tokens.add(stripLeadingZeros(m.group(2)));
+        return tokens;
     }
 
     /**
@@ -171,15 +227,36 @@ public final class BulletTextRules {
 
     /**
      * Ratio used to read the word-based {@link GenerationConfig} bands as character
-     * bands. The configured defaults are already self-consistent at this ratio — 22-26
-     * words is the "≈130 chars" single line the prompt asks for, 42-50 the "≈250 chars"
-     * double line — so the conversion changes no existing tuning.
+     * bands. The configured defaults are calibrated against {@link #CHARS_PER_LINE} at
+     * this ratio — 15-18 words is the ~81-97 char one-line band, 32-37 the ~173-200 char
+     * two-line band — so the conversion changes no existing tuning.
      *
      * <p>ponytail: one global constant rather than six new config columns. If per-user
      * tuning drifts (very terse or very verbose writing), promote the character bands to
      * their own columns instead of adjusting this.
      */
     static final double CHARS_PER_WORD = 5.4;
+
+    /**
+     * Rendered characters per LaTeX bullet line, measured against a real compiled PDF
+     * from {@code resume.tex}: 11pt body text in the template's widened text block
+     * ({@code \addtolength{\textwidth}{1.2in}} — see that file). A bullet longer than
+     * this wraps to a second line.
+     *
+     * <p>This is a physical measurement, not a tuning knob: if the template's text
+     * width or font size ever changes, this must be re-measured against a freshly
+     * compiled PDF, and the {@link GenerationConfig} word bands re-derived from it.
+     */
+    public static final int CHARS_PER_LINE = 105;
+
+    /**
+     * Estimated rendered line count for a bullet, using the same bold-stripped
+     * character count the length filter uses. Ceiling division: any partial line
+     * still costs a full line of vertical space on the page.
+     */
+    public static int estimatedLines(String text) {
+        return Math.max(1, (int) Math.ceil(charCount(text) / (double) CHARS_PER_LINE));
+    }
 
     /** The configured word band expressed in characters. */
     private static int chars(int words) {
@@ -210,6 +287,93 @@ public final class BulletTextRules {
     public static int charCount(String s) {
         if (s == null || s.isBlank()) return 0;
         return s.replace("**", "").trim().length();
+    }
+
+    /**
+     * Maximum {@code **bold**} spans a bullet is allowed to keep — see {@link #capBoldSpans}.
+     * A bullet bolding 8-12 spans (one shipped example did both) reads as no emphasis at all;
+     * capping at 2 restores the point of bolding in the first place.
+     */
+    public static final int MAX_BOLD_SPANS = 2;
+
+    /**
+     * Bold ceiling for {@code boldDensity=HEAVY}. HEAVY is the user asking for more emphasis,
+     * so it gets more — but still a ceiling, because the failure mode that motivated the cap
+     * was a bullet where eight bolded spans left nothing actually emphasised. Four is the most
+     * a single-line bullet can carry and still read as having highlights rather than being one.
+     */
+    public static final int MAX_BOLD_SPANS_HEAVY = 4;
+
+    /** The bold ceiling for a config's density: NONE and LIGHT keep the default, HEAVY gets more. */
+    public static int maxBoldSpans(GenerationConfig cfg) {
+        return cfg != null && cfg.getBoldDensity() == GenerationConfig.BoldDensity.HEAVY
+                ? MAX_BOLD_SPANS_HEAVY
+                : MAX_BOLD_SPANS;
+    }
+
+    private static final Pattern BOLD_SPAN = Pattern.compile("\\*\\*(.+?)\\*\\*");
+
+    /**
+     * Keeps at most {@link #MAX_BOLD_SPANS} {@code **bold**} spans in a bullet, unwrapping
+     * the rest (words kept, markers dropped) rather than deleting them.
+     *
+     * <p>Survivors are chosen by priority, not just position: a span containing a digit
+     * (a quantified claim — "4 venues", "0ms", "46.44%") wins over one that doesn't, since
+     * that is what a recruiter's eye should land on. Ties within the same priority keep the
+     * earliest span. This is a single pass over the matched spans, reusing {@link #DIGITS}
+     * to test each span's own content rather than a second bold-stripping regex.
+     *
+     * <p>Unpaired {@code **} never matches {@link #BOLD_SPAN} (it requires a closing pair),
+     * so malformed markup just passes through untouched rather than corrupting the text.
+     *
+     * <p>Does not change {@link #charCount}: that method strips every {@code **} occurrence
+     * unconditionally, so unwrapping a losing span (which removes its two markers) leaves the
+     * bold-stripped character count identical. Callers relying on charCount for the length
+     * filter can call this before or after without changing a keep/drop decision.
+     */
+    public static String capBoldSpans(String text) {
+        return capBoldSpans(text, MAX_BOLD_SPANS);
+    }
+
+    /**
+     * As {@link #capBoldSpans(String)}, but with an explicit ceiling so a HEAVY-density config
+     * keeps more emphasis than the default. See {@link #maxBoldSpans(GenerationConfig)}.
+     */
+    public static String capBoldSpans(String text, int maxSpans) {
+        if (text == null || text.isBlank()) return text;
+        Matcher m = BOLD_SPAN.matcher(text);
+        List<int[]> spans = new ArrayList<>();      // [start, end) of each "**...**" match
+        List<String> inner = new ArrayList<>();     // content between the markers
+        List<Boolean> hasDigit = new ArrayList<>();
+        while (m.find()) {
+            spans.add(new int[]{m.start(), m.end()});
+            inner.add(m.group(1));
+            hasDigit.add(DIGITS.matcher(m.group(1)).find());
+        }
+        if (spans.size() <= maxSpans) return text;
+
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < spans.size(); i++) order.add(i);
+        order.sort((a, b) -> {
+            if (!hasDigit.get(a).equals(hasDigit.get(b))) return hasDigit.get(a) ? -1 : 1;
+            return Integer.compare(spans.get(a)[0], spans.get(b)[0]);
+        });
+        Set<Integer> keep = new HashSet<>(order.subList(0, maxSpans));
+
+        StringBuilder sb = new StringBuilder();
+        int last = 0;
+        for (int i = 0; i < spans.size(); i++) {
+            int[] span = spans.get(i);
+            sb.append(text, last, span[0]);
+            if (keep.contains(i)) {
+                sb.append("**").append(inner.get(i)).append("**");
+            } else {
+                sb.append(inner.get(i));
+            }
+            last = span[1];
+        }
+        sb.append(text, last, text.length());
+        return sb.toString();
     }
 
     /**

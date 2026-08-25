@@ -1,5 +1,6 @@
 package com.resumepipeline.bullet;
 
+import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
@@ -34,13 +35,16 @@ public class BulletService {
     private final ProjectService projectService;
     private final LlmClient llm;
     private final LlmUsageService llmUsageService;
+    // Read at persist time for the user's bold ceiling — see BulletTextRules.maxBoldSpans.
+    private final GenerationConfigService configService;
 
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
-                         LlmUsageService llmUsageService) {
+                         LlmUsageService llmUsageService, GenerationConfigService configService) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
         this.llmUsageService = llmUsageService;
+        this.configService = configService;
     }
 
     public List<Bullet> listForProject(UUID userId, UUID projectId) {
@@ -131,7 +135,9 @@ public class BulletService {
      * mutated in place so callers can chain this across categories in a batch. Must be called
      * serially — it is not safe to call concurrently against a shared seenTexts list.
      */
-    private List<Bullet> saveDeduped(UUID projectId, RawGeneration gen, List<String> seenTexts, ProgressLog progress) {
+    private List<Bullet> saveDeduped(UUID userId, UUID projectId, RawGeneration gen,
+                                     List<String> seenTexts, ProgressLog progress) {
+        int maxBold = BulletTextRules.maxBoldSpans(configService.get(userId));
         List<Bullet> saved = new ArrayList<>();
         int dupDropped = 0;
         for (LlmClient.GeneratedBullet g : gen.result().bullets()) {
@@ -139,8 +145,15 @@ public class BulletService {
                 dupDropped++;
                 continue;
             }
-            seenTexts.add(g.text());
-            saved.add(repo.save(new Bullet(projectId, g.text(), g.tags().toArray(new String[0]), gen.category())));
+            // Capped here, once, right before storage: every generation path (single-category
+            // and the parallel bank fan-out) funnels through this method, so this is the one
+            // place that guarantees every persisted bullet has been bold-capped regardless of
+            // which caller produced it. Applied after the dedup check on purpose — isNearDuplicate
+            // already strips ** internally (see wordSet/quantityTokens), so capping first vs.
+            // after cannot change a dedup decision either way.
+            String text = BulletTextRules.capBoldSpans(g.text(), maxBold);
+            seenTexts.add(text);
+            saved.add(repo.save(new Bullet(projectId, text, g.tags().toArray(new String[0]), gen.category())));
         }
         if (dupDropped > 0) {
             progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
@@ -163,7 +176,7 @@ public class BulletService {
         // bullets saved by other calls in the meantime — same behavior as before the split.
         List<String> seenTexts = new ArrayList<>(
                 repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
-        return saveDeduped(projectId, gen, seenTexts, progress);
+        return saveDeduped(userId, projectId, gen, seenTexts, progress);
     }
 
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, ProgressLog progress) {
@@ -204,7 +217,7 @@ public class BulletService {
                 repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
         List<Bullet> combined = new ArrayList<>();
         for (RawGeneration gen : results) {
-            combined.addAll(saveDeduped(projectId, gen, seenTexts, progress));
+            combined.addAll(saveDeduped(userId, projectId, gen, seenTexts, progress));
         }
         progress.emit("Done — generated " + combined.size() + " bullets across " + total + " categories.");
         return combined;
