@@ -2,6 +2,8 @@ package com.resumepipeline.render;
 
 import org.springframework.stereotype.Component;
 
+import java.util.regex.Pattern;
+
 /**
  * Escapes arbitrary text (including LLM output) for safe inclusion in LaTeX.
  *
@@ -17,6 +19,8 @@ public class LatexEscaper {
 
     private static final String BACKSLASH_SENTINEL = "RPBSLASHSENTINEL";
 
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+
     private static final String LDQUO  = String.valueOf((char) 0x201C);
     private static final String RDQUO  = String.valueOf((char) 0x201D);
     private static final String LSQUO  = String.valueOf((char) 0x2018);
@@ -29,7 +33,10 @@ public class LatexEscaper {
     public String escape(String input) {
         if (input == null) return "";
 
-        String s = input;
+        // Collapse all whitespace (incl. newlines) to single spaces: a blank line inside a
+        // \textbf{...}/\textit{...} argument becomes \par and aborts the LaTeX compile with
+        // "Paragraph ended before \text@command was complete".
+        String s = WHITESPACE.matcher(input).replaceAll(" ").trim();
 
         // --- Pass 1: escape LaTeX special chars ---
         s = s.replace("\\", BACKSLASH_SENTINEL);

@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -137,8 +138,24 @@ public class ApplicationController {
         return new ResponseEntity<>(a.getPdfBlob(), h, 200);
     }
 
+    @GetMapping(value = "/{id}/tex", produces = "application/x-tex")
+    public ResponseEntity<byte[]> tex(Authentication auth, @PathVariable UUID id) {
+        Application a = service.get(AuthUtils.userId(auth), id);
+        if (a.getTexBlob() == null || a.getTexBlob().length == 0) {
+            return ResponseEntity.status(404).body("No LaTeX source stored".getBytes(StandardCharsets.UTF_8));
+        }
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.parseMediaType("application/x-tex"));
+        h.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + baseFilename(a) + ".tex\"");
+        return new ResponseEntity<>(a.getTexBlob(), h, 200);
+    }
+
     @GetMapping(value = "/{id}/cover-letter", produces = MediaType.TEXT_PLAIN_VALUE)
     public String coverLetter(Authentication auth, @PathVariable UUID id) {
         return service.get(AuthUtils.userId(auth), id).getCoverLetter();
+    }
+
+    private static String baseFilename(Application a) {
+        return "resume-" + (a.getCompany() == null ? "app" : a.getCompany().replaceAll("\\W+", "_"));
     }
 }

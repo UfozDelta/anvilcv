@@ -15,6 +15,7 @@ export function ApplicationDetail() {
 
   const app = s.app;
   const pdfUrl = api.pdfUrl(`/api/applications/${app.id}/pdf`);
+  const texUrl = api.pdfUrl(`/api/applications/${app.id}/tex`);
   const ogSelection = new Set(app.selectedBulletIds);
   const dirty = !setsEqual(s.selectedIds, ogSelection);
 
@@ -138,8 +139,9 @@ export function ApplicationDetail() {
               </div>
             )}
           </div>
-          <div>
+          <div style={{ display: 'flex', gap: 8 }}>
             <a href={pdfUrl} className="btn btn--sm" target="_blank" rel="noreferrer">↓ DOWNLOAD PDF</a>
+            <a href={texUrl} className="btn btn--sm">↓ DOWNLOAD .TEX</a>
           </div>
 
           <Section num="04.C" title="Cover Letter" />

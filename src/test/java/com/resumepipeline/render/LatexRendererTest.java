@@ -27,6 +27,13 @@ class LatexRendererTest {
         assertTrue(out.contains("Bio: 50\\%"), out);
     }
 
+    // A blank line inside a \textbf{...} argument becomes \par and aborts the LaTeX compile
+    // with "Paragraph ended before \text@command was complete", so escaping must flatten it.
+    @Test void escapeCollapsesNewlines() {
+        assertEquals("a b", new LatexEscaper().escape("a\n\nb"));
+        assertEquals("a b", new LatexEscaper().escape("  a\r\n\tb  "));
+    }
+
     @Test void renderRawDoesNotEscape() {
         String out = renderer.renderRaw(TEMPLATE, Map.of("NAME", "R&D", "BIO", "\\textbf{x}"));
         assertTrue(out.contains("Name: R&D"), out);
