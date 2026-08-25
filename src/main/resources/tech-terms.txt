@@ -1,0 +1,428 @@
+# Canonical technology names for resume project headings.
+# One per line, in the exact casing that should appear on the PDF.
+# Matched case-insensitively against the raw techStack field, longest term first.
+# Comments (#) and blank lines are ignored. Add freely — no code change needed.
+
+# --- languages ---
+Java
+Kotlin
+Scala
+Groovy
+Python
+JavaScript
+TypeScript
+Go
+Rust
+C++
+C#
+Objective-C
+Swift
+Ruby
+PHP
+Perl
+Lua
+R
+MATLAB
+Julia
+Haskell
+OCaml
+Elixir
+Erlang
+Clojure
+F#
+Dart
+Zig
+Nim
+Solidity
+Assembly
+RISC-V
+CUDA
+VHDL
+Verilog
+SQL
+PL/pgSQL
+Bash
+PowerShell
+HTML
+CSS
+Sass
+SCSS
+Less
+GraphQL
+Protobuf
+
+# --- jvm / backend frameworks ---
+Spring Boot
+Spring Security
+Spring Cloud
+Spring
+Hibernate
+Quarkus
+Micronaut
+Vert.x
+Dropwizard
+Jakarta EE
+Ktor
+Play Framework
+Netty
+Maven
+Gradle
+JUnit
+Mockito
+Testcontainers
+Flyway
+Liquibase
+Lombok
+Jackson
+Jsoup
+
+# --- python ---
+Django
+Flask
+FastAPI
+Tornado
+Celery
+SQLAlchemy
+Alembic
+Pydantic
+pandas
+NumPy
+SciPy
+scikit-learn
+PyTorch
+TensorFlow
+Keras
+JAX
+XGBoost
+LightGBM
+CatBoost
+Hugging Face
+Transformers
+LangChain
+LlamaIndex
+spaCy
+NLTK
+OpenCV
+Matplotlib
+Seaborn
+Plotly
+Streamlit
+Gradio
+Jupyter
+Polars
+Dask
+Ray
+asyncio
+multiprocessing
+threading
+pytest
+Poetry
+uv
+
+# --- javascript / frontend ---
+React
+Next.js
+Vue
+Nuxt
+Angular
+Svelte
+SvelteKit
+SolidJS
+Solid
+Preact
+Remix
+Astro
+Ember
+Backbone
+jQuery
+Node.js
+Deno
+Bun
+Express
+NestJS
+Fastify
+Koa
+Hapi
+tRPC
+Socket.IO
+Redux
+Zustand
+MobX
+Recoil
+TanStack Query
+React Query
+React Native
+Expo
+Electron
+Tauri
+Flutter
+Ionic
+Capacitor
+Tailwind CSS
+Tailwind
+Bootstrap
+Material UI
+Chakra UI
+shadcn/ui
+styled-components
+Emotion
+Framer Motion
+D3.js
+D3
+Three.js
+Chart.js
+Recharts
+WebGL
+WebGPU
+Canvas
+WebAssembly
+WebSocket
+WebRTC
+Server-Sent Events
+Service Worker
+Vite
+Webpack
+Rollup
+esbuild
+Turbopack
+Babel
+ESLint
+Prettier
+Biome
+Jest
+Vitest
+Playwright
+Cypress
+Puppeteer
+Selenium
+Storybook
+pnpm
+npm
+Yarn
+
+# --- databases / storage ---
+PostgreSQL
+MySQL
+MariaDB
+SQLite
+Oracle
+SQL Server
+MongoDB
+Redis
+Valkey
+Memcached
+Cassandra
+ScyllaDB
+DynamoDB
+Firestore
+Firebase
+Supabase
+Neon
+PlanetScale
+CockroachDB
+TiDB
+Couchbase
+CouchDB
+Neo4j
+ArangoDB
+InfluxDB
+TimescaleDB
+QuestDB
+ClickHouse
+DuckDB
+Snowflake
+BigQuery
+Redshift
+Databricks
+Elasticsearch
+OpenSearch
+Solr
+Meilisearch
+Typesense
+Algolia
+Pinecone
+Weaviate
+Qdrant
+Milvus
+Chroma
+pgvector
+FAISS
+MinIO
+Parquet
+Avro
+Arrow
+Delta Lake
+Iceberg
+Prisma
+Drizzle
+TypeORM
+Sequelize
+Knex
+
+# --- messaging / streaming ---
+Kafka
+RabbitMQ
+NATS
+Pulsar
+ActiveMQ
+ZeroMQ
+MQTT
+Kinesis
+SQS
+SNS
+Celery
+BullMQ
+Sidekiq
+Temporal
+Airflow
+Dagster
+Prefect
+dbt
+Spark
+Flink
+Beam
+Hadoop
+Hive
+Presto
+Trino
+
+# --- cloud / infra / devops ---
+AWS
+Azure
+Google Cloud
+GCP
+Vercel
+Netlify
+Heroku
+Railway
+Fly.io
+Render
+DigitalOcean
+Cloudflare
+Cloudflare Workers
+Cloudflare Tunnel
+Lambda
+EC2
+ECS
+EKS
+S3
+RDS
+CloudFront
+Route 53
+API Gateway
+Docker
+Docker Compose
+Kubernetes
+Helm
+Istio
+Linkerd
+Nomad
+Terraform
+Pulumi
+Ansible
+Chef
+Puppet
+Vagrant
+Packer
+Jenkins
+GitHub Actions
+GitLab CI
+CircleCI
+Travis CI
+ArgoCD
+Flux
+Nginx
+Apache
+Caddy
+HAProxy
+Traefik
+Envoy
+Consul
+Vault
+etcd
+ZooKeeper
+Prometheus
+Grafana
+Datadog
+New Relic
+Sentry
+Loki
+Jaeger
+OpenTelemetry
+ELK
+Logstash
+Kibana
+Splunk
+PagerDuty
+Linux
+Ubuntu
+Debian
+Alpine
+systemd
+tmux
+Git
+
+# --- ai / llm ---
+OpenAI
+Anthropic
+Claude
+GPT-4
+Gemini
+Llama
+Mistral
+Ollama
+vLLM
+LoRA
+RAG
+BM25
+FAISS
+ONNX
+TensorRT
+Triton
+MLflow
+Weights & Biases
+Kubeflow
+SageMaker
+Bedrock
+Vertex AI
+MCP
+
+# --- protocols / security / standards ---
+REST
+gRPC
+OAuth2
+OAuth
+OIDC
+SAML
+JWT
+LDAP
+Kerberos
+TLS
+mTLS
+SSL
+AES-256-GCM
+AES
+RSA
+ECDSA
+HMAC
+Argon2
+bcrypt
+scrypt
+PBKDF2
+SSO
+CORS
+CSRF
+HTTP/2
+HTTP/3
+QUIC
+TCP
+UDP
+DNS
+FIX
+WebHooks
+Stripe
+Twilio
+SendGrid
+Auth0
+Clerk
+Keycloak

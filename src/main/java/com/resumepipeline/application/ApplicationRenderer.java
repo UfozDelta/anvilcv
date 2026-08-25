@@ -7,6 +7,7 @@ import com.resumepipeline.profile.ProfileService.EducationEntry;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.render.LatexEscaper;
 import com.resumepipeline.render.LatexRenderer;
+import com.resumepipeline.render.TechStackSummary;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -151,8 +152,11 @@ public class ApplicationRenderer {
         for (Map.Entry<UUID, List<Bullet>> g : grouped.entrySet()) {
             Project p = projectById.get(g.getKey());
             String name = p == null ? "Project" : p.getName();
-            String tagSummary = (p != null && p.getTechStack() != null && !p.getTechStack().isBlank())
-                    ? p.getTechStack()
+            // The raw techStack is prose written for the bullet-generation prompt; the heading
+            // needs the handful of technology names inside it. See TechStackSummary.
+            String shortStack = p == null ? "" : TechStackSummary.shorten(p.getTechStack());
+            String tagSummary = !shortStack.isBlank()
+                    ? shortStack
                     : g.getValue().stream()
                         .flatMap(b -> Arrays.stream(b.getTags() == null ? new String[0] : b.getTags()))
                         .distinct().limit(6)
