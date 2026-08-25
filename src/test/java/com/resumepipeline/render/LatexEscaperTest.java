@@ -48,7 +48,31 @@ class LatexEscaperTest {
     }
 
     @Test void unicodeSingleQuotes() {
-        assertEquals("it`s `quoted'", esc.escape("it‘s ‘quoted’"));
+        // U+2018 always becomes a plain apostrophe (never a backtick) — see comment in
+        // LatexEscaper: the LLM emits U+2018 on both ends of a span, so treating it as an
+        // opening quote would render a wrong-facing backtick on the closing side.
+        assertEquals("it's 'quoted'", esc.escape("it‘s ‘quoted‘"));
+    }
+
+    @Test void curlySingleQuoteBothEndsNoBacktick() {
+        // LLM emits U+2018...U+2018 around code identifiers instead of U+2018...U+2019.
+        assertEquals("'Shapiro-Wilk'", esc.escape("‘Shapiro-Wilk‘"));
+        assertEquals("'KS'", esc.escape("‘KS‘"));
+        assertEquals("'asyncio'", esc.escape("‘asyncio‘"));
+    }
+
+    @Test void properlyPairedSingleQuotesAlsoMatch() {
+        // A correctly paired U+2018...U+2019 span still renders as matching apostrophes
+        // (giving up the distinct opening-quote glyph in exchange for consistency).
+        assertEquals("'quoted'", esc.escape("‘quoted’"));
+    }
+
+    @Test void possessiveApostropheSurvives() {
+        assertEquals("4 venues' live rosters", esc.escape("4 venues’ live rosters"));
+    }
+
+    @Test void doubleCurlyQuotesUnaffected() {
+        assertEquals("``hello''", esc.escape("“hello”"));
     }
 
     @Test void emDash()     { assertEquals("a---b", esc.escape("a—b")); }

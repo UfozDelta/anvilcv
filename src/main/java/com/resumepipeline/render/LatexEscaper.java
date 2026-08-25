@@ -52,7 +52,13 @@ public class LatexEscaper {
 
         // --- Pass 2: typographic replacements (emit literal LaTeX) ---
         s = s.replace(LDQUO, "``").replace(RDQUO, "''");
-        s = s.replace(LSQUO, "`").replace(RSQUO, "'");
+        // LSQUO (U+2018) maps to a plain apostrophe, not the LaTeX open-quote backtick.
+        // The LLM frequently emits U+2018 on BOTH ends of a quoted span (e.g. code
+        // identifiers like 'asyncio'), so treating it as an opening quote renders a
+        // wrong-facing backtick on the closing side. We give up correct typography for
+        // the rare properly-paired U+2018...U+2019 case in exchange for never emitting a
+        // mismatched mark — these spans are almost always identifiers, not prose quotes.
+        s = s.replace(LSQUO, "'").replace(RSQUO, "'");
         s = s.replace(EMDASH, "---").replace(ENDASH, "--");
         s = s.replace(HELLIP, "\\ldots{}");
         s = s.replace(NBSP, "~");
