@@ -55,3 +55,7 @@ Thumbs.db
 /.legacy
 handoff.md
 LLM_SETTINGS_PLAN.md
+
+# Generated resumes — real PII, never commit these
+*.pdf
+!docs/**/*.pdf
