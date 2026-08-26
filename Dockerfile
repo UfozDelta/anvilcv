@@ -25,24 +25,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 
 ENV TECTONIC_BIN=/usr/local/bin/tectonic
 
-# Pre-warm tectonic so first PDF compile doesn't download packages at runtime
-RUN printf '%s\n' \
-      '\documentclass{article}' \
-      '\usepackage[empty]{fullpage}' \
-      '\usepackage{titlesec}' \
-      '\usepackage{marvosym}' \
-      '\usepackage[usenames,dvipsnames]{color}' \
-      '\usepackage{verbatim}' \
-      '\usepackage{enumitem}' \
-      '\usepackage[hidelinks]{hyperref}' \
-      '\usepackage{fancyhdr}' \
-      '\usepackage[english]{babel}' \
-      '\usepackage{tabularx}' \
-      '\usepackage{latexsym}' \
-      '\begin{document}warm\end{document}' \
-      > /tmp/warm.tex && \
-    $TECTONIC_BIN /tmp/warm.tex && \
-    rm -f /tmp/warm.tex /tmp/warm.pdf
+# Pre-warm tectonic so a PDF compile never downloads anything at runtime.
+#
+# This used to compile a document whose body was the word "warm". That loaded
+# every \usepackage but rendered one word in one font at one size, so it cached
+# cmr10 and nothing else — \Huge, \scshape, bold, italic and the math fonts a
+# real resume needs were all still misses. Each miss is a network fetch, and a
+# refused fetch fails the compile outright, so users saw "tectonic exit 1" with
+# no PDF whenever the bundle CDN blipped.
+#
+# prewarm.sh compiles the real template instead, so the cache cannot drift from
+# what production actually renders. tr strips CRLF in case of a Windows checkout.
+COPY docker/prewarm.sh /tmp/prewarm/prewarm.sh
+COPY src/main/resources/template/resume.tex /tmp/prewarm/resume.tex
+RUN tr -d '\r' < /tmp/prewarm/prewarm.sh > /tmp/prewarm/run.sh && \
+    sh /tmp/prewarm/run.sh && \
+    rm -rf /tmp/prewarm
 
 COPY --from=build /app/target/resume-pipeline-0.1.0.jar app.jar
 
