@@ -4,7 +4,6 @@ import { groupRankedByProject } from '../lib/groupBullets';
 import { parseRanking } from '../lib/ranking';
 
 const TOP_N = 15;
-const GROUP_CAP = 3;
 
 export function useApplicationDetail(id: string | undefined) {
   const [app, setApp] = useState<ApplicationResponse | null>(null);
@@ -26,11 +25,10 @@ export function useApplicationDetail(id: string | undefined) {
     setApp(a);
     const ranking = parseRanking(a.bulletRanking).sort((x, y) => x.rank - y.rank);
     // Respect saved selection if user already re-rendered; otherwise pre-select top N.
-    if (a.selectedBulletIds.length > 0) {
-      setSelectedIds(new Set(a.selectedBulletIds));
-    } else {
-      setSelectedIds(new Set(ranking.slice(0, TOP_N).map(r => r.bulletId)));
-    }
+    const sel = a.selectedBulletIds.length > 0
+      ? new Set(a.selectedBulletIds)
+      : new Set(ranking.slice(0, TOP_N).map(r => r.bulletId));
+    setSelectedIds(sel);
 
     // Pull all bullets referenced in the ranking so we can display text
     const ids = ranking.map(r => r.bulletId);
@@ -48,6 +46,11 @@ export function useApplicationDetail(id: string | undefined) {
       const map: Record<string, Bullet> = {};
       all.forEach(b => { map[b.id] = b; });
       setBullets(map);
+      // Open the groups that already contribute a selected bullet; collapse the rest.
+      // Key must match groupRankedByProject's bucket key.
+      setExpandedGroups(new Set(
+        ranking.filter(r => sel.has(r.bulletId)).map(r => map[r.bulletId]?.projectId ?? '__other__'),
+      ));
     }
   }
   useEffect(() => { load(); }, [id]);
@@ -120,6 +123,6 @@ export function useApplicationDetail(id: string | undefined) {
     pdfBlobUrl, pdfVersion, setPdfVersion, expandedWhys, showTail, setShowTail,
     expandedGroups, selectedIds, ranking, bulletsReady, grouped,
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
-    TOP_N, GROUP_CAP,
+    TOP_N,
   };
 }

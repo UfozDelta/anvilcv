@@ -213,8 +213,9 @@ public abstract class BaseLlmClient implements LlmClient {
                   • 2-line bullet: %d to %d characters (roughly %d to %d words).
                   • NEVER produce a bullet of %d-%d characters — that range half-fills line 2.
 
-                Default to 2-line bullets where the substance warrants it; reserve 1-liners for crisp
-                accomplishments. Aim for a mix.
+                Aim for a roughly even mix of 1-line and 2-line bullets, and prefer the 1-line form
+                when the substance fits it — a resume is one page, and every 2-liner spends double
+                the vertical space of a 1-liner that lands just as hard.
 
                 ## 2. FORMAT — Google XYZ pattern
 
@@ -267,14 +268,16 @@ public abstract class BaseLlmClient implements LlmClient {
 
                 ─────────────────────────────────────────────────────────────
                 ## EXAMPLES (study these — match this length, bold density, and ending punctuation)
+                ## Two are 1-line and two are 2-line, and every one of them satisfies the character
+                ## targets above. Do not write anything longer than the longest example here.
 
                   ✓ Built a RAG pipeline over **64K** MLS listings with hybrid full-text + vector search, RRF-k fusion, and a semantic cache, cutting query latency under **300ms** and LLM calls by 40%%.
 
-                  ✓ Engineered a real-time geospatial pipeline over **64K live listings** using React-Leaflet, Turf.js, and MongoDB 2dsphere queries with viewport-aware fetching and marker diffing, cutting map re-render from **180ms to 70ms**.
+                  ✓ Engineered a real-time geospatial pipeline over **64K live listings** with React-Leaflet, Turf.js, and MongoDB 2dsphere viewport queries, cutting map re-render from **180ms to 70ms**.
 
-                  ✓ Designed a sub-cent-precision credit ledger powering metered billing across AI, voice, and SMS usage, processing **120K transactions/month** through an append-only audit trail and idempotent **Stripe** webhook integration.
+                  ✓ Designed a sub-cent-precision credit ledger clearing **120K transactions/month**.
 
-                  ✓ Encrypted all third-party OAuth and telephony tokens at rest with **AES-256-GCM**, eliminating plaintext credentials from the database across the multi-tenant platform.
+                  ✓ Encrypted third-party OAuth and telephony tokens at rest with **AES-256-GCM**.
 
                   ✗ Worked on backend stuff using various tools and got things faster.
                     (passive opener, no bolds, no metrics, no period-style impact)

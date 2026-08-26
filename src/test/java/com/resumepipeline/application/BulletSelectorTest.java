@@ -69,23 +69,33 @@ class BulletSelectorTest {
         }
 
         @Test
-        void totalCapEnforced() {
-            // 20 distinct projects, 1 bullet each -> only MAX_TOTAL survive greedy.
+        void entryCapBoundsProjectCountAndTotal() {
+            // 20 candidate projects, each with a full 3-bullet bank. Only MAX_ENTRIES of them
+            // may open, and each opened one is filled to MAX_PER_PROJECT -- so the selection is
+            // exactly MAX_TOTAL bullets spread over MAX_ENTRIES entries, never a long tail of
+            // thin ones. Before the entry cap existed, greedy opened all 20.
             List<Project> projects = new ArrayList<>();
-            List<Bullet> bullets = new ArrayList<>();
+            List<Bullet> ranked1 = new ArrayList<>();
+            List<Bullet> all = new ArrayList<>();
             for (int i = 0; i < 20; i++) {
                 UUID pid = UUID.randomUUID();
                 projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "P" + i));
-                bullets.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
+                Bullet r = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
+                ranked1.add(r);
+                all.add(r);
+                all.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
+                all.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
             }
             List<LlmClient.RankedBullet> ranked = IntStream.range(0, 20)
-                    .mapToObj(i -> TestFixtures.ranked(bullets.get(i).getId(), i + 1))
+                    .mapToObj(i -> TestFixtures.ranked(ranked1.get(i).getId(), i + 1))
                     .toList();
             Map<UUID, Project> projById = projects.stream()
                     .collect(Collectors.toMap(Project::getId, p -> p));
 
-            List<Bullet> out = BulletSelector.select(ranked, byId(bullets), projById, bullets, NO_KEYWORDS);
+            List<Bullet> out = BulletSelector.select(ranked, byId(ranked1), projById, all, NO_KEYWORDS);
 
+            assertEquals(BulletSelector.MAX_ENTRIES,
+                    out.stream().map(Bullet::getProjectId).distinct().count());
             assertEquals(BulletSelector.MAX_TOTAL, out.size());
         }
 
@@ -304,27 +314,6 @@ class BulletSelectorTest {
                     "line budget should bind before the bullet-count cap, got " + out.size());
         }
 
-        @Test
-        void shortBulletsStillReachOldCountUnderLineBudget() {
-            // Short (1-line) bullets easily fit MAX_TOTAL_LINES, so the count cap is what
-            // still binds, same as before the line budget existed.
-            List<Project> projects = new ArrayList<>();
-            List<Bullet> bullets = new ArrayList<>();
-            for (int i = 0; i < 20; i++) {
-                UUID pid = UUID.randomUUID();
-                projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "P" + i));
-                bullets.add(TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]));
-            }
-            List<LlmClient.RankedBullet> ranked = IntStream.range(0, 20)
-                    .mapToObj(i -> TestFixtures.ranked(bullets.get(i).getId(), i + 1))
-                    .toList();
-            Map<UUID, Project> projById = projects.stream()
-                    .collect(Collectors.toMap(Project::getId, p -> p));
-
-            List<Bullet> out = BulletSelector.select(ranked, byId(bullets), projById, bullets, NO_KEYWORDS);
-
-            assertEquals(BulletSelector.MAX_TOTAL, out.size());
-        }
 
         @Test
         void nearDuplicateBulletIsRejectedEvenWhenBothRankedHighest() {
@@ -396,21 +385,27 @@ class BulletSelectorTest {
             // comment in BulletSelector pass 2), permanently dropping the count by one and
             // leaving min-fill free to pad the target project back up from the bank.
             //
-            // Layout: 6 filler PROJECT entries (1 short bullet each) + 1 target PROJECT with 3
-            // short bullets (t1, t2, t3) = 9 bullets / 9 lines, well under MAX_TOTAL (15) and
-            // MAX_TOTAL_LINES (26). The target is uniquely "fullest" (count 3, fillers count 1
-            // each), so eviction always picks its worst-ranked bullet: t3.
+            // Layout: 4 filler PROJECT entries (1 short bullet each) + 1 target PROJECT with 3
+            // short bullets (t1, t2, t3) = 7 bullets / 7 lines, well under MAX_TOTAL and
+            // MAX_TOTAL_LINES. Four fillers, not six: MAX_ENTRIES caps how many projects greedy
+            // may open, and the target has to be one of them for it to be the eviction victim.
+            // The target is uniquely "fullest" (count 3, fillers count 1 each), so eviction
+            // always picks its worst-ranked bullet: t3.
             //
-            // exp1 is an oversized (~20-line) EXPERIENCE candidate: adding it would blow the
+            // exp1 is an oversized (~39-line) EXPERIENCE candidate: adding it would blow the
             // line budget even after evicting t3, so it gets evicted-and-skipped, permanently
             // freeing t3's slot. exp2 is a normal-sized EXPERIENCE candidate that then fits
             // directly. Finally, bankNearDup — a near-duplicate of t3's text, offered only
             // through the min-fill bank fallback (never ranked) — must be admitted for the
             // target project once t3's text is no longer in the "already selected" set.
+            //
+            // This also pins the pass-4 side of the same rule: the floor pass matches on the
+            // LIVE selection rather than on selectedIds, so t3 is eligible again — but the
+            // target is already back to MAX_PER_PROJECT via bankNearDup, so t3 stays out.
             List<Project> projects = new ArrayList<>();
             List<Bullet> rankedBullets = new ArrayList<>();
             List<Bullet> all = new ArrayList<>();
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < 4; i++) {
                 UUID pid = UUID.randomUUID();
                 projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "Filler" + i));
                 Bullet b = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
@@ -433,7 +428,7 @@ class BulletSelectorTest {
             projects.add(TestFixtures.project(exp1, Project.Kind.EXPERIENCE, "E1"));
             projects.add(TestFixtures.project(exp2, Project.Kind.EXPERIENCE, "E2"));
             Bullet e1 = TestFixtures.bullet(UUID.randomUUID(), exp1, new String[0]);
-            e1.setText("x".repeat(2000)); // ~20 lines — cannot fit even after one eviction
+            e1.setText("x".repeat(4000)); // ~39 lines — cannot fit even after one eviction
             Bullet e2 = TestFixtures.bullet(UUID.randomUUID(), exp2, new String[0]);
             rankedBullets.add(e1); rankedBullets.add(e2);
             all.add(e1); all.add(e2);
@@ -458,6 +453,95 @@ class BulletSelectorTest {
             assertTrue(ids(out).contains(bankNearDup.getId()),
                     "bank near-duplicate of the evicted bullet is admitted once the evicted text is gone");
             assertTrue(out.size() <= BulletSelector.MAX_TOTAL);
+        }
+
+        /**
+         * The invariant itself, asserted directly rather than inferred from a bullet count:
+         * every project that survives selection carries MAX_PER_PROJECT bullets, or its whole
+         * dedup-admissible bank when that bank holds fewer. No entry is ever a stub.
+         */
+        private static void assertNoStubEntries(List<Bullet> out, List<Bullet> all) {
+            Map<UUID, List<Bullet>> bank = all.stream()
+                    .collect(Collectors.groupingBy(Bullet::getProjectId));
+            for (UUID pid : out.stream().map(Bullet::getProjectId).distinct().toList()) {
+                long have = out.stream().filter(b -> b.getProjectId().equals(pid)).count();
+                int available = bank.getOrDefault(pid, List.of()).size();
+                assertEquals(Math.min(BulletSelector.MAX_PER_PROJECT, available), have,
+                        "project " + pid + " must carry min(MAX_PER_PROJECT, bank), got " + have
+                                + " of a " + available + "-bullet bank");
+            }
+        }
+
+        @Test
+        void everySurvivingProjectIsFilledToTheFloorUnderLineBudgetPressure() {
+            // The shipped-PDF shape: more projects than the page can hold, every bullet a
+            // 2-line ~180-char bullet, so the line budget binds hard. Before the floor pass,
+            // greedy spent the page on the top entries and left the tail at one bullet each.
+            // Now the page is spent in whole entries and no stub survives.
+            List<Project> projects = new ArrayList<>();
+            List<Bullet> rankedBullets = new ArrayList<>();
+            List<Bullet> all = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                UUID pid = UUID.randomUUID();
+                projects.add(TestFixtures.project(pid, Project.Kind.PROJECT, "P" + i));
+                for (int j = 0; j < 3; j++) {
+                    Bullet b = TestFixtures.bullet(UUID.randomUUID(), pid, new String[0]);
+                    b.setText("p" + i + "b" + j + "-" + "x".repeat(180)); // 2 lines each
+                    rankedBullets.add(b);
+                    all.add(b);
+                }
+            }
+            List<LlmClient.RankedBullet> ranked = IntStream.range(0, rankedBullets.size())
+                    .mapToObj(i -> TestFixtures.ranked(rankedBullets.get(i).getId(), i + 1))
+                    .toList();
+            Map<UUID, Project> projById = projects.stream()
+                    .collect(Collectors.toMap(Project::getId, p -> p));
+
+            List<Bullet> out = BulletSelector.select(ranked, byId(rankedBullets), projById, all, NO_KEYWORDS);
+
+            assertNoStubEntries(out, all);
+            assertFalse(out.isEmpty(), "budget pressure must not empty the resume");
+            int lines = out.stream()
+                    .mapToInt(b -> com.resumepipeline.llm.BulletTextRules.estimatedLines(b.getText()))
+                    .sum();
+            assertTrue(lines <= BulletSelector.MAX_TOTAL_LINES,
+                    "trim must bring the page back inside the line budget, got " + lines);
+        }
+
+        @Test
+        void nearDuplicateIsSteppedOverSoTheProjectStillReachesTheFloor() {
+            // Dedup outranks the floor, but it does not *lower* the floor: a collision at rank 2
+            // is stepped over by pulling deeper into the bank, so the project still ships three
+            // distinct bullets. Fewer is only correct once the admissible bank is exhausted --
+            // see nearDuplicateBulletIsRejectedEvenWhenBothRankedHighest for that case.
+            UUID proj = UUID.randomUUID();
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            Bullet keep = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            keep.setText("Built a data pipeline processing 10000 records daily using Kafka and "
+                    + "Spark for real time analytics.");
+            Bullet dupe = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            dupe.setText("Built a data pipeline processing 10000 records daily using Kafka and "
+                    + "Spark for real time reporting.");
+            Bullet clean1 = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            clean1.setText("Shipped a 5-role RBAC layer over Clerk JWTs covering every admin route.");
+            Bullet clean2 = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            clean2.setText("Migrated the billing ledger onto append-only Postgres partitions.");
+            List<Bullet> all = List.of(keep, dupe, clean1, clean2);
+
+            // dupe is ranked second — directly in the path of the fill.
+            List<LlmClient.RankedBullet> ranked = List.of(
+                    TestFixtures.ranked(keep.getId(), 1),
+                    TestFixtures.ranked(dupe.getId(), 2),
+                    TestFixtures.ranked(clean1.getId(), 3),
+                    TestFixtures.ranked(clean2.getId(), 4));
+
+            List<Bullet> out = BulletSelector.select(ranked, byId(all),
+                    projectsById(p), all, NO_KEYWORDS);
+
+            assertEquals(BulletSelector.MAX_PER_PROJECT, out.size(),
+                    "the duplicate is stepped over, not surrendered to");
+            assertFalse(ids(out).contains(dupe.getId()), "near-duplicate never lands");
+            assertTrue(ids(out).containsAll(List.of(keep.getId(), clean1.getId(), clean2.getId())));
         }
 
         @Test

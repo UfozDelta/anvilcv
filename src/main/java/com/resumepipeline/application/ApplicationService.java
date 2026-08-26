@@ -187,8 +187,8 @@ public class ApplicationService {
                 .sorted(Comparator.comparingInt(LlmClient.RankedBullet::rank))
                 .toList();
 
-        progress.emit("Selecting top " + BulletSelector.MAX_TOTAL + " bullets (max "
-                + BulletSelector.MAX_PER_PROJECT + " per project)...");
+        progress.emit("Selecting up to " + BulletSelector.MAX_ENTRIES + " entries at "
+                + BulletSelector.MAX_PER_PROJECT + " bullets each...");
         List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, kwLower);
 
         // Rebuild the per-project / per-kind summary for the progress stream.

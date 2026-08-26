@@ -82,7 +82,6 @@ export function ApplicationDetail() {
                       selectedIds={s.selectedIds}
                       expandedWhys={s.expandedWhys}
                       bullets={s.bullets}
-                      groupCap={s.GROUP_CAP}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
@@ -101,7 +100,6 @@ export function ApplicationDetail() {
                       selectedIds={s.selectedIds}
                       expandedWhys={s.expandedWhys}
                       bullets={s.bullets}
-                      groupCap={s.GROUP_CAP}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
