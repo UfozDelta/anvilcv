@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
-import { api, type Project, type Bullet, CATEGORIES } from '../lib/api';
+import { api, type Project, type Bullet, type RefitResponse, CATEGORIES } from '../lib/api';
 import { parseExtract } from '../lib/parseExtract';
+import { fitOf, needsRefit } from '../lib/bulletLength';
+import { useGenerationConfig } from './useGenerationConfig';
 
 export function useProjectDetail(id: string | undefined) {
   const [project, setProject] = useState<Project | null>(null);
@@ -33,6 +35,10 @@ export function useProjectDetail(id: string | undefined) {
   const [editLocation, setEditLocation] = useState('');
   const [editDates, setEditDates] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [refitting, setRefitting] = useState(false);
+  const [refitMsg, setRefitMsg] = useState<string | null>(null);
+  // The user's length bands, for the per-row fit badge and the REFIT button's count.
+  const { cfg } = useGenerationConfig();
 
   async function load() {
     if (!id) return;
@@ -121,6 +127,28 @@ export function useProjectDetail(id: string | undefined) {
     setEditing(null);
     await load();
   }
+  /**
+   * Bullets whose rendered length misses the configured bands. Counted over the whole bank,
+   * not the visible tab, because the refit endpoint acts on the whole project.
+   */
+  const offBandIds = useMemo(
+    () => new Set(bullets.filter(b => needsRefit(fitOf(b.text, cfg))).map(b => b.id)),
+    [bullets, cfg]);
+
+  async function refitBullets() {
+    if (!id || offBandIds.size === 0) return;
+    setRefitting(true); setRefitMsg(null); setErr(null);
+    try {
+      const r = await api.post<RefitResponse>(`/api/projects/${id}/bullets/refit`);
+      setBullets(r.bullets);
+      setRefitMsg(`${r.rewritten} REWRITTEN · ${r.unchanged} KEPT`);
+    } catch (e: any) {
+      setErr(e?.message || 'Refit failed');
+    } finally {
+      setRefitting(false);
+    }
+  }
+
   async function delBullet(b: Bullet) {
     if (!confirm(`Delete this bullet?`)) return;
     await api.del(`/api/bullets/${b.id}`);
@@ -196,6 +224,7 @@ export function useProjectDetail(id: string | undefined) {
     editLocation, setEditLocation, editDates, setEditDates,
     editDescription, setEditDescription,
     load, generateBank, addBullet, saveBullet, delBullet, setBulletStatus,
+    cfg, offBandIds, refitting, refitMsg, refitBullets,
     categoryMap, grouped, visibleGroups, flatByDate, presentCats,
   };
 }

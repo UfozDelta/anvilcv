@@ -141,6 +141,17 @@ export function ProjectDetail() {
           >{s.adding ? '✕ CANCEL' : '＋ ADD BULLET'}</button>
           <button
             className="btn btn--sm"
+            onClick={s.refitBullets}
+            disabled={s.refitting || s.offBandIds.size === 0}
+            title="Rewrite bullets whose length misses the page bands"
+            style={{ background: 'var(--paper)', color: 'var(--ink)', borderColor: 'var(--ink)', marginRight: 8 }}
+          >
+            {s.refitting
+              ? <span className="spinner">REFITTING</span>
+              : s.offBandIds.size === 0 ? 'ALL FIT' : `REFIT ${s.offBandIds.size}`}
+          </button>
+          <button
+            className="btn btn--sm"
             onClick={() => s.setSortMode('category')}
             style={{ background: s.sortMode === 'category' ? 'var(--ink)' : 'var(--paper)', color: s.sortMode === 'category' ? 'var(--paper)' : 'var(--ink)' }}
           >BY CATEGORY</button>
@@ -151,6 +162,10 @@ export function ProjectDetail() {
           >BY DATE</button>
         </div>
       </div>
+
+      {s.refitMsg && (
+        <div className="label muted" style={{ marginBottom: 10 }}>{s.refitMsg}</div>
+      )}
 
       {s.adding && (
         <AddBullet onSave={s.addBullet} onCancel={() => s.setAdding(false)} />
@@ -260,9 +275,9 @@ export function ProjectDetail() {
             )}
           </div>
           {g.rows.map((b, i) => s.editing === b.id ? (
-            <EditBullet key={b.id} bullet={b} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
+            <EditBullet key={b.id} bullet={b} cfg={s.cfg} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
           ) : (
-            <BulletRow key={b.id} bullet={b} index={i} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+            <BulletRow key={b.id} bullet={b} index={i} cfg={s.cfg} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
               onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')} />
           ))}
         </div>
@@ -274,9 +289,9 @@ export function ProjectDetail() {
           {s.flatByDate.map((b, i) => {
             const cat = s.categoryMap.get(b.category);
             return s.editing === b.id ? (
-              <EditBullet key={b.id} bullet={b} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
+              <EditBullet key={b.id} bullet={b} cfg={s.cfg} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
             ) : (
-              <BulletRow key={b.id} bullet={b} index={i} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+              <BulletRow key={b.id} bullet={b} index={i} cfg={s.cfg} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
                 onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')}
                 categoryLabel={cat} />
             );

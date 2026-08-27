@@ -1,5 +1,6 @@
 package com.resumepipeline.bullet;
 
+import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
@@ -17,11 +18,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 @Service
 public class BulletService {
@@ -84,6 +87,116 @@ public class BulletService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bullet not found: " + bulletId));
         projectService.get(userId, b.getProjectId()); // verify ownership
         repo.deleteById(bulletId);
+    }
+
+    /**
+     * Outcome of a refit run: how many bullets were off-band to begin with, how many came back
+     * rewritten into a valid band, and how many were left exactly as they were.
+     */
+    public record RefitOutcome(int checked, int offBand, int rewritten, int unchanged, List<Bullet> bullets) {}
+
+    /**
+     * Re-measure every bullet on a project against the user's current length bands and rewrite
+     * the ones that miss. This is the post-hoc counterpart to the generation-time recovery pass:
+     * bullets that were hand-added, hand-edited, or generated under different band settings have
+     * never been measured, and an over-length one costs whole projects their place on the page
+     * (see {@code BulletSelector}'s line budget).
+     *
+     * <p>A rewrite is accepted only if it is an improvement on every axis that matters. It must
+     * land in a valid band, must not open weakly, and must not carry a quantity the original did
+     * not already state -- the original bullet is the source context for
+     * {@link BulletTextRules#fabricatedNumbers}, so a refit can shorten and rephrase but can
+     * never invent a metric to reach a band. Anything failing those checks leaves the stored
+     * bullet untouched: the worst case of this button is that nothing changes, never that a
+     * bullet gets worse.
+     */
+    public RefitOutcome refit(UUID userId, UUID projectId, ProgressLog progress) {
+        projectService.get(userId, projectId); // verify ownership
+        GenerationConfig cfg = configService.get(userId);
+        List<Bullet> all = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
+
+        List<Bullet> offBand = all.stream()
+                .filter(b -> BulletTextRules.decide(BulletTextRules.charCount(b.getText()), cfg)
+                        != BulletTextRules.Decision.KEPT)
+                .toList();
+
+        if (offBand.isEmpty()) {
+            progress.emit("All " + all.size() + " bullet(s) already fit the length bands.");
+            log.info("BULLET_REFIT project={} checked={} off_band=0 (no LLM call)", projectId, all.size());
+            return new RefitOutcome(all.size(), 0, 0, 0, all);
+        }
+        progress.emit(offBand.size() + " of " + all.size() + " bullet(s) miss the length bands.");
+
+        TokenAccumulator tokens = new TokenAccumulator();
+        LlmClient.RefitResult result;
+        try {
+            result = llm.refitBullets(new LlmClient.RefitRequest(userId, offBand.stream()
+                    .map(b -> new LlmClient.BulletToRefit(b.getId().toString(), b.getText()))
+                    .toList()), progress, tokens);
+        } finally {
+            llmUsageService.record(userId, "bullet_refit", tokens, null, projectId);
+        }
+
+        // By id, not by position: a model that drops or reorders entries must not be able to
+        // write one bullet's rewrite over a different bullet's row.
+        Map<String, Bullet> byId = offBand.stream()
+                .collect(Collectors.toMap(b -> b.getId().toString(), b -> b));
+        int maxBold = BulletTextRules.maxBoldSpans(cfg);
+        // Dedup is against every OTHER bullet on the project, so a rewrite cannot converge onto
+        // a bullet that already exists -- including one that was in band and never sent.
+        List<String> otherTexts = new ArrayList<>(all.stream().map(Bullet::getText).toList());
+
+        int rewritten = 0;
+        for (LlmClient.BulletToRefit r : result.bullets()) {
+            Bullet b = byId.remove(r.id());
+            if (b == null) continue;                       // unknown or duplicated id
+            String text = BulletTextRules.capBoldSpans(BulletTextRules.ensureTerminalPeriod(r.text()), maxBold);
+            String reject = rejectRefit(text, b.getText(), cfg, otherTexts);
+            if (reject != null) {
+                progress.emit("Kept original (" + reject + "): " + abbreviate(b.getText()));
+                continue;
+            }
+            int before = BulletTextRules.charCount(b.getText());
+            otherTexts.remove(b.getText());
+            otherTexts.add(text);
+            b.setText(text);
+            repo.save(b);
+            rewritten++;
+            progress.emit("Refit " + before + "c -> " + BulletTextRules.charCount(text) + "c");
+        }
+
+        int unchanged = offBand.size() - rewritten;
+        log.info("BULLET_REFIT project={} checked={} off_band={} rewritten={} unchanged={}",
+                projectId, all.size(), offBand.size(), rewritten, unchanged);
+        progress.emit("Refit done: " + rewritten + " rewritten, " + unchanged + " left as they were.");
+        return new RefitOutcome(all.size(), offBand.size(), rewritten, unchanged,
+                repo.findByProjectIdOrderByCreatedAtAsc(projectId));
+    }
+
+    /**
+     * Why a proposed rewrite is not good enough to replace {@code original}, or null to accept it.
+     * Every check that guards generated bullets applies here too, plus one that only makes sense
+     * for a rewrite: the replacement must not be measurably worse than what it replaces.
+     */
+    private static String rejectRefit(String text, String original, GenerationConfig cfg, List<String> others) {
+        if (text.isBlank()) return "empty rewrite";
+        if (text.equals(original)) return "unchanged by model";
+        if (BulletTextRules.decide(BulletTextRules.charCount(text), cfg) != BulletTextRules.Decision.KEPT) {
+            return "rewrite still off-band at " + BulletTextRules.charCount(text) + "c";
+        }
+        if (BulletTextRules.hasForbiddenOpener(text)) return "rewrite opens weakly";
+        // Source context is the ORIGINAL bullet: a refit may only restate numbers it was given.
+        List<String> fabricated = BulletTextRules.fabricatedNumbers(text, original);
+        if (!fabricated.isEmpty()) return "rewrite invented " + String.join(", ", fabricated);
+        List<String> rivals = new ArrayList<>(others);
+        rivals.remove(original);
+        if (BulletTextRules.isNearDuplicate(text, rivals)) return "rewrite duplicates another bullet";
+        return null;
+    }
+
+    private static String abbreviate(String s) {
+        if (s == null) return "";
+        return s.length() <= 60 ? s : s.substring(0, 57) + "...";
     }
 
     /** Single un-categorized generation. Persists bullets with category="general". */

@@ -87,6 +87,21 @@ public class ProjectController {
                 .stream().map(BulletResponse::from).toList();
     }
 
+    /**
+     * Re-measure this project's bullets against the user's length bands and rewrite the ones
+     * that miss. Synchronous: it is a single LLM call over one batch, and it makes no call at
+     * all when every bullet already fits.
+     */
+    @PostMapping("/{id}/bullets/refit")
+    public RefitResponse refitBullets(Authentication auth, @PathVariable UUID id) {
+        BulletService.RefitOutcome r = bullets.refit(AuthUtils.userId(auth), id, ProgressLog.noOp());
+        return new RefitResponse(r.checked(), r.offBand(), r.rewritten(), r.unchanged(),
+                r.bullets().stream().map(BulletResponse::from).toList());
+    }
+
+    public record RefitResponse(int checked, int offBand, int rewritten, int unchanged,
+                                List<BulletResponse> bullets) {}
+
     @PostMapping("/{id}/bullets/generate-bank/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public SubmitResponse generateBankSubmit(Authentication auth, @PathVariable UUID id,

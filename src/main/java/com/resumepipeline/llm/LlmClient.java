@@ -5,7 +5,7 @@ import com.resumepipeline.progress.ProgressLog;
 import java.util.List;
 
 /**
- * LLM abstraction. Three methods, one per pipeline LLM call.
+ * LLM abstraction. One method per pipeline LLM call.
  * Each method accepts a ProgressLog so callers can stream real-time events to
  * the browser via SSE. Pass ProgressLog.noOp() when streaming is not needed.
  */
@@ -16,6 +16,15 @@ public interface LlmClient {
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
     RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens);
+
+    /**
+     * Rewrite already-persisted bullets whose rendered length falls outside the user's
+     * configured bands, so they stop pushing the rendered resume onto a second page.
+     * Unlike {@link #generateBullets} this writes no new content: each returned bullet is a
+     * rephrasing of the one it shares an id with, and the caller re-runs the same length and
+     * fabricated-metric checks before persisting anything.
+     */
+    RefitResult refitBullets(RefitRequest req, ProgressLog progress, TokenAccumulator tokens);
 
     String coverLetter(CoverLetterRequest req, ProgressLog progress, TokenAccumulator tokens);
 
@@ -46,6 +55,14 @@ public interface LlmClient {
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     record GeneratedBullet(String text, List<String> tags) {}
+
+    /**
+     * A batch of over/under-length bullets to rewrite. Ids are opaque to the LLM layer and
+     * exist only so the caller can map replies back to rows — the reply order is not trusted.
+     */
+    record RefitRequest(java.util.UUID userId, List<BulletToRefit> bullets) {}
+    record BulletToRefit(String id, String text) {}
+    record RefitResult(List<BulletToRefit> bullets) {}
 
     record JdCleanResult(String cleanJd, String company, String role, List<String> keywords) {}
 

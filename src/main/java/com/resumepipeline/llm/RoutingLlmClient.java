@@ -57,6 +57,11 @@ public class RoutingLlmClient implements LlmClient {
         return current().coverLetter(req, progress, tokens);
     }
 
+    @Override
+    public RefitResult refitBullets(RefitRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        return current().refitBullets(req, progress, tokens);
+    }
+
     /** The delegate for the settings as they stand right now. */
     // ponytail: unsynchronised read-then-write. BulletService generates categories in
     // parallel, so concurrent callers can each build a client and the last one wins.

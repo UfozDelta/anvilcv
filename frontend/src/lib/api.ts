@@ -86,6 +86,15 @@ export interface Bullet {
   updatedAt: string;
 }
 
+/** Result of POST /api/projects/{id}/bullets/refit — `bullets` is the project's full bank after the pass. */
+export interface RefitResponse {
+  checked: number;
+  offBand: number;
+  rewritten: number;
+  unchanged: number;
+  bullets: Bullet[];
+}
+
 export const CATEGORIES: { slug: string; label: string; blurb: string }[] = [
   { slug: 'ai-ml',    label: 'AI / ML',           blurb: 'RAG, agents, embeddings, prompt design' },
   { slug: 'backend',  label: 'Backend & Data',    blurb: 'APIs, schemas, indexes, migrations' },

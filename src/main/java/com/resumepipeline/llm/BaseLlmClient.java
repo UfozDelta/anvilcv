@@ -385,13 +385,7 @@ public abstract class BaseLlmClient implements LlmClient {
                                        int newNeeded, GenerationConfig cfg) {
         StringBuilder sb = new StringBuilder(
                 "\n─────────────────────────────────────────────────────────────\n## RECOVERY PASS\n\n");
-        sb.append(("Bullets must be EITHER %d-%d characters (fills 1 line) OR %d-%d characters (fills\n"
-                 + "2 lines). The %d-%d character range is forbidden — it half-fills line 2. NEVER exceed\n"
-                 + "%d characters — that spills onto a third line.\n\n")
-                .formatted(BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
-                        BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg),
-                        BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
-                        BulletTextRules.doubleHighChars(cfg)));
+        sb.append(bandRules(cfg));
 
         // Grouped by reason: a bullet cut for length and a bullet cut for its opening verb need
         // opposite instructions, and a single blended one ("rewrite this") gets both done badly.
@@ -426,6 +420,99 @@ public abstract class BaseLlmClient implements LlmClient {
         }
         sb.append("Return the rewritten bullets and any new bullets together in the bullets array.\n");
         return sb.toString();
+    }
+
+    /**
+     * The configured length bands as prompt text. Shared by the generation recovery pass and
+     * {@link #refitBullets} so both state the same rule -- a bullet rewritten by one and then
+     * by the other must not be chasing two different targets.
+     */
+    private static String bandRules(GenerationConfig cfg) {
+        return ("Bullets must be EITHER %d-%d characters (fills 1 line) OR %d-%d characters (fills\n"
+              + "2 lines). The %d-%d character range is forbidden — it half-fills line 2. NEVER exceed\n"
+              + "%d characters — that spills onto a third line.\n\n")
+                .formatted(BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
+                        BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg),
+                        BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
+                        BulletTextRules.doubleHighChars(cfg));
+    }
+
+    // -------- refitBullets --------
+
+    /**
+     * One call for the whole batch, not one per bullet: the band rules are the bulk of the
+     * prompt, and repeating them per bullet would pay for them N times over.
+     *
+     * <p>Nothing the model returns is trusted here. Replies are matched back to the request by
+     * id (order and completeness are not assumed), and the caller re-runs the length and
+     * fabricated-metric checks before any of it reaches the database -- see
+     * {@code BulletService.refit}.
+     */
+    @Override
+    public RefitResult refitBullets(RefitRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        if (req.bullets() == null || req.bullets().isEmpty()) return new RefitResult(List.of());
+        GenerationConfig cfg = configService.get(req.userId());
+
+        StringBuilder list = new StringBuilder();
+        for (BulletToRefit b : req.bullets()) {
+            list.append("  - id: ").append(b.id()).append("\n")
+                .append("    text: ").append(b.text()).append("\n\n");
+        }
+
+        String prompt = """
+                Rewrite each resume bullet below so its rendered length lands in a valid band.
+
+                %s## RULES
+
+                  - Return EVERY bullet listed below, each carrying back the SAME id it was given.
+                  - Keep the same facts, metrics, technologies and meaning. This is a rephrasing to
+                    hit a length: change the wording and the level of detail, nothing else.
+                  - NEVER invent a number, percentage, duration or scale that is not already in the
+                    bullet you were given. If you cannot reach the band without one, cut detail
+                    instead. A rewrite carrying a new number will be rejected.
+                  - Keep the strong action verb the bullet opens with. Never open with "Worked on",
+                    "Helped with", "Was responsible for", "Assisted", "Contributed to" or
+                    "Collaborated on".
+                  - Keep at most %d **double asterisk** bold span(s), on the biggest quantified
+                    claim or the marquee technology.
+                  - End every bullet with a period.
+
+                ## BULLETS TO REWRITE
+
+                %s
+                """.formatted(bandRules(cfg), BulletTextRules.maxBoldSpans(cfg), list);
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                        "id", SchemaSpec.string(),
+                        "text", SchemaSpec.string()
+                )), List.of("id", "text")))
+        )), List.of("bullets"));
+
+        progress.emit("Refitting " + req.bullets().size() + " bullet(s) to the length bands...");
+        String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(),
+                progress, tokens, false, "Refit");
+
+        RefitEnvelope env;
+        try {
+            env = mapper.readValue(json, RefitEnvelope.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM refit response: " + json, e);
+        }
+        if (env.bullets == null) {
+            log.warn("LLM refit response had no 'bullets' array: {}", abbreviate(json));
+            progress.emit("LLM returned no bullets array.");
+            return new RefitResult(List.of());
+        }
+
+        List<BulletToRefit> out = new ArrayList<>();
+        for (RefitJson r : env.bullets) {
+            if (r == null || r.id == null || r.text == null || r.text.isBlank()) continue;
+            out.add(new BulletToRefit(r.id, BulletTextRules.ensureTerminalPeriod(r.text)));
+        }
+        log.info("BULLET_REFIT requested={} returned={} in_tok={} out_tok={}",
+                req.bullets().size(), out.size(), tokens.getPromptTokens(), tokens.getCandidatesTokens());
+        return new RefitResult(out);
     }
 
     /**
@@ -839,6 +926,10 @@ public abstract class BaseLlmClient implements LlmClient {
     protected static class BulletsEnvelope { public List<BulletJson> bullets; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class BulletJson { public String text; public List<String> tags; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class RefitEnvelope { public List<RefitJson> bullets; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class RefitJson { public String id; public String text; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class JdCleanEnvelope {
         public String cleanJd; public String company; public String role; public List<String> keywords;
