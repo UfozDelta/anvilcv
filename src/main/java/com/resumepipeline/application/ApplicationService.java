@@ -233,6 +233,39 @@ public class ApplicationService {
                 + " db=" + filledSkills.get("databases").size()
                 + " devops=" + filledSkills.get("devops").size());
 
+        // ATS report, narrowed to what actually lands on the page.
+        //
+        // The LLM is asked for keywords appearing in "the top 8 bullets", but the rendered
+        // set is whatever BulletSelector returns — never literally the top 8, since passes
+        // 2-4 evict, pad from the raw bank, and drop whole entries. The LLM also matches
+        // semantically ("React" from "front-end work"), which overstates what an ATS scanner
+        // — a literal keyword matcher — will find. So keep its list and intersect it with a
+        // literal match against the rendered text.
+        //
+        // The corpus is everything the template emits, not just bullets: the skills block and
+        // coursework render too (see ApplicationRenderer), so a keyword living only in
+        // skills_devops is on the PDF and must not be reported missing.
+        List<String> renderedParts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
+        filledSkills.values().forEach(renderedParts::addAll);
+        renderedParts.addAll(selectedCourses);
+        String renderedText = String.join("\n", renderedParts);
+
+        Set<String> llmMatched = rank.atsMatched().stream()
+                .map(String::toLowerCase).collect(Collectors.toSet());
+        // Iterate clean.keywords(), not kwLower — these strings render as chips in the UI and
+        // should keep the JD's own casing ("PostgreSQL", not "postgresql").
+        List<String> atsMatched = new ArrayList<>();
+        List<String> atsMissing = new ArrayList<>();
+        for (String k : clean.keywords()) {
+            if (llmMatched.contains(k.toLowerCase()) && KeywordScorer.mentions(renderedText, k)) {
+                atsMatched.add(k);
+            } else {
+                atsMissing.add(k);
+            }
+        }
+        progress.emit("ATS on rendered page: " + atsMatched.size() + "/" + clean.keywords().size()
+                + " matched (LLM claimed " + rank.atsMatched().size() + ")");
+
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
         PipelineTimer tRender = PipelineTimer.start("LaTeX render");
@@ -276,8 +309,8 @@ public class ApplicationService {
         a.setCompany(clean.company());
         a.setRole(clean.role());
         a.setCoverLetter(coverLetterText);
-        a.setAtsMatched(rank.atsMatched().toArray(new String[0]));
-        a.setAtsMissing(rank.atsMissing().toArray(new String[0]));
+        a.setAtsMatched(atsMatched.toArray(new String[0]));
+        a.setAtsMissing(atsMissing.toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
         a.setSelectedCourses(selectedCourses.toArray(new String[0]));
         try {

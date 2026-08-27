@@ -96,6 +96,27 @@ public final class KeywordScorer {
     }
 
     /**
+     * Which of {@code keywordsLower} this bullet covers, in canonical form — the same
+     * text-and-tag matching {@link #score} counts, exposed as a set instead of a total.
+     *
+     * <p>A count says how good a bullet is alone; a set says what it adds to bullets already
+     * chosen. Selection needs the second: a third bullet repeating keywords the first two
+     * already carry adds nothing an ATS or a recruiter can see, while one carrying a keyword
+     * the page is still missing does.
+     */
+    public static Set<String> matched(Bullet b, Set<String> keywordsLower) {
+        Set<String> present = new HashSet<>(forms(b.getText()));
+        for (String tag : b.getTags() == null ? new String[0] : b.getTags()) {
+            String c = canonical(tag);
+            if (!c.isBlank()) present.add(c);
+        }
+        return keywordsLower.stream()
+                .map(KeywordScorer::canonical)
+                .filter(k -> !k.isBlank() && present.contains(k))
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * True when {@code text} actually mentions {@code term}, using the same normalisation
      * as scoring — so a bullet saying "K8s" mentions "kubernetes". Used to check that the
      * tags an LLM attaches to a bullet are things it really wrote about.

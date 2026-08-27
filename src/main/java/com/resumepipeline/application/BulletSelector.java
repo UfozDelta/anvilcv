@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  *   <li><b>greedy</b> — take ranked bullets best-first, capping total and per-project;</li>
  *   <li><b>kind-floor</b> — force minimum EXPERIENCE/PROJECT diversity;</li>
  *   <li><b>min-fill</b> — pad thin projects up to the per-project cap from
- *       remaining ranked candidates, then from the raw bank by tag score;</li>
+ *       remaining ranked candidates, then from the raw bank by marginal keyword gain;</li>
  *   <li><b>floor</b> — top every surviving project up to {@link #MAX_PER_PROJECT} ignoring
  *       every budget, then trim whole projects until the page fits again.</li>
  * </ol>
@@ -106,7 +106,7 @@ public final class BulletSelector {
      * @param bulletById   candidate bullets keyed by id (the LLM-ranked subset)
      * @param projectById  all of the user's projects keyed by id
      * @param allBullets   the user's entire bullet bank (for the min-fill fallback)
-     * @param keywordsLower lower-cased JD keywords driving tag-score fallback ordering
+     * @param keywordsLower lower-cased JD keywords driving raw-bank fallback ordering
      */
     public static List<Bullet> select(List<LlmClient.RankedBullet> rankedSorted,
                                       Map<UUID, Bullet> bulletById,
@@ -201,6 +201,15 @@ public final class BulletSelector {
         // Pass 3: min-fill — pad each on-resume project up to the per-project cap.
         Map<UUID, List<Bullet>> allByProject = allBullets.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId));
+
+        // JD keywords the page already carries. Only the raw-bank fallbacks below consult it —
+        // passes 1 and 2 stay in pure LLM-rank order, because three other pieces of code read
+        // `selected`'s ordering as "best-first" (the evictor's weakest-is-last, pass 3's padding
+        // order, and the trim loop's victim choice) and would quietly invert if it became
+        // coverage order instead.
+        Set<String> covered = selected.stream()
+                .flatMap(b -> KeywordScorer.matched(b, keywordsLower).stream())
+                .collect(Collectors.toCollection(HashSet::new));
         // Rank order, not hash order. This was a HashSet, so min-fill padded projects in
         // UUID-hash order — arbitrary with respect to quality, which meant a tight budget could
         // starve the *top-ranked* entry while padding a weaker one to three. `selected` is
@@ -224,19 +233,19 @@ public final class BulletSelector {
                 lines += bLines;
             }
 
-            // Source 2: raw bank fallback for thin banks, sorted by tag score.
+            // Source 2: raw bank fallback for thin banks, by marginal keyword gain.
             if (have < MAX_PER_PROJECT && selected.size() < MAX_TOTAL) {
-                List<Bullet> bank = allByProject.getOrDefault(pid, List.of()).stream()
+                List<Bullet> bank = new ArrayList<>(allByProject.getOrDefault(pid, List.of()).stream()
                         .filter(b -> !selectedIds.contains(b.getId()))
-                        .sorted(Comparator.comparingLong(tagScore).reversed())
-                        .toList();
-                for (Bullet b : bank) {
-                    if (have >= MAX_PER_PROJECT || selected.size() >= MAX_TOTAL) break;
+                        .toList());
+                while (have < MAX_PER_PROJECT && selected.size() < MAX_TOTAL && !bank.isEmpty()) {
+                    Bullet b = bank.remove(bestByGainIndex(bank, covered, keywordsLower, tagScore));
                     if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
                     int bLines = BulletTextRules.estimatedLines(b.getText());
                     if (lines + bLines > MAX_TOTAL_LINES) continue;
                     selected.add(b); selectedIds.add(b.getId()); selectedTexts.add(b.getText()); have++;
                     lines += bLines;
+                    covered.addAll(KeywordScorer.matched(b, keywordsLower));
                 }
             }
         }
@@ -280,14 +289,14 @@ public final class BulletSelector {
             // holds a single spare. Both loops stop at MAX_PER_PROJECT *or* exhaustion, which
             // is what makes the result min(MAX_PER_PROJECT, admissible bank) by construction.
             if (have < MAX_PER_PROJECT) {
-                List<Bullet> bank = allByProject.getOrDefault(pid, List.of()).stream()
+                List<Bullet> bank = new ArrayList<>(allByProject.getOrDefault(pid, List.of()).stream()
                         .filter(b -> !liveIds.contains(b.getId()))
-                        .sorted(Comparator.comparingLong(tagScore).reversed())
-                        .toList();
-                for (Bullet b : bank) {
-                    if (have >= MAX_PER_PROJECT) break;
+                        .toList());
+                while (have < MAX_PER_PROJECT && !bank.isEmpty()) {
+                    Bullet b = bank.remove(bestByGainIndex(bank, covered, keywordsLower, tagScore));
                     if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
                     selected.add(b); liveIds.add(b.getId()); selectedTexts.add(b.getText()); have++;
+                    covered.addAll(KeywordScorer.matched(b, keywordsLower));
                 }
             }
         }
@@ -323,6 +332,38 @@ public final class BulletSelector {
         }
 
         return selected;
+    }
+
+    /**
+     * Index of the bank bullet that adds the most JD keywords {@code covered} does not already
+     * hold, breaking ties on absolute keyword score and then on bank order.
+     *
+     * <p>Why marginal gain rather than the absolute score this used to sort by: a resume is read
+     * as a set. Once the first bullet of an entry carries "kubernetes", a second one carrying
+     * only "kubernetes" again scores just as high on the absolute measure while adding nothing
+     * a keyword scanner or a recruiter can see — and it crowds out the bullet that would have
+     * covered the keyword the page is still missing. Absolute score survives as the tiebreak,
+     * so a bank with no keyword signal at all (every gain 0) picks exactly what it picked
+     * before: highest score first, bank order within equal scores.
+     *
+     * <p>Only the raw-bank fallbacks call this. The ranked passes stay in LLM-rank order —
+     * see the {@code covered} declaration in {@link #select} for why that ordering is load-bearing.
+     */
+    private static int bestByGainIndex(List<Bullet> bank, Set<String> covered,
+                                       Set<String> keywordsLower, ToLongFunction<Bullet> tagScore) {
+        int best = 0;
+        long bestGain = -1, bestScore = -1;
+        for (int i = 0; i < bank.size(); i++) {
+            Set<String> adds = KeywordScorer.matched(bank.get(i), keywordsLower);
+            adds.removeAll(covered);
+            long gain = adds.size();
+            long score = tagScore.applyAsLong(bank.get(i));
+            // Strictly greater, so equal gain *and* equal score keeps the earlier bullet.
+            if (gain > bestGain || (gain == bestGain && score > bestScore)) {
+                best = i; bestGain = gain; bestScore = score;
+            }
+        }
+        return best;
     }
 
     /** Total estimated rendered lines for a selection — the page budget's unit. */

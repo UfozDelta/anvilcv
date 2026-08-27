@@ -562,6 +562,29 @@ class BulletSelectorTest {
             // ranked1 first, then highTag (score 2) before lowTag (score 0).
             assertEquals(List.of(ranked1.getId(), highTag.getId(), lowTag.getId()), ids(out));
         }
+
+        @Test
+        void minFillBankFallbackPrefersNewKeywordsOverRepeatedOnes() {
+            UUID proj = UUID.randomUUID();
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            // The ranked pick already puts java+spring on the page.
+            Bullet ranked1 = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"java", "spring"});
+            // Scores 2 on the absolute measure, but both keywords are already covered — adds nothing.
+            Bullet repeat = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"java", "spring"});
+            // Scores only 1, but it is the one keyword the page is still missing.
+            Bullet fresh = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"kafka"});
+            List<Bullet> all = List.of(ranked1, repeat, fresh);
+
+            List<LlmClient.RankedBullet> ranked = List.of(TestFixtures.ranked(ranked1.getId(), 1));
+            Set<String> kw = Set.of("java", "spring", "kafka");
+
+            List<Bullet> out = BulletSelector.select(ranked, byId(List.of(ranked1)),
+                    projectsById(p), all, kw);
+
+            // Absolute tag score alone would seat `repeat` (2) ahead of `fresh` (1).
+            assertEquals(List.of(ranked1.getId(), fresh.getId(), repeat.getId()), ids(out),
+                    "marginal keyword gain outranks absolute tag score in the bank fallback");
+        }
     }
 
     @Nested
