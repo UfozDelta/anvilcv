@@ -16,6 +16,10 @@ const CFG: GenerationConfig = {
 const of = (n: number) => 'x'.repeat(n);
 
 describe('charCount', () => {
+  it('counts an unpaired ** - it renders as literal asterisks', () => {
+    expect(charCount('a **bc')).toBe('a **bc'.length);
+  });
+
   it('ignores bold markers, which take no width on the page', () => {
     expect(charCount('a **bc** d')).toBe(charCount('a bc d'));
   });

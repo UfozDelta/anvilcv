@@ -283,10 +283,15 @@ public final class BulletTextRules {
      * <p>This, not {@link #wordCount}, is what decides line fill: a word count treats
      * {@code **Kubernetes**} and {@code **a**} as one apiece, while the LaTeX line they
      * have to fill does not.
+     *
+     * <p>Only PAIRED markers come off, mirroring {@code ApplicationRenderer.escapeRich},
+     * which rewrites the same span pattern to bold. A lone {@code **} is
+     * not bold syntax: it survives into the PDF as two visible asterisks, so counting it
+     * out would measure the bullet short of what it renders.
      */
     public static int charCount(String s) {
         if (s == null || s.isBlank()) return 0;
-        return s.replace("**", "").trim().length();
+        return BOLD_SPAN.matcher(s).replaceAll("$1").trim().length();
     }
 
     /**

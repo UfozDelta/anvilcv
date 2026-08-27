@@ -40,6 +40,12 @@ class BulletTextRulesTest {
 
     // ---- charCount ----
 
+    @Test void charCountCountsUnpairedBoldMarker() {
+        // A lone ** is not bold syntax - escapeRich leaves it, so it prints as two
+        // asterisks and must be measured.
+        assertEquals(6, BulletTextRules.charCount("a **bc"));
+    }
+
     @Test void charCountNull()  { assertEquals(0, BulletTextRules.charCount(null)); }
     @Test void charCountBlank() { assertEquals(0, BulletTextRules.charCount("   ")); }
     @Test void charCountPlain() { assertEquals(11, BulletTextRules.charCount("Built a RAG")); }

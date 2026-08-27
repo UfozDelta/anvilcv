@@ -17,9 +17,15 @@ export const CHARS_PER_LINE = 105;
 
 export type Fit = 'ONE_LINE' | 'TWO_LINE' | 'DEAD_ZONE' | 'TOO_LONG' | 'TOO_SHORT' | 'OFF';
 
-/** Rendered length: bold markers compile to \textbf{} and take no width on the page. */
+/**
+ * Rendered length: bold markers compile to \textbf{} and take no width on the page.
+ *
+ * Only PAIRED markers come off, mirroring the backend `BulletTextRules.charCount` and
+ * `ApplicationRenderer.escapeRich`. A lone `**` is not bold syntax - it renders as two
+ * visible asterisks, so stripping it would measure the bullet short of what it prints.
+ */
 export function charCount(text: string): number {
-  return text.replace(/\*\*/g, '').trim().length;
+  return text.replace(/\*\*([\s\S]+?)\*\*/g, '$1').trim().length;
 }
 
 /** Ceiling division — a partial line still costs a full line of vertical space. */
