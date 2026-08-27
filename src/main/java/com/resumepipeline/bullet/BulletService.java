@@ -132,6 +132,9 @@ public class BulletService {
      * Outcome of a refit run: how many bullets were off-band to begin with, how many came back
      * rewritten into a valid band, and how many were left exactly as they were.
      */
+    /** Status that marks a bullet as finished; refit skips these.  */
+    private static final String APPROVED = "APPROVED";
+
     public record RefitOutcome(int checked, int offBand, int rewritten, int unchanged, List<Bullet> bullets) {}
 
     /**
@@ -154,17 +157,27 @@ public class BulletService {
         GenerationConfig cfg = configService.get(userId);
         List<Bullet> all = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
 
-        List<Bullet> offBand = all.stream()
+        // Approving a bullet is the user saying it is finished, so refit leaves it alone even
+        // when it misses a band. `all` stays unfiltered below: the dedup guard must still see
+        // approved text, or a rewrite could converge onto an approved bullet.
+        List<Bullet> eligible = all.stream()
+                .filter(b -> !APPROVED.equals(b.getStatus()))
+                .toList();
+
+        List<Bullet> offBand = eligible.stream()
                 .filter(b -> BulletTextRules.decide(BulletTextRules.charCount(b.getText()), cfg)
                         != BulletTextRules.Decision.KEPT)
                 .toList();
 
+        int skipped = all.size() - eligible.size();
+        String approvedNote = skipped == 0 ? "" : " (" + skipped + " approved, left alone)";
         if (offBand.isEmpty()) {
-            progress.emit("All " + all.size() + " bullet(s) already fit the length bands.");
-            log.info("BULLET_REFIT project={} checked={} off_band=0 (no LLM call)", projectId, all.size());
-            return new RefitOutcome(all.size(), 0, 0, 0, all);
+            progress.emit("All " + eligible.size() + " bullet(s) already fit the length bands" + approvedNote + ".");
+            log.info("BULLET_REFIT project={} checked={} approved_skipped={} off_band=0 (no LLM call)",
+                    projectId, eligible.size(), skipped);
+            return new RefitOutcome(eligible.size(), 0, 0, 0, all);
         }
-        progress.emit(offBand.size() + " of " + all.size() + " bullet(s) miss the length bands.");
+        progress.emit(offBand.size() + " of " + eligible.size() + " bullet(s) miss the length bands" + approvedNote + ".");
 
         TokenAccumulator tokens = new TokenAccumulator();
         LlmClient.RefitResult result;
@@ -205,10 +218,10 @@ public class BulletService {
         }
 
         int unchanged = offBand.size() - rewritten;
-        log.info("BULLET_REFIT project={} checked={} off_band={} rewritten={} unchanged={}",
-                projectId, all.size(), offBand.size(), rewritten, unchanged);
+        log.info("BULLET_REFIT project={} checked={} approved_skipped={} off_band={} rewritten={} unchanged={}",
+                projectId, eligible.size(), skipped, offBand.size(), rewritten, unchanged);
         progress.emit("Refit done: " + rewritten + " rewritten, " + unchanged + " left as they were.");
-        return new RefitOutcome(all.size(), offBand.size(), rewritten, unchanged,
+        return new RefitOutcome(eligible.size(), offBand.size(), rewritten, unchanged,
                 repo.findByProjectIdOrderByCreatedAtAsc(projectId));
     }
 

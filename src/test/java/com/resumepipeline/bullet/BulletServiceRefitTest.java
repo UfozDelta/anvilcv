@@ -115,6 +115,21 @@ class BulletServiceRefitTest {
     }
 
     @Test
+    void neverTouchesAnApprovedBulletEvenWhenItIsOffBand() {
+        Bullet approved = bullet(OFF_BAND);
+        approved.setStatus("APPROVED");
+        given(approved, bullet(IN_BAND));
+
+        BulletService.RefitOutcome out = service.refit(user, proj, ProgressLog.noOp());
+
+        verifyNoInteractions(llm);
+        assertEquals(OFF_BAND, approved.getText());
+        assertEquals(0, out.offBand());
+        // Only the unapproved bullet was in scope.
+        assertEquals(1, out.checked());
+    }
+
+    @Test
     void acceptsARewriteThatLandsInBand() {
         Bullet b = bullet(OFF_BAND);
         given(b);

@@ -131,10 +131,12 @@ export function useProjectDetail(id: string | undefined) {
   }
   /**
    * Bullets whose rendered length misses the configured bands. Counted over the whole bank,
-   * not the visible tab, because the refit endpoint acts on the whole project.
+   * not the visible tab, because the refit endpoint acts on the whole project — minus
+   * approved ones, which the backend deliberately leaves alone. Counting those here would
+   * light the REFIT button up for bullets it will never rewrite.
    */
   const offBandIds = useMemo(
-    () => new Set(bullets.filter(b => needsRefit(fitOf(b.text, cfg))).map(b => b.id)),
+    () => new Set(bullets.filter(b => b.status !== 'APPROVED' && needsRefit(fitOf(b.text, cfg))).map(b => b.id)),
     [bullets, cfg]);
 
   async function refitBullets() {
