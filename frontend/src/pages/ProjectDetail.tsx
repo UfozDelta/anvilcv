@@ -136,6 +136,13 @@ export function ProjectDetail() {
         <div className="row" style={{ gap: 0 }}>
           <button
             className="btn btn--sm"
+            onClick={() => s.preview.preview(s.displayed.map(b => b.id))}
+            disabled={s.preview.busy || s.displayed.length === 0}
+            title="Compile the bullets shown below onto a real resume page"
+            style={{ background: 'var(--paper)', color: 'var(--ink)', borderColor: 'var(--ink)', marginRight: 8 }}
+          >{s.preview.busy ? 'RENDERING...' : `RENDER PDF (~${s.displayedLines} LINES)`}</button>
+          <button
+            className="btn btn--sm"
             onClick={() => { s.setAdding(a => !a); s.setEditing(null); }}
             style={{ background: s.adding ? 'var(--acid)' : 'var(--paper)', color: 'var(--ink)', borderColor: 'var(--ink)', marginRight: 8 }}
           >{s.adding ? '✕ CANCEL' : '＋ ADD BULLET'}</button>
@@ -162,6 +169,20 @@ export function ProjectDetail() {
           >BY DATE</button>
         </div>
       </div>
+
+      {s.preview.err && <div className="err" style={{ marginBottom: 12 }}>{s.preview.err}</div>}
+
+      {s.preview.url && (
+        <div style={{ marginBottom: 20 }}>
+          <div className="row row--between row--centered" style={{ background: 'var(--acid)', color: 'var(--ink)', padding: '6px 10px', border: '2px solid var(--ink)', borderBottom: 'none' }}>
+            <span className="label" style={{ fontWeight: 700 }}>
+              RENDER · {s.displayed.length} BULLETS · NOT SAVED
+            </span>
+            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={s.preview.close}>✕ CLOSE</button>
+          </div>
+          <iframe src={s.preview.url} title="bullet render" style={{ width: '100%', height: 900, border: '2px solid var(--ink)', background: '#fff' }} />
+        </div>
+      )}
 
       {s.refitMsg && (
         <div className="label muted" style={{ marginBottom: 10 }}>{s.refitMsg}</div>

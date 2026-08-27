@@ -50,6 +50,19 @@ export const api = {
   parseResume: (text: string) => request<ParseResumeResponse>('/api/resume/parse', { method: 'POST', body: JSON.stringify({ text }) }),
   pdfUrl: (path: string) => `${BASE}${path}`,
   fetchRaw: (path: string) => fetch(`${BASE}${path}`, { credentials: 'include' }),
+  // Raw POST for endpoints that answer with a blob (PDF preview). Mirrors request()'s
+  // 401 handling so an expired session still routes to re-login instead of surfacing
+  // an empty error body.
+  postRaw: async (path: string, body: unknown) => {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
+    return res;
+  },
 };
 
 // ---------- types mirroring backend DTOs ----------

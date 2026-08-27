@@ -1,5 +1,6 @@
 package com.resumepipeline.bullet;
 
+import com.resumepipeline.application.ApplicationRenderer;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
@@ -9,7 +10,9 @@ import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
+import com.resumepipeline.project.ProjectRepository;
 import com.resumepipeline.project.ProjectService;
+import com.resumepipeline.render.PdfCompiler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -19,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -41,13 +45,48 @@ public class BulletService {
     // Read at persist time for the user's bold ceiling — see BulletTextRules.maxBoldSpans.
     private final GenerationConfigService configService;
 
+    // Bullet preview only: render the selected bullets on a real page, no DB write.
+    private final ProjectRepository projectRepo;
+    private final ApplicationRenderer renderer;
+    private final PdfCompiler compiler;
+
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
-                         LlmUsageService llmUsageService, GenerationConfigService configService) {
+                         LlmUsageService llmUsageService, GenerationConfigService configService,
+                         ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
         this.llmUsageService = llmUsageService;
         this.configService = configService;
+        this.projectRepo = projectRepo;
+        this.renderer = renderer;
+        this.compiler = compiler;
+    }
+
+    /**
+     * Compiles just these bullets onto a real resume page - no header, education or
+     * skills - so a selection can be eyeballed without re-rendering (and overwriting)
+     * a saved application. Nothing is persisted.
+     *
+     * <p>Ownership gate is the repository query: it only returns bullets whose project
+     * belongs to {@code userId}, so the project ids derived from them are safe to look
+     * up unscoped.
+     */
+    public PdfCompiler.Result preview(UUID userId, List<UUID> bulletIds) {
+        if (bulletIds == null || bulletIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No bullets to preview");
+        }
+        Map<UUID, Bullet> byId = repo.findByIdsAndProjectUserId(bulletIds.toArray(new UUID[0]), userId)
+                .stream().collect(Collectors.toMap(Bullet::getId, b -> b));
+        // Caller order is display order - keep it, so the PDF matches what is on screen.
+        List<Bullet> ordered = bulletIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+        if (ordered.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No matching bullets");
+        }
+        Map<UUID, Project> projectById = projectRepo.findByIdIn(
+                        ordered.stream().map(Bullet::getProjectId).distinct().toList()).stream()
+                .collect(Collectors.toMap(Project::getId, p -> p));
+        return compiler.compile(renderer.renderSnippet(ordered, projectById));
     }
 
     public List<Bullet> listForProject(UUID userId, UUID projectId) {

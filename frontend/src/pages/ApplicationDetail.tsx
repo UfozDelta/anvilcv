@@ -82,9 +82,12 @@ export function ApplicationDetail() {
                       selectedIds={s.selectedIds}
                       expandedWhys={s.expandedWhys}
                       bullets={s.bullets}
+                      previewing={s.previewKey === g.key}
+                      previewBusy={s.previewBusy}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
+                      onPreview={ids => s.previewGroup(g.key, ids)}
                     />
                   ))}
                 </div>
@@ -100,9 +103,12 @@ export function ApplicationDetail() {
                       selectedIds={s.selectedIds}
                       expandedWhys={s.expandedWhys}
                       bullets={s.bullets}
+                      previewing={s.previewKey === g.key}
+                      previewBusy={s.previewBusy}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
+                      onPreview={ids => s.previewGroup(g.key, ids)}
                     />
                   ))}
                 </div>
@@ -112,6 +118,10 @@ export function ApplicationDetail() {
 
           <div className="row row--between row--centered" style={{ marginTop: 20, position: 'sticky', bottom: 16, background: 'var(--paper)', padding: '12px 0', borderTop: '2px solid var(--ink)' }}>
             <span className="label muted">
+              <span style={s.selectedLines > s.MAX_TOTAL_LINES ? { color: 'var(--rust)', fontWeight: 700 } : undefined}>
+                ~{s.selectedLines}/{s.MAX_TOTAL_LINES} LINES
+              </span>
+              {' · '}
               {dirty ? 'SELECTION CHANGED · RE-RENDER PDF' : 'NO CHANGES'}
             </span>
             <button className="btn btn--acid" disabled={!dirty} onClick={() => s.setRerenderStreaming(true)}>
@@ -123,8 +133,21 @@ export function ApplicationDetail() {
         {/* RIGHT: PDF preview + cover + ATS */}
         <div className="stack">
           <Section num="04.B" title="PDF" />
+          {s.previewErr && (
+            <div className="err" style={{ marginBottom: 8 }}>{s.previewErr}</div>
+          )}
+          {s.previewUrl && (
+            <div className="row row--between row--centered" style={{ background: 'var(--acid)', color: 'var(--ink)', padding: '6px 10px', border: '2px solid var(--ink)', borderBottom: 'none' }}>
+              <span className="label" style={{ fontWeight: 700 }}>
+                PREVIEW · {previewName(s)} · NOT SAVED
+              </span>
+              <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={s.closePreview}>✕ BACK TO SAVED</button>
+            </div>
+          )}
           <div style={{ border: '2px solid var(--ink)', height: 720, background: '#fff' }}>
-            {app.pdfAvailable ? (
+            {s.previewUrl ? (
+              <iframe src={s.previewUrl} title="bullet preview" style={{ width: '100%', height: '100%', border: 'none' }} />
+            ) : app.pdfAvailable ? (
               <iframe src={s.pdfBlobUrl ?? undefined} title="resume PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
             ) : (
               <div className="center-page" style={{ height: '100%' }}>
@@ -176,6 +199,12 @@ export function ApplicationDetail() {
       )}
     </div>
   );
+}
+
+/** Project name behind the open preview, for the banner. */
+function previewName(s: ReturnType<typeof useApplicationDetail>): string {
+  const all = [...s.grouped.experience, ...s.grouped.projects];
+  return all.find(g => g.key === s.previewKey)?.project?.name ?? 'Other';
 }
 
 function outcomeStyle(o: string): React.CSSProperties {

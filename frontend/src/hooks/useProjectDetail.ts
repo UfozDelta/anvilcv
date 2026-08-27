@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { api, type Project, type Bullet, type RefitResponse, CATEGORIES } from '../lib/api';
 import { parseExtract } from '../lib/parseExtract';
+import { estimatedLines } from '../lib/bulletLength';
+import { useBulletPreview } from './useBulletPreview';
 import { fitOf, needsRefit } from '../lib/bulletLength';
 import { useGenerationConfig } from './useGenerationConfig';
 
@@ -200,6 +202,18 @@ export function useProjectDetail(id: string | undefined) {
     return [...src].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tabBullets, filterCat]);
 
+  // Exactly what the page is showing, in display order — the two views read from
+  // different sources, so the rendered PDF has to follow whichever is on screen.
+  const displayed = useMemo(
+    () => (sortMode === 'date' ? flatByDate : visibleGroups.flatMap(g => g.rows)),
+    [sortMode, flatByDate, visibleGroups],
+  );
+  const displayedLines = useMemo(
+    () => displayed.reduce((n, b) => n + estimatedLines(b.text), 0),
+    [displayed],
+  );
+  const preview = useBulletPreview();
+
   const presentCats = useMemo(() => grouped.map(g => g.slug), [grouped]);
 
   function togglePick(slug: string) {
@@ -226,5 +240,6 @@ export function useProjectDetail(id: string | undefined) {
     load, generateBank, addBullet, saveBullet, delBullet, setBulletStatus,
     cfg, offBandIds, refitting, refitMsg, refitBullets,
     categoryMap, grouped, visibleGroups, flatByDate, presentCats,
+    displayed, displayedLines, preview,
   };
 }

@@ -58,6 +58,11 @@ public class ApplicationRenderer {
         }
 
         return renderer.renderRaw("template/resume.tex", Map.ofEntries(
+                // Gate keys for the two blocks that carry no {{TOKEN}} of their own. Always
+                // non-blank here, so a profile with an empty name or empty Languages keeps
+                // its header and skills; renderSnippet() blanks them to drop both blocks.
+                Map.entry("HEADER",           "1"),
+                Map.entry("SKILLS_BLOCK",     "1"),
                 Map.entry("NAME",             escapePlain(p.getName())),
                 Map.entry("PHONE",            escapePlain(p.getPhone())),
                 Map.entry("EMAIL",            escapePlain(p.getEmail())),
@@ -72,6 +77,47 @@ public class ApplicationRenderer {
                 Map.entry("SKILLS_DATABASES", selectedSkillValue(selectedSkills, "databases", p.getSkillsDatabases())),
                 Map.entry("SKILLS_DEVOPS",    selectedSkillValue(selectedSkills, "devops", p.getSkillsDevops())),
                 Map.entry("SKILLS_INTERESTS", escapeRich(p.getSkillsInterests()))
+        ));
+    }
+
+    /**
+     * Renders the same template with only the bullet sections filled: no header, no
+     * education, no skills. Used by the bullet preview, so a project's bullets can be
+     * seen on a real page without touching the saved application.
+     *
+     * <p>Blanking HEADER and SKILLS_BLOCK drops those blocks via
+     * {@code LatexRenderer.dropEmptySections}. Page geometry is the template's, so line
+     * wrapping matches the real resume.
+     */
+    public String renderSnippet(List<Bullet> bullets, Map<UUID, Project> projectById) {
+        List<Bullet> experienceBullets = new ArrayList<>();
+        List<Bullet> projectBullets = new ArrayList<>();
+        for (Bullet b : bullets) {
+            Project owner = projectById.get(b.getProjectId());
+            if (owner != null && owner.getKind() == Project.Kind.EXPERIENCE) {
+                experienceBullets.add(b);
+            } else {
+                projectBullets.add(b);
+            }
+        }
+
+        return renderer.renderRaw("template/resume.tex", Map.ofEntries(
+                Map.entry("HEADER",           ""),
+                Map.entry("SKILLS_BLOCK",     ""),
+                Map.entry("NAME",             ""),
+                Map.entry("PHONE",            ""),
+                Map.entry("EMAIL",            ""),
+                Map.entry("LINKEDIN_HANDLE",  ""),
+                Map.entry("GITHUB_HANDLE",    ""),
+                Map.entry("PORTFOLIO_LINK",   ""),
+                Map.entry("EDUCATION_ITEMS",  ""),
+                Map.entry("EXPERIENCE_ITEMS", renderExperience(experienceBullets, projectById)),
+                Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById)),
+                Map.entry("SKILLS_LANGUAGES", ""),
+                Map.entry("SKILLS_FRAMEWORKS",""),
+                Map.entry("SKILLS_DATABASES", ""),
+                Map.entry("SKILLS_DEVOPS",    ""),
+                Map.entry("SKILLS_INTERESTS", "")
         ));
     }
 

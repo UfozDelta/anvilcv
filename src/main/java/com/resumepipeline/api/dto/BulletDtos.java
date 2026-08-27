@@ -15,6 +15,8 @@ public class BulletDtos {
 
     public record UpdateStatusRequest(@NotBlank String status) {}
 
+    public record PreviewRequest(List<UUID> bulletIds) {}
+
     public record BulletResponse(
             UUID id,
             UUID projectId,

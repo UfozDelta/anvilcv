@@ -1,9 +1,13 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { api, type ApplicationResponse, type Bullet, type Project } from '../lib/api';
 import { groupRankedByProject } from '../lib/groupBullets';
+import { estimatedLines } from '../lib/bulletLength';
+import { useBulletPreview } from './useBulletPreview';
 import { parseRanking } from '../lib/ranking';
 
 const TOP_N = 15;
+/** Mirrors `BulletSelector.MAX_TOTAL_LINES` — rendered bullet lines that fit one page. */
+const MAX_TOTAL_LINES = 29;
 
 export function useApplicationDetail(id: string | undefined) {
   const [app, setApp] = useState<ApplicationResponse | null>(null);
@@ -18,6 +22,9 @@ export function useApplicationDetail(id: string | undefined) {
   const [pdfVersion, setPdfVersion] = useState(0);
   const [expandedWhys, setExpandedWhys] = useState<Set<string>>(new Set());
   const [showTail, setShowTail] = useState(false);
+  // Which project group the open preview belongs to; the PDF itself lives in the shared hook.
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const preview = useBulletPreview();
 
   async function load() {
     if (!id) return;
@@ -110,6 +117,24 @@ export function useApplicationDetail(id: string | undefined) {
     });
   }
 
+  /** Render only this group's included bullets, leaving the saved resume untouched. */
+  async function previewGroup(key: string, bulletIds: string[]) {
+    const url = await preview.preview(bulletIds);
+    setPreviewKey(url ? key : null);
+  }
+
+  function closePreview() {
+    preview.close();
+    setPreviewKey(null);
+  }
+
+  // Rendered lines the current selection costs, against the one-page budget the
+  // backend selects with (BulletSelector.MAX_TOTAL_LINES).
+  const selectedLines = useMemo(
+    () => [...selectedIds].reduce((n, bid) => n + estimatedLines(bullets[bid]?.text ?? ''), 0),
+    [selectedIds, bullets],
+  );
+
   function toggleWhy(bid: string) {
     setExpandedWhys(prev => {
       const next = new Set(prev);
@@ -123,6 +148,9 @@ export function useApplicationDetail(id: string | undefined) {
     pdfBlobUrl, pdfVersion, setPdfVersion, expandedWhys, showTail, setShowTail,
     expandedGroups, selectedIds, ranking, bulletsReady, grouped,
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
+    previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
+    previewGroup, closePreview,
+    selectedLines, MAX_TOTAL_LINES,
     TOP_N,
   };
 }

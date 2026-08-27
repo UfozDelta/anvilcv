@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -24,7 +25,29 @@ public class PdfCompiler {
         this.timeoutSeconds = timeoutSeconds;
     }
 
+    /**
+     * Caps concurrent tectonic processes. Each compile forks a process and holds the
+     * calling request thread for up to {@code tectonic.timeout-seconds}; the bullet
+     * preview lets a user fire these off freely, so without a bound a few clicks can
+     * pin every core.
+     */
+    private static final Semaphore SLOTS = new Semaphore(2);
+
     public Result compile(String latexSource) {
+        try {
+            SLOTS.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Result.failure("Interrupted waiting for a compile slot", "");
+        }
+        try {
+            return compileNow(latexSource);
+        } finally {
+            SLOTS.release();
+        }
+    }
+
+    private Result compileNow(String latexSource) {
         Path tmp = null;
         try {
             tmp = Files.createTempDirectory("rp-tex-" + UUID.randomUUID());
