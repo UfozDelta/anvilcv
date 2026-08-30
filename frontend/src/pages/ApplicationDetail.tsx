@@ -45,11 +45,11 @@ export function ApplicationDetail() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.05fr', gap: 32, alignItems: 'start' }}>
+      <div className="split">
 
         {/* LEFT: ranked bullets */}
         <div>
-          <Section num="04.A" title="Ranked Bullets" count={s.ranking.length} />
+          <Section num="03.A" title="Ranked Bullets" count={s.ranking.length} />
           <div className="label muted" style={{ marginBottom: 10 }}>
             CLICK RANK TO TOGGLE · {s.selectedIds.size} INCLUDED
           </div>
@@ -132,7 +132,7 @@ export function ApplicationDetail() {
 
         {/* RIGHT: PDF preview + cover + ATS */}
         <div className="stack">
-          <Section num="04.B" title="PDF" />
+          <Section num="03.B" title="PDF" />
           {s.previewErr && (
             <div className="err" style={{ marginBottom: 8 }}>{s.previewErr}</div>
           )}
@@ -144,7 +144,7 @@ export function ApplicationDetail() {
               <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={s.closePreview}>✕ BACK TO SAVED</button>
             </div>
           )}
-          <div style={{ border: '2px solid var(--ink)', height: 720, background: '#fff' }}>
+          <div style={{ border: '2px solid var(--ink)', height: 'min(720px, 80vh)', background: '#fff' }}>
             {s.previewUrl ? (
               <iframe src={s.previewUrl} title="bullet preview" style={{ width: '100%', height: '100%', border: 'none' }} />
             ) : app.pdfAvailable ? (
@@ -165,12 +165,18 @@ export function ApplicationDetail() {
             <a href={texUrl} className="btn btn--sm">↓ DOWNLOAD .TEX</a>
           </div>
 
-          <Section num="04.C" title="Cover Letter" />
+          <Section num="03.C" title="Cover Letter" />
+          {app.coverLetterFlags.length > 0 && (
+            <div className="err" style={{ marginBottom: 8 }}>
+              UNVERIFIED FIGURES: {app.coverLetterFlags.join(', ')} — not in your selected
+              bullets or the job description. Check before sending.
+            </div>
+          )}
           <div className="panel panel--inset editorial" style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.55 }}>
             {app.coverLetter || <span className="muted">No cover letter.</span>}
           </div>
 
-          <Section num="04.D" title="ATS" />
+          <Section num="03.D" title="ATS" />
           <div>
             <div className="label muted" style={{ marginBottom: 6 }}>MATCHED</div>
             <div style={{ marginBottom: 12 }}>

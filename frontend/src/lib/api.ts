@@ -188,6 +188,8 @@ export interface ApplicationResponse {
   bulletRanking: string; // JSON string of RankedBullet[]
   selectedBulletIds: string[];
   coverLetter: string | null;
+  /** Figures the letter states that are in neither the selected bullets nor the JD. */
+  coverLetterFlags: string[];
   atsMatched: string[];
   atsMissing: string[];
   pdfAvailable: boolean;

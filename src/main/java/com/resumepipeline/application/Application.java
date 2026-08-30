@@ -39,6 +39,11 @@ public class Application {
     @Column(name = "cover_letter", columnDefinition = "text")
     private String coverLetter;
 
+    /** Figures in the cover letter that trace to neither the selected bullets nor the JD. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "cover_letter_flags", columnDefinition = "text[]", nullable = false)
+    private String[] coverLetterFlags = new String[0];
+
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "ats_matched", columnDefinition = "text[]", nullable = false)
     private String[] atsMatched = new String[0];
@@ -108,6 +113,8 @@ public class Application {
         this.selectedBulletIds = selectedBulletIds == null ? new UUID[0] : selectedBulletIds;
     }
     public String getCoverLetter() { return coverLetter; }
+    public String[] getCoverLetterFlags() { return coverLetterFlags; }
+    public void setCoverLetterFlags(String[] f) { this.coverLetterFlags = f == null ? new String[0] : f; }
     public void setCoverLetter(String coverLetter) { this.coverLetter = coverLetter; }
     public String[] getAtsMatched() { return atsMatched; }
     public void setAtsMatched(String[] atsMatched) { this.atsMatched = atsMatched == null ? new String[0] : atsMatched; }

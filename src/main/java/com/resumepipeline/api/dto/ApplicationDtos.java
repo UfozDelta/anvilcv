@@ -48,7 +48,8 @@ public class ApplicationDtos {
     public record ApplicationResponse(
             UUID id, String company, String role, String jdText, String jdUrl, String roleEmphasis,
             String bulletRanking, List<UUID> selectedBulletIds,
-            String coverLetter, List<String> atsMatched, List<String> atsMissing,
+            String coverLetter, List<String> coverLetterFlags,
+            List<String> atsMatched, List<String> atsMissing,
             List<String> selectedCourses, Map<String, List<String>> selectedSkills,
             boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
@@ -68,7 +69,7 @@ public class ApplicationDtos {
                     a.getId(), a.getCompany(), a.getRole(), a.getJdText(), a.getJdUrl(),
                     a.getRoleEmphasis(), a.getBulletRanking(),
                     Arrays.asList(a.getSelectedBulletIds()),
-                    a.getCoverLetter(),
+                    a.getCoverLetter(), Arrays.asList(a.getCoverLetterFlags()),
                     Arrays.asList(a.getAtsMatched()), Arrays.asList(a.getAtsMissing()),
                     Arrays.asList(a.getSelectedCourses()), skillsMap,
                     a.getPdfBlob() != null && a.getPdfBlob().length > 0,

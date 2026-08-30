@@ -309,6 +309,21 @@ public class ApplicationService {
         a.setCompany(clean.company());
         a.setRole(clean.role());
         a.setCoverLetter(coverLetterText);
+
+        // Same no-fabrication rule the bullets go through, applied to the one artifact the
+        // LLM writes as free prose. Source context is the selected bullets plus the JD: a
+        // letter may restate a metric it was given, and may cite the employer's own figures
+        // ("your 500-person org") because those come from the posting. Anything else is
+        // invented. Flagged rather than dropped -- a cover letter is a single artifact, and
+        // binning it wholesale is worse for the user than showing them which figure to check.
+        List<String> coverFlags = coverLetterText == null ? List.of()
+                : BulletTextRules.fabricatedNumbers(
+                        coverLetterText, String.join(" ", selectedTexts) + " " + clean.cleanJd());
+        if (!coverFlags.isEmpty()) {
+            progress.emit("Cover letter states figures not in your bullets or the JD ("
+                    + String.join(", ", coverFlags) + ") - verify before sending");
+        }
+        a.setCoverLetterFlags(coverFlags.toArray(new String[0]));
         a.setAtsMatched(atsMatched.toArray(new String[0]));
         a.setAtsMissing(atsMissing.toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
