@@ -74,6 +74,15 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Text extraction for ResumePdfParseTest: the reference implementation that
+             ATS vendors run (Apache Tika wraps it), so it is what the resume must parse
+             cleanly under. Test scope only; nothing in main code reads a PDF. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
