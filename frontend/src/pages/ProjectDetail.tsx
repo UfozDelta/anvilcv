@@ -180,7 +180,7 @@ export function ProjectDetail() {
             </span>
             <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={s.preview.close}>✕ CLOSE</button>
           </div>
-          <iframe src={s.preview.url} title="bullet render" style={{ width: '100%', height: 900, border: '2px solid var(--ink)', background: '#fff' }} />
+          <iframe src={s.preview.url} title="bullet render" style={{ width: '100%', height: 'min(900px, 80vh)', border: '2px solid var(--ink)', background: '#fff' }} />
         </div>
       )}
 
@@ -220,7 +220,7 @@ export function ProjectDetail() {
       {/* Category picker */}
       <div className="panel panel--inset stack-sm" style={{ marginBottom: 20 }}>
         <div className="label">GENERATE BULLETS — PICK LENSES</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <div className="grid-4">
           {CATEGORIES.map(c => {
             const on = s.picked.has(c.slug);
             return (

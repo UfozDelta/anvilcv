@@ -140,7 +140,7 @@ export function AdminPage() {
         </div>
       )}
 
-      <Section num="01" title="Active Provider" />
+      <Section num="07.A" title="Active Provider" />
       <div style={styles.section}>
         <div style={styles.row}>
           <span style={styles.label}>Provider</span>
@@ -163,7 +163,7 @@ export function AdminPage() {
         const d = draft[p.id];
         return (
           <div key={p.id}>
-            <Section num={String(i + 2).padStart(2, '0')} title={p.label} count={provider === p.id ? 'ACTIVE' : undefined} />
+            <Section num={`07.${String.fromCharCode(66 + i)}`} title={p.label} count={provider === p.id ? 'ACTIVE' : undefined} />
             <div style={styles.section}>
               <div style={styles.row}>
                 <span style={styles.label}>API key</span>

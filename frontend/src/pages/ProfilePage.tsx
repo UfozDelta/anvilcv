@@ -80,7 +80,7 @@ export function ProfilePage() {
         {/* BASICS */}
         <div className="panel panel--inset stack-sm">
           <div className="label">BASICS</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="grid-2">
             <Field label="Full Name" value={p.name} onChange={v => update('name', v)} />
             <Field label="Phone" value={p.phone} onChange={v => update('phone', v)} />
             <Field label="Email" value={p.email} onChange={v => update('email', v)} />
@@ -98,7 +98,7 @@ export function ProfilePage() {
               <div className="label">ENTRY {i + 1}</div>
               <button type="button" className="btn btn--ghost btn--sm btn--rust" onClick={() => delEdu(i)}>REMOVE</button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="grid-2">
               <Field label="School" value={e.school} onChange={v => updateEdu(i, { school: v })} />
               <Field label="Location" value={e.location} onChange={v => updateEdu(i, { location: v })} />
               <Field label="Degree" value={e.degree} onChange={v => updateEdu(i, { degree: v })} />

@@ -27,7 +27,7 @@ export function Applications() {
 
   return (
     <div className="shell">
-      <Section num="02" title="Applications" count={apps.length} />
+      <Section num="03" title="Applications" count={apps.length} />
 
       <div className="row" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 6 }}>
         {OUTCOMES.map(o => (

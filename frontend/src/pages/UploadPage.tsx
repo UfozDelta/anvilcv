@@ -89,7 +89,7 @@ export function UploadPage() {
 
   return (
     <div className="shell">
-      <Section num="07" title="Import from Resume" />
+      <Section num="—" title="Import from Resume" />
 
       <div className="panel panel--inset stack" style={{ marginTop: 24 }}>
         <div className="label">PASTE RESUME TEXT</div>
@@ -147,7 +147,7 @@ export function UploadPage() {
                 <div key={i} className="panel panel--inset" style={{ opacity: e.selected ? 1 : 0.45 }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
                     <input type="checkbox" checked={e.selected} onChange={ev => updateExp(i, { selected: ev.target.checked })} style={{ marginTop: 4 }} />
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div className="grid-2" style={{ flex: 1 }}>
                       <label className="field">
                         <div className="field__label">Job Title</div>
                         <input className="field__input" value={e.title || ''} onChange={ev => updateExp(i, { title: ev.target.value })} />
@@ -188,7 +188,7 @@ export function UploadPage() {
                 <div key={i} className="panel panel--inset" style={{ opacity: p.selected ? 1 : 0.45 }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
                     <input type="checkbox" checked={p.selected} onChange={ev => updateProj(i, { selected: ev.target.checked })} style={{ marginTop: 4 }} />
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div className="grid-2" style={{ flex: 1 }}>
                       <label className="field">
                         <div className="field__label">Project Name</div>
                         <input className="field__input" value={p.name} onChange={ev => updateProj(i, { name: ev.target.value })} />

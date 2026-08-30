@@ -86,7 +86,7 @@ export function Experiences() {
               <form onSubmit={submit} className="panel panel--inset stack" style={{ marginTop: 12 }}>
                 <div className="label">NEW EXPERIENCE / ROLE</div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="grid-2">
                   <label className="field">
                     <div className="field__label">Job Title</div>
                     <input className="field__input" autoFocus value={title} onChange={e => setTitle(e.target.value)} required

@@ -15,13 +15,13 @@ export function SettingsPage() {
     <>
     <div className="shell" style={{ maxWidth: 720 }}>
       <h1 style={{ fontFamily: 'var(--mono)', fontSize: '1rem', marginBottom: 32 }}>
-        05 — GENERATION SETTINGS
+        06 — GENERATION SETTINGS
       </h1>
 
       {err && <div className="err" style={{ marginBottom: 16 }}>{err}</div>}
 
       {/* ── Word Filter ─────────────────────────────────── */}
-      <Section num="01" title="Word Filter" />
+      <Section num="06.A" title="Word Filter" />
       <div style={styles.section}>
         <label style={styles.toggleRow}>
           <input
@@ -65,7 +65,7 @@ export function SettingsPage() {
       </div>
 
       {/* ── Generation Tuning ───────────────────────────── */}
-      <Section num="02" title="Generation Tuning" />
+      <Section num="06.B" title="Generation Tuning" />
       <div style={styles.section}>
         <SingleSlider
           label={`Temperature — ${cfg.temperature.toFixed(2)}`}
@@ -126,7 +126,7 @@ export function SettingsPage() {
     </div>
 
     <div className="panel" style={{ marginTop: 32 }}>
-      <Section num="03" title="TOOLS" />
+      <Section num="06.C" title="TOOLS" />
       <div style={{ marginTop: 20 }}>
         <div style={{ marginBottom: 12 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', fontWeight: 600 }}>

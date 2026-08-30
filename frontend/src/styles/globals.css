@@ -208,7 +208,7 @@ body::before {
 .nav {
   display: flex;
   gap: 24px;
-  margin: -28px 0 var(--pad-lg);
+  margin: -28px auto var(--pad-lg);
   padding-bottom: 10px;
   border-bottom: var(--rule-thin);
   font-size: 12px;
@@ -531,4 +531,60 @@ a { color: var(--ink); }
 a:focus-visible, button:focus-visible {
   outline: 3px solid var(--acid);
   outline-offset: 2px;
+}
+
+/* -------- Responsive grid utilities -------- */
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.split  { display: grid; grid-template-columns: 1fr 1.05fr; gap: 32px; align-items: start; }
+
+/* -------- Mobile -------- */
+
+@media (max-width: 720px) {
+  :root { --pad: 16px; --pad-lg: 28px; }
+
+  .grid-2, .grid-4, .split { grid-template-columns: 1fr; }
+
+  .row { flex-wrap: wrap; }
+
+  /* Masthead stacks; meta drops to the left under the brand. */
+  .masthead {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: var(--pad-lg);
+  }
+  .masthead__brand { font-size: 26px; }
+  .masthead__rule { display: none; }
+  .masthead__meta { font-size: 10px; line-height: 1.5; }
+
+  /* Nav scrolls horizontally instead of wrapping into a wall of links. */
+  .nav {
+    margin-top: -18px;
+    gap: 16px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+
+  .list__row { grid-template-columns: 1fr auto; gap: 12px; }
+  .list__num { display: none; }
+  .list__title { font-size: 17px; }
+
+  .bullet { grid-template-columns: 40px 1fr; gap: 10px; }
+
+  .section-mark { gap: 10px; }
+  .section-mark__title { font-size: 11px; letter-spacing: 0.14em; }
+
+  .btn { padding: 12px 14px; letter-spacing: 0.12em; }
+
+  /* 16px prevents iOS Safari zooming in on focus. */
+  .field__input, .field__textarea, .field__select { font-size: 16px; }
+  .field__textarea { min-height: 120px; }
+
+  .dropcap::first-letter { font-size: 3em; }
 }
