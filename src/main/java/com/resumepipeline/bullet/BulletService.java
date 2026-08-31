@@ -209,12 +209,18 @@ public class BulletService {
                 continue;
             }
             int before = BulletTextRules.charCount(b.getText());
+            int after = BulletTextRules.charCount(text);
+            int linesBefore = BulletTextRules.estimatedLines(b.getText());
+            int linesAfter = BulletTextRules.estimatedLines(text);
+            boolean inBand = BulletTextRules.decide(after, cfg) == BulletTextRules.Decision.KEPT;
             otherTexts.remove(b.getText());
             otherTexts.add(text);
             b.setText(text);
             repo.save(b);
             rewritten++;
-            progress.emit("Refit " + before + "c -> " + BulletTextRules.charCount(text) + "c");
+            progress.emit("Refit " + before + "c -> " + after + "c"
+                    + (inBand ? "" : " (still off-band, but " + linesAfter
+                                     + " lines instead of " + linesBefore + ")"));
         }
 
         int unchanged = offBand.size() - rewritten;
@@ -233,8 +239,16 @@ public class BulletService {
     private static String rejectRefit(String text, String original, GenerationConfig cfg, List<String> others) {
         if (text.isBlank()) return "empty rewrite";
         if (text.equals(original)) return "unchanged by model";
-        if (BulletTextRules.decide(BulletTextRules.charCount(text), cfg) != BulletTextRules.Decision.KEPT) {
-            return "rewrite still off-band at " + BulletTextRules.charCount(text) + "c";
+        // Band misses are graded, not fatal. A rewrite that lands just outside the band is
+        // still worth taking when it renders on fewer lines than what it replaces: rejecting
+        // a 203c/2-line rewrite reinstates the 318c/4-line original, which is the worse
+        // bullet by the only measure that costs page space. The target stays strict -- the
+        // model is still told the exact ceiling -- but the fallback prefers the better of the
+        // two rather than demanding perfection.
+        if (BulletTextRules.decide(BulletTextRules.charCount(text), cfg) != BulletTextRules.Decision.KEPT
+                && BulletTextRules.estimatedLines(text) >= BulletTextRules.estimatedLines(original)) {
+            return "rewrite still off-band at " + BulletTextRules.charCount(text)
+                    + "c and no shorter on the page";
         }
         if (BulletTextRules.hasForbiddenOpener(text)) return "rewrite opens weakly";
         // Source context is the ORIGINAL bullet: a refit may only restate numbers it was given.

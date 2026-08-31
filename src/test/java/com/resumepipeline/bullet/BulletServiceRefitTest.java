@@ -55,6 +55,19 @@ class BulletServiceRefitTest {
     private static final String GOOD_REWRITE =
             "Built a distributed ingestion service that cut nightly batch turnaround for the team.";
 
+    /** 294 chars — three rendered lines, well past the two-line ceiling. */
+    private static final String THREE_LINER =
+            "Engineered a distributed ingestion service that replaced the nightly batch job for the "
+          + "analytics team, adding backpressure, retry with jitter, and a dead-letter queue so a "
+          + "slow downstream consumer could no longer stall the whole pipeline or silently drop "
+          + "records during a partial outage window.";
+
+    /** 201 chars — one over the ceiling, so still off-band, but two lines instead of three. */
+    private static final String NEAR_MISS_REWRITE =
+            "Engineered a distributed ingestion service replacing the nightly batch job, adding "
+          + "backpressure, retry with jitter, and a dead-letter queue so a slow consumer cannot "
+          + "stall the pipeline or drop records.";
+
     private Bullet bullet(String text) {
         Bullet b = new Bullet(proj, text, new String[]{"java"}, "backend");
         ReflectionTestUtils.setField(b, "id", UUID.randomUUID());
@@ -167,6 +180,35 @@ class BulletServiceRefitTest {
         service.refit(user, proj, ProgressLog.noOp());
 
         assertEquals(OFF_BAND, b.getText());
+        verify(repo, never()).save(any());
+    }
+
+    @Test
+    void acceptsAnOffBandRewriteThatCostsFewerLines() {
+        // The point of the refit is page space. Rejecting a 201c/2-line rewrite reinstates a
+        // 294c/3-line original, which is strictly worse by the measure that matters.
+        Bullet b = bullet(THREE_LINER);
+        given(b);
+        llmReplies(NEAR_MISS_REWRITE);
+
+        service.refit(user, proj, ProgressLog.noOp());
+
+        assertNotEquals(BulletTextRules.Decision.KEPT,
+                BulletTextRules.decide(BulletTextRules.charCount(NEAR_MISS_REWRITE), CFG),
+                "fixture must still be off-band, or this asserts nothing");
+        assertEquals(NEAR_MISS_REWRITE, b.getText());
+        verify(repo).save(b);
+    }
+
+    @Test
+    void stillRejectsAnOffBandRewriteThatSavesNoLines() {
+        Bullet b = bullet(THREE_LINER);
+        given(b);
+        llmReplies(THREE_LINER.replace("silently drop", "quietly drop"));
+
+        service.refit(user, proj, ProgressLog.noOp());
+
+        assertEquals(THREE_LINER, b.getText());
         verify(repo, never()).save(any());
     }
 

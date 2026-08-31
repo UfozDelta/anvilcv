@@ -98,14 +98,19 @@ class RefitDryRunTest {
             String text = BulletTextRules.capBoldSpans(BulletTextRules.ensureTerminalPeriod(r.text()), maxBold);
             int before = BulletTextRules.charCount(b.text()), after = BulletTextRules.charCount(text);
             var decision = BulletTextRules.decide(after, cfg);
-            boolean kept = decision == BulletTextRules.Decision.KEPT;
-            if (kept) ok++;
-            System.out.printf("%n%s  %dc/%dL -> %dc/%dL  %s%n", kept ? "OK  " : "REJECT",
-                    before, BulletTextRules.estimatedLines(b.text()),
-                    after, BulletTextRules.estimatedLines(text), kept ? "" : decision);
+            int linesBefore = BulletTextRules.estimatedLines(b.text());
+            int linesAfter = BulletTextRules.estimatedLines(text);
+            boolean inBand = decision == BulletTextRules.Decision.KEPT;
+            // Mirrors rejectRefit: off-band is fine when it costs fewer rendered lines.
+            boolean accepted = inBand || linesAfter < linesBefore;
+            if (accepted) ok++;
+            System.out.printf("%n%s  %dc/%dL -> %dc/%dL  %s%n",
+                    inBand ? "OK    " : accepted ? "ACCEPT" : "REJECT",
+                    before, linesBefore, after, linesAfter,
+                    inBand ? "" : decision + (accepted ? " but fewer lines" : ""));
             System.out.println("  before: " + b.text());
             System.out.println("  after:  " + text);
         }
-        System.out.printf("%n%d/%d proposed rewrites land in band. NOTHING WRITTEN.%n", ok, offBand.size());
+        System.out.printf("%n%d/%d proposed rewrites would be accepted. NOTHING WRITTEN.%n", ok, offBand.size());
     }
 }
