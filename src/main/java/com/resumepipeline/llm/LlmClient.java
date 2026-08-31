@@ -43,6 +43,9 @@ public interface LlmClient {
             String ownership,
             String scaleImpact,
             String hardestProblem,
+            String technicalDecisions,
+            String userImpact,
+            String securityPosture,
             String title, String company, String location, String dates,
             /** Bullets already in the bank for this project — the prompt is told to avoid repeating them. */
             List<String> existingBullets,

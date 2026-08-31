@@ -65,6 +65,7 @@ public class ProjectController {
         return ProjectResponse.from(projects.update(AuthUtils.userId(auth), id,
                 req.name(), req.description(), req.githubUrl(),
                 req.techStack(), req.yourRole(), req.ownership(), req.scaleImpact(), req.hardestProblem(),
+                req.technicalDecisions(), req.userImpact(), req.securityPosture(),
                 req.title(), req.company(), req.location(), req.dates()));
     }
 

@@ -92,6 +92,7 @@ class OpenCodeLlmClientTest {
         LlmClient.BulletGenerationResult result = client.generateBullets(
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, "Java", null, null, null, null,
+                        null, null, null,
                         null, null, null, null, List.of(), List.of()),
                 ProgressLog.noOp(), new TokenAccumulator());
 
@@ -122,6 +123,7 @@ class OpenCodeLlmClientTest {
         LlmClient.BulletGenerationResult result = client.generateBullets(
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, "Java", null, null, null, null,
+                        null, null, null,
                         null, null, null, null, List.of(), List.of()),
                 ProgressLog.noOp(), new TokenAccumulator());
 

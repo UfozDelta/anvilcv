@@ -111,17 +111,20 @@ public abstract class BaseLlmClient implements LlmClient {
     public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens) {
         boolean experience = req.kind() == SourceKind.EXPERIENCE;
 
-        String contextBlock = experience
+        // Both kinds get the same enrich-field block. Experience rows used to get a
+        // description-only template, which silently discarded tech stack, role, ownership,
+        // scale, decisions, impact and security even though BulletService passes them all --
+        // and experience is where most of the resume's real estate goes.
+        String header = experience
                 ? """
                 Role:     %s
                 Company:  %s
                 Location: %s
                 Dates:    %s
+                """.formatted(nz(req.title()), nz(req.company()), nz(req.location()), nz(req.dates()))
+                : "Project name: " + nz(req.projectName()) + "\n";
 
-                Description of work (what was built, with what tech, at what scale):
-                %s
-                """.formatted(nz(req.title()), nz(req.company()), nz(req.location()), nz(req.dates()), nz(req.description()))
-                : buildProjectContextBlock(req);
+        String contextBlock = header + "\n" + buildFieldBlock(req, experience);
 
         String repoBlock = req.repoContext() == null || req.repoContext().isBlank()
                 ? ""
@@ -906,15 +909,47 @@ public abstract class BaseLlmClient implements LlmClient {
 
     private static String nz(String s) { return s == null ? "" : s; }
 
-    private static String buildProjectContextBlock(GenerateBulletsRequest req) {
+    /**
+     * The enrich fields, each under its own label. Shared by both source kinds -- only the
+     * header above differs. Every field is optional; {@link #has} drops the label with it so
+     * an unfilled column costs nothing in the prompt.
+     */
+    /**
+     * The extractor tags every number with where it came from -- {@code [repo]}, {@code [commit]},
+     * {@code [diff]}, {@code [dev]}. That provenance is for the human reviewing the context doc;
+     * nothing downstream reads it, and a populated project carries dozens, shipped once per lens.
+     * Strip at prompt-build time only -- the stored column keeps its tags.
+     */
+    private static final java.util.regex.Pattern PROVENANCE_TAG =
+            java.util.regex.Pattern.compile("\\s*\\[(?:repo|commit|diff|dev)]");
+
+    static String untag(String s) {
+        return PROVENANCE_TAG.matcher(s).replaceAll("");
+    }
+
+    private static String buildFieldBlock(GenerateBulletsRequest req, boolean experience) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Project name: ").append(nz(req.projectName())).append("\n\n");
-        sb.append("Project description:\n").append(nz(req.description())).append("\n");
-        if (has(req.techStack()))      sb.append("\nTech stack: ").append(req.techStack()).append("\n");
-        if (has(req.yourRole()))       sb.append("Your role: ").append(req.yourRole()).append("\n");
-        if (has(req.ownership()))      sb.append("\nWhat you owned:\n").append(req.ownership()).append("\n");
-        if (has(req.scaleImpact()))    sb.append("\nScale & impact: ").append(req.scaleImpact()).append("\n");
-        if (has(req.hardestProblem())) sb.append("\nHardest problem solved:\n").append(req.hardestProblem()).append("\n");
+        sb.append(experience
+                        ? "Description of work (what was built, with what tech, at what scale):\n"
+                        : "Project description:\n")
+          .append(untag(nz(req.description()))).append("\n");
+        if (has(req.techStack()))      sb.append("\nTech stack: ").append(untag(req.techStack())).append("\n");
+        if (has(req.yourRole()))       sb.append("Your role: ").append(untag(req.yourRole())).append("\n");
+        if (has(req.ownership()))      sb.append("\nWhat you owned:\n").append(untag(req.ownership())).append("\n");
+        if (has(req.scaleImpact()))    sb.append("\nScale & impact: ").append(untag(req.scaleImpact())).append("\n");
+        if (has(req.hardestProblem())) sb.append("\nHardest problem solved:\n").append(untag(req.hardestProblem())).append("\n");
+        // Carries the rejected alternative ("chose X over Y") and the failure each choice
+        // prevented. The counterfactual is the only legal stand-in for XYZ's "as measured by"
+        // clause when nothing in the repo was ever benchmarked.
+        if (has(req.technicalDecisions()))
+            sb.append("\nKey technical decisions — and the failures they prevented:\n")
+              .append(untag(req.technicalDecisions())).append("\n");
+        if (has(req.userImpact()))
+            sb.append("\nWho it served & why it mattered: ").append(untag(req.userImpact())).append("\n");
+        // Kept out of "what you owned" on purpose: a compliance regime is a constraint you
+        // worked under, not a component you built.
+        if (has(req.securityPosture()))
+            sb.append("\nSecurity & compliance posture:\n").append(untag(req.securityPosture())).append("\n");
         return sb.toString();
     }
 

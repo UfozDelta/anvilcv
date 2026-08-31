@@ -29,27 +29,27 @@ public class GenerationConfig {
 
     /** 81-97 chars: fits on one rendered line. */
     @Column(name = "single_line_low", nullable = false)
-    private int singleLineLow = 15;
+    private int singleLineLow = 11;
 
     @Column(name = "single_line_high", nullable = false)
-    private int singleLineHigh = 18;
+    private int singleLineHigh = 13;
 
     /** 173-200 chars: fills two rendered lines without spilling to a third. */
     @Column(name = "double_line_low", nullable = false)
-    private int doubleLineLow = 32;
+    private int doubleLineLow = 23;
 
     @Column(name = "double_line_high", nullable = false)
-    private int doubleLineHigh = 37;
+    private int doubleLineHigh = 27;
 
     /** 103-167 chars: the awkward gap between a full first line and a full second one. */
     @Column(name = "dead_zone_low", nullable = false)
-    private int deadZoneLow = 19;
+    private int deadZoneLow = 14;
 
     @Column(name = "dead_zone_high", nullable = false)
-    private int deadZoneHigh = 31;
+    private int deadZoneHigh = 22;
 
     @Column(name = "min_word_floor", nullable = false)
-    private int minWordFloor = 12;
+    private int minWordFloor = 9;
 
     @Column(nullable = false)
     private double temperature = 1.0;

@@ -286,6 +286,7 @@ public class BulletService {
                             p.getName(), p.getDescription(), p.getRepoContext(),
                             p.getTechStack(), p.getYourRole(), p.getOwnership(),
                             p.getScaleImpact(), p.getHardestProblem(),
+                            p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                             p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
                             existing, siblingCategories),
                     progress, tokens);

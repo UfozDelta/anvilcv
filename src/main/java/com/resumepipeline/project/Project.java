@@ -50,6 +50,15 @@ public class Project {
     @Column(name = "hardest_problem", columnDefinition = "text")
     private String hardestProblem;
 
+    @Column(name = "technical_decisions", columnDefinition = "text")
+    private String technicalDecisions;
+
+    @Column(name = "user_impact", columnDefinition = "text")
+    private String userImpact;
+
+    @Column(name = "security_posture", columnDefinition = "text")
+    private String securityPosture;
+
     // Used when kind = EXPERIENCE
     private String title;
     private String company;
@@ -102,6 +111,12 @@ public class Project {
     public void setScaleImpact(String scaleImpact) { this.scaleImpact = scaleImpact; }
     public String getHardestProblem() { return hardestProblem; }
     public void setHardestProblem(String hardestProblem) { this.hardestProblem = hardestProblem; }
+    public String getTechnicalDecisions() { return technicalDecisions; }
+    public void setTechnicalDecisions(String technicalDecisions) { this.technicalDecisions = technicalDecisions; }
+    public String getUserImpact() { return userImpact; }
+    public void setUserImpact(String userImpact) { this.userImpact = userImpact; }
+    public String getSecurityPosture() { return securityPosture; }
+    public void setSecurityPosture(String securityPosture) { this.securityPosture = securityPosture; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getCompany() { return company; }

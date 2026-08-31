@@ -60,3 +60,4 @@ LLM_SETTINGS_PLAN.md
 *.pdf
 !docs/**/*.pdf
 claude.md
+context_work/

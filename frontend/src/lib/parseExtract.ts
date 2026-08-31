@@ -11,6 +11,9 @@ export type ExtractField =
   | 'ownership'
   | 'scaleImpact'
   | 'hardestProblem'
+  | 'technicalDecisions'
+  | 'userImpact'
+  | 'securityPosture'
   | 'description';
 
 // Heading text (lower-cased, trimmed) → field. These mirror the "##" headings
@@ -21,6 +24,9 @@ const HEADING_TO_FIELD: Record<string, ExtractField> = {
   'what you owned end-to-end': 'ownership',
   'scale & impact': 'scaleImpact',
   'hardest problem solved': 'hardestProblem',
+  'notable technical decisions': 'technicalDecisions',
+  'users & business context': 'userImpact',
+  'security & compliance posture': 'securityPosture',
   'architecture overview': 'description',
 };
 
@@ -44,6 +50,32 @@ function cleanBody(lines: string[]): string {
     .trim();
 }
 
+const FIELDS: ExtractField[] = [
+  'techStack',
+  'yourRole',
+  'ownership',
+  'scaleImpact',
+  'hardestProblem',
+  'technicalDecisions',
+  'userImpact',
+  'securityPosture',
+  'description',
+];
+
+/**
+ * Sections the extractor marks "→ fold into: **someField**" carry supporting
+ * material (Standout Signal, Failure Modes Avoided, ...) rather than owning a
+ * field of their own. Their headings aren't in HEADING_TO_FIELD, so without
+ * this they'd be dropped on import. Read the pointer line and append the body
+ * to the field it names.
+ */
+function foldTarget(line: string): ExtractField | null {
+  const m = line.match(/^\s*→\s*fold into:\s*\*\*(\w+)\*\*/i);
+  if (!m) return null;
+  const name = m[1].toLowerCase();
+  return FIELDS.find(f => f.toLowerCase() === name) ?? null;
+}
+
 /**
  * Parse extractor output into a partial map of fields. Only sections whose
  * heading is recognized (and whose body is non-empty) are included.
@@ -56,14 +88,24 @@ export function parseExtract(raw: string): Partial<Record<ExtractField, string>>
   const lines = text.split(/\r?\n/);
 
   let currentField: ExtractField | null = null;
+  // True when the active section was routed here by a "fold into" pointer, so
+  // its body supplements whatever the owning section already wrote.
+  let appending = false;
+  // Set after an unrecognized heading, while we wait to see whether its first
+  // pointer line folds it into a field.
+  let awaitingFold = false;
   let buf: string[] = [];
 
   const flush = () => {
     if (currentField) {
       const body = cleanBody(buf);
-      if (body) out[currentField] = body;
+      if (body) {
+        const prev = out[currentField];
+        out[currentField] = appending && prev ? `${prev}\n\n${body}` : body;
+      }
     }
     buf = [];
+    appending = false;
   };
 
   for (const line of lines) {
@@ -73,6 +115,7 @@ export function parseExtract(raw: string): Partial<Record<ExtractField, string>>
       flush();
       const key = heading[1].toLowerCase().trim();
       currentField = HEADING_TO_FIELD[key] ?? null;
+      awaitingFold = currentField === null;
       continue;
     }
     // Section separators reset the active section so stray text after a
@@ -80,7 +123,19 @@ export function parseExtract(raw: string): Partial<Record<ExtractField, string>>
     if (/^\s*---\s*$/.test(line)) {
       flush();
       currentField = null;
+      awaitingFold = false;
       continue;
+    }
+    if (awaitingFold) {
+      if (!line.trim()) continue;
+      const target = foldTarget(line);
+      awaitingFold = false;
+      if (target) {
+        currentField = target;
+        appending = true;
+      }
+      // Either way the pointer line itself isn't body text.
+      if (target) continue;
     }
     if (currentField) buf.push(line);
   }

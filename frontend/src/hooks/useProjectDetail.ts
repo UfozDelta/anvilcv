@@ -26,6 +26,9 @@ export function useProjectDetail(id: string | undefined) {
   const [ownership, setOwnership] = useState('');
   const [scaleImpact, setScaleImpact] = useState('');
   const [hardestProblem, setHardestProblem] = useState('');
+  const [technicalDecisions, setTechnicalDecisions] = useState('');
+  const [userImpact, setUserImpact] = useState('');
+  const [securityPosture, setSecurityPosture] = useState('');
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [pasteMsg, setPasteMsg] = useState<string | null>(null);
@@ -56,6 +59,9 @@ export function useProjectDetail(id: string | undefined) {
       setOwnership(p.ownership || '');
       setScaleImpact(p.scaleImpact || '');
       setHardestProblem(p.hardestProblem || '');
+      setTechnicalDecisions(p.technicalDecisions || '');
+      setUserImpact(p.userImpact || '');
+      setSecurityPosture(p.securityPosture || '');
       setEditTitle(p.title || '');
       setEditCompany(p.company || '');
       setEditLocation(p.location || '');
@@ -83,7 +89,7 @@ export function useProjectDetail(id: string | undefined) {
     if (!id) return;
     setEnrichErr(null); setEnrichSaving(true);
     try {
-      await api.put(`/api/projects/${id}`, { techStack, yourRole, ownership, scaleImpact, hardestProblem, description: editDescription });
+      await api.put(`/api/projects/${id}`, { techStack, yourRole, ownership, scaleImpact, hardestProblem, technicalDecisions, userImpact, securityPosture, description: editDescription });
       await load();
       setEnrichOpen(false);
     } catch (e: any) {
@@ -106,6 +112,9 @@ export function useProjectDetail(id: string | undefined) {
     if (fields.ownership !== undefined) setOwnership(fields.ownership);
     if (fields.scaleImpact !== undefined) setScaleImpact(fields.scaleImpact);
     if (fields.hardestProblem !== undefined) setHardestProblem(fields.hardestProblem);
+    if (fields.technicalDecisions !== undefined) setTechnicalDecisions(fields.technicalDecisions);
+    if (fields.userImpact !== undefined) setUserImpact(fields.userImpact);
+    if (fields.securityPosture !== undefined) setSecurityPosture(fields.securityPosture);
     if (fields.description !== undefined) setEditDescription(fields.description);
     setPasteMsg(`Filled ${keys.length}/6 fields — review below, then SAVE CONTEXT.`);
     setPasteOpen(false);
@@ -234,6 +243,8 @@ export function useProjectDetail(id: string | undefined) {
     enrichOpen, setEnrichOpen, enrichSaving, enrichErr, saveEnrich,
     techStack, setTechStack, yourRole, setYourRole, ownership, setOwnership,
     scaleImpact, setScaleImpact, hardestProblem, setHardestProblem,
+    technicalDecisions, setTechnicalDecisions, userImpact, setUserImpact,
+    securityPosture, setSecurityPosture,
     pasteOpen, setPasteOpen, pasteText, setPasteText, pasteMsg, parseAndFill,
     infoOpen, setInfoOpen, infoSaving, infoErr, saveInfo,
     editTitle, setEditTitle, editCompany, setEditCompany,

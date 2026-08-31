@@ -227,15 +227,25 @@ public final class BulletTextRules {
 
     /**
      * Ratio used to read the word-based {@link GenerationConfig} bands as character
-     * bands. The configured defaults are calibrated against {@link #CHARS_PER_LINE} at
-     * this ratio — 15-18 words is the ~81-97 char one-line band, 32-37 the ~173-200 char
-     * two-line band — so the conversion changes no existing tuning.
+     * bands. Measured against the real bullet corpus (n=84): mean 7.41, median 7.38,
+     * p90 7.98. Technical resume vocabulary — {@code PostgreSQL}, {@code AES-256-GCM},
+     * {@code anti-hallucination} — runs much longer than ordinary prose, so the earlier
+     * 5.4 understated rendered width by roughly a third.
+     *
+     * <p>This ratio and the {@link GenerationConfig} word bands are one calibration and
+     * move together: the bands exist to hit character targets that fit {@link
+     * #CHARS_PER_LINE}, so changing this without re-deriving them (see
+     * {@code V24__recalibrate_bands_for_measured_ratio.sql}) silently retargets every
+     * bullet. At 7.4 the shipped bands give ~81-96 chars for one line and ~170-200 for
+     * two — the two-line ceiling stays under 2 x CHARS_PER_LINE, so a kept bullet never
+     * renders a third line.
      *
      * <p>ponytail: one global constant rather than six new config columns. If per-user
      * tuning drifts (very terse or very verbose writing), promote the character bands to
-     * their own columns instead of adjusting this.
+     * their own columns instead of adjusting this. Re-measure with
+     * {@code CharsPerWordMeasureTest} before changing it.
      */
-    static final double CHARS_PER_WORD = 5.4;
+    static final double CHARS_PER_WORD = 7.4;
 
     /**
      * Rendered characters per LaTeX bullet line, measured against a real compiled PDF
@@ -256,6 +266,17 @@ public final class BulletTextRules {
      */
     public static int estimatedLines(String text) {
         return Math.max(1, (int) Math.ceil(charCount(text) / (double) CHARS_PER_LINE));
+    }
+
+    /**
+     * Upper bound on a kept bullet, in characters. The configured two-line band is the
+     * intent, but a bullet may never render a third line, so this hard-clamps to what two
+     * rendered lines physically hold. Without the clamp an admin raising the word band --
+     * or a future ratio change -- would silently start admitting three-line bullets, which
+     * blow the one-page budget a resume is built around.
+     */
+    static int twoLineCeilingChars(GenerationConfig cfg) {
+        return Math.min(chars(cfg.getDoubleLineHigh()), 2 * CHARS_PER_LINE);
     }
 
     /** The configured word band expressed in characters. */
@@ -413,7 +434,7 @@ public final class BulletTextRules {
         if (charCount >= chars(cfg.getDeadZoneLow()) && charCount <= chars(cfg.getDeadZoneHigh())) {
             return Decision.DEAD_ZONE;
         }
-        if (charCount > chars(cfg.getDoubleLineHigh())) {
+        if (charCount > twoLineCeilingChars(cfg)) {
             return Decision.TOO_LONG;
         }
         if (charCount < chars(cfg.getMinWordFloor())) {
@@ -428,6 +449,6 @@ public final class BulletTextRules {
     public static int singleLowChars(GenerationConfig cfg)    { return chars(cfg.getSingleLineLow()); }
     public static int singleHighChars(GenerationConfig cfg)   { return chars(cfg.getSingleLineHigh()); }
     public static int doubleLowChars(GenerationConfig cfg)    { return chars(cfg.getDoubleLineLow()); }
-    public static int doubleHighChars(GenerationConfig cfg)   { return chars(cfg.getDoubleLineHigh()); }
+    public static int doubleHighChars(GenerationConfig cfg)   { return twoLineCeilingChars(cfg); }
     public static int minFloorChars(GenerationConfig cfg)     { return chars(cfg.getMinWordFloor()); }
 }

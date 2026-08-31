@@ -106,17 +106,20 @@ class BulletTextRulesTest {
         assertEquals(Decision.KEPT, BulletTextRules.decide(130, c));  // would be dead zone
     }
 
-    @Test void decideDeadZoneLowBoundary()  { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(103, cfg())); }
-    @Test void decideDeadZoneHighBoundary() { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(167, cfg())); }
-    @Test void decideDeadZoneMiddle()       { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(130, cfg())); }
+    // Boundaries are derived, not hardcoded: the word bands and CHARS_PER_WORD are one
+    // calibration and both have moved before (V21, V24). Hardcoding the character values
+    // makes these tests fail on every recalibration without indicating a real regression.
+    @Test void decideDeadZoneLowBoundary()  { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(BulletTextRules.deadZoneLowChars(cfg()), cfg())); }
+    @Test void decideDeadZoneHighBoundary() { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide(BulletTextRules.deadZoneHighChars(cfg()), cfg())); }
+    @Test void decideDeadZoneMiddle()       { assertEquals(Decision.DEAD_ZONE, BulletTextRules.decide((BulletTextRules.deadZoneLowChars(cfg()) + BulletTextRules.deadZoneHighChars(cfg())) / 2, cfg())); }
 
-    @Test void decideTooShort()             { assertEquals(Decision.TOO_SHORT, BulletTextRules.decide(64, cfg())); }
-    @Test void decideFloorBoundaryKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(65, cfg())); }
+    @Test void decideTooShort()             { assertEquals(Decision.TOO_SHORT, BulletTextRules.decide(BulletTextRules.minFloorChars(cfg()) - 1, cfg())); }
+    @Test void decideFloorBoundaryKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.minFloorChars(cfg()), cfg())); }
 
-    @Test void decideSingleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(90, cfg())); }
-    @Test void decideJustBelowDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(102, cfg())); }
-    @Test void decideJustAboveDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(168, cfg())); }
-    @Test void decideDoubleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(185, cfg())); }
+    @Test void decideSingleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.singleHighChars(cfg()), cfg())); }
+    @Test void decideJustBelowDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.deadZoneLowChars(cfg()) - 1, cfg())); }
+    @Test void decideJustAboveDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.deadZoneHighChars(cfg()) + 1, cfg())); }
+    @Test void decideDoubleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.doubleHighChars(cfg()), cfg())); }
 
     @Test void decideCeilingBoundaryKept()  { assertEquals(Decision.KEPT, BulletTextRules.decide(200, cfg())); }
     @Test void decideJustOverCeiling()      { assertEquals(Decision.TOO_LONG, BulletTextRules.decide(201, cfg())); }

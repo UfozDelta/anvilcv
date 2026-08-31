@@ -10,7 +10,7 @@ import type { GenerationConfig } from './api';
  */
 
 /** Mirrors `BulletTextRules.CHARS_PER_WORD` — the word bands are read as character bands. */
-export const CHARS_PER_WORD = 5.4;
+export const CHARS_PER_WORD = 7.4;
 
 /** Mirrors `BulletTextRules.CHARS_PER_LINE` — rendered characters per LaTeX bullet line. */
 export const CHARS_PER_LINE = 105;

@@ -1,15 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { charCount, estimatedLines, fitOf, needsRefit } from './bulletLength';
+import { CHARS_PER_LINE, CHARS_PER_WORD, charCount, estimatedLines, fitOf, needsRefit } from './bulletLength';
 import type { GenerationConfig } from './api';
 
-// The shipped backend defaults. In characters: 1 line 81-97, dead zone 103-167,
-// 2 lines 173-200, floor 65.
+// The shipped backend defaults (V24, calibrated at CHARS_PER_WORD 7.4 measured over
+// the real corpus). In characters: 1 line 81-96, dead zone 104-163, 2 lines 170-200,
+// floor 67. The 200 ceiling is under 2 x CHARS_PER_LINE, so a kept bullet never
+// renders a third line.
 const CFG: GenerationConfig = {
   wordFilterEnabled: true,
-  singleLineLow: 15, singleLineHigh: 18,
-  doubleLineLow: 32, doubleLineHigh: 37,
-  deadZoneLow: 19, deadZoneHigh: 31,
-  minWordFloor: 12,
+  singleLineLow: 11, singleLineHigh: 13,
+  doubleLineLow: 23, doubleLineHigh: 27,
+  deadZoneLow: 14, deadZoneHigh: 22,
+  minWordFloor: 9,
   temperature: 1.0, boldDensity: 'LIGHT', tone: 'NEUTRAL', actionVerbStyle: 'TECHNICAL',
 };
 
@@ -52,11 +54,21 @@ describe('fitOf', () => {
     expect(fitOf(of(250), { ...CFG, wordFilterEnabled: false })).toBe('OFF');
   });
 
+  // Derived from the config rather than hardcoded: the bands and CHARS_PER_WORD are one
+  // calibration and have moved twice (V21, V24). Hardcoded edges fail on every
+  // recalibration without indicating a real regression.
   it('treats the band edges as inside the band', () => {
-    expect(fitOf(of(97), CFG)).toBe('ONE_LINE');   // singleLineHigh
-    expect(fitOf(of(103), CFG)).toBe('DEAD_ZONE'); // deadZoneLow
-    expect(fitOf(of(167), CFG)).toBe('DEAD_ZONE'); // deadZoneHigh
-    expect(fitOf(of(200), CFG)).toBe('TWO_LINE');  // doubleLineHigh
+    const c = (words: number) => Math.round(words * CHARS_PER_WORD);
+    expect(fitOf(of(c(CFG.singleLineHigh)), CFG)).toBe('ONE_LINE');
+    expect(fitOf(of(c(CFG.deadZoneLow)), CFG)).toBe('DEAD_ZONE');
+    expect(fitOf(of(c(CFG.deadZoneHigh)), CFG)).toBe('DEAD_ZONE');
+    expect(fitOf(of(c(CFG.doubleLineHigh)), CFG)).toBe('TWO_LINE');
+  });
+
+  it('never admits a bullet that would render a third line', () => {
+    const ceiling = Math.round(CFG.doubleLineHigh * CHARS_PER_WORD);
+    expect(estimatedLines(of(ceiling))).toBeLessThanOrEqual(2);
+    expect(fitOf(of(2 * CHARS_PER_LINE + 1), CFG)).toBe('TOO_LONG');
   });
 });
 

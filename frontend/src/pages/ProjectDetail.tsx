@@ -86,7 +86,9 @@ export function ProjectDetail() {
 
       {/* Enrich Context — compact trigger, full editor lives in the drawer */}
       {(() => {
-        const filledCount = [project.techStack, project.yourRole, project.ownership, project.scaleImpact, project.hardestProblem].filter(Boolean).length;
+        const filledCount = [project.techStack, project.yourRole, project.ownership, project.scaleImpact,
+                             project.hardestProblem, project.technicalDecisions, project.userImpact,
+                             project.securityPosture].filter(Boolean).length;
         return (
           <button
             type="button"
@@ -112,6 +114,9 @@ export function ProjectDetail() {
             ownership={s.ownership} setOwnership={s.setOwnership}
             scaleImpact={s.scaleImpact} setScaleImpact={s.setScaleImpact}
             hardestProblem={s.hardestProblem} setHardestProblem={s.setHardestProblem}
+            technicalDecisions={s.technicalDecisions} setTechnicalDecisions={s.setTechnicalDecisions}
+            userImpact={s.userImpact} setUserImpact={s.setUserImpact}
+            securityPosture={s.securityPosture} setSecurityPosture={s.setSecurityPosture}
             editDescription={s.editDescription} setEditDescription={s.setEditDescription}
             enrichErr={s.enrichErr} enrichSaving={s.enrichSaving} saveEnrich={s.saveEnrich}
           />

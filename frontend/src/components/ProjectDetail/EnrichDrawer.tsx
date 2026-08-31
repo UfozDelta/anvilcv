@@ -10,6 +10,9 @@ export function EnrichDrawer(props: {
   ownership: string; setOwnership: (v: string) => void;
   scaleImpact: string; setScaleImpact: (v: string) => void;
   hardestProblem: string; setHardestProblem: (v: string) => void;
+  technicalDecisions: string; setTechnicalDecisions: (v: string) => void;
+  userImpact: string; setUserImpact: (v: string) => void;
+  securityPosture: string; setSecurityPosture: (v: string) => void;
   editDescription: string; setEditDescription: (v: string) => void;
   enrichErr: string | null; enrichSaving: boolean; saveEnrich: () => void;
 }) {
@@ -17,6 +20,8 @@ export function EnrichDrawer(props: {
     onClose, pasteOpen, setPasteOpen, pasteText, setPasteText, pasteMsg, parseAndFill,
     techStack, setTechStack, yourRole, setYourRole, ownership, setOwnership,
     scaleImpact, setScaleImpact, hardestProblem, setHardestProblem,
+    technicalDecisions, setTechnicalDecisions, userImpact, setUserImpact,
+    securityPosture, setSecurityPosture,
     editDescription, setEditDescription, enrichErr, enrichSaving, saveEnrich,
   } = props;
 
@@ -106,6 +111,23 @@ export function EnrichDrawer(props: {
           <textarea className="field__textarea" value={hardestProblem} onChange={e => setHardestProblem(e.target.value)}
             style={{ minHeight: 80 }}
             placeholder="Had to guarantee exactly-once delivery under network partitions…" />
+        </label>
+        <label className="field">
+          <div className="field__label">Key technical decisions</div>
+          <textarea className="field__textarea" value={technicalDecisions} onChange={e => setTechnicalDecisions(e.target.value)}
+            style={{ minHeight: 80 }}
+            placeholder="Chose Redis over Postgres pub/sub to cut write amplification at 50ms polling; idempotency keys prevent double-charges on provider retries…" />
+        </label>
+        <label className="field">
+          <div className="field__label">Who it served &amp; why it mattered</div>
+          <input className="field__input" value={userImpact} onChange={e => setUserImpact(e.target.value)}
+            placeholder="40 brokerage tenants; an outage means lost listings…" />
+        </label>
+        <label className="field">
+          <div className="field__label">Security &amp; compliance posture</div>
+          <textarea className="field__textarea" value={securityPosture} onChange={e => setSecurityPosture(e.target.value)}
+            style={{ minHeight: 80 }}
+            placeholder="AES-256-GCM for tokens at rest; SOC 2 Type II; per-tenant row-level isolation…" />
         </label>
         <label className="field">
           <div className="field__label">Description / architecture overview</div>

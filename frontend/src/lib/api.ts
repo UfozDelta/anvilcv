@@ -81,6 +81,9 @@ export interface Project {
   ownership?: string | null;
   scaleImpact?: string | null;
   hardestProblem?: string | null;
+  technicalDecisions?: string | null;
+  userImpact?: string | null;
+  securityPosture?: string | null;
   title?: string | null;
   company?: string | null;
   location?: string | null;

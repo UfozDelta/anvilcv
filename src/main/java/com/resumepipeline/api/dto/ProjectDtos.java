@@ -25,6 +25,9 @@ public class ProjectDtos {
             String ownership,
             String scaleImpact,
             String hardestProblem,
+            String technicalDecisions,
+            String userImpact,
+            String securityPosture,
             String title, String company, String location, String dates
     ) {}
 
@@ -40,6 +43,9 @@ public class ProjectDtos {
             String ownership,
             String scaleImpact,
             String hardestProblem,
+            String technicalDecisions,
+            String userImpact,
+            String securityPosture,
             String title, String company, String location, String dates,
             Instant createdAt
     ) {
@@ -49,6 +55,7 @@ public class ProjectDtos {
                     p.getGithubUrl(), p.getRepoContext() != null,
                     p.getTechStack(), p.getYourRole(), p.getOwnership(),
                     p.getScaleImpact(), p.getHardestProblem(),
+                    p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                     p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
                     p.getCreatedAt());
         }

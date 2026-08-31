@@ -71,7 +71,7 @@ class ProjectServiceTest {
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.update(user, id, "P", "d", "https://github.com/x/y",
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null);
 
         verifyNoInteractions(githubFetcher);
     }
@@ -87,7 +87,7 @@ class ProjectServiceTest {
         when(githubFetcher.fetch("https://github.com/new/repo")).thenReturn("README");
 
         service.update(user, id, "P", "d", "https://github.com/new/repo",
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null);
 
         verify(githubFetcher).fetch("https://github.com/new/repo");
     }

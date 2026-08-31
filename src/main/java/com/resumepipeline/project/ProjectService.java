@@ -55,6 +55,7 @@ public class ProjectService {
     public Project update(UUID userId, UUID id, String name, String description,
                           String githubUrl, String techStack, String yourRole,
                           String ownership, String scaleImpact, String hardestProblem,
+                          String technicalDecisions, String userImpact, String securityPosture,
                           String title, String company, String location, String dates) {
         Project p = get(userId, id);
         if (name != null)        p.setName(name);
@@ -66,6 +67,9 @@ public class ProjectService {
         p.setOwnership(ownership);
         p.setScaleImpact(scaleImpact);
         p.setHardestProblem(hardestProblem);
+        p.setTechnicalDecisions(technicalDecisions);
+        p.setUserImpact(userImpact);
+        p.setSecurityPosture(securityPosture);
         p.setTitle(title);
         p.setCompany(company);
         p.setLocation(location);
