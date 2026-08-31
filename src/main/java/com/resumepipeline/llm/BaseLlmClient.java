@@ -456,10 +456,19 @@ public abstract class BaseLlmClient implements LlmClient {
         if (req.bullets() == null || req.bullets().isEmpty()) return new RefitResult(List.of());
         GenerationConfig cfg = configService.get(req.userId());
 
+        // Per-bullet length and target. A model cannot count characters in its own output, so
+        // the global "never exceed N" rule alone leaves it guessing how deep to cut -- it shaves
+        // adjectives off a 318-char bullet and lands at 253, still a third line, still rejected.
+        int ceiling = BulletTextRules.doubleHighChars(cfg);
         StringBuilder list = new StringBuilder();
         for (BulletToRefit b : req.bullets()) {
+            int now = BulletTextRules.charCount(b.text());
             list.append("  - id: ").append(b.id()).append("\n")
-                .append("    text: ").append(b.text()).append("\n\n");
+                .append("    current length: ").append(now).append(" characters");
+            if (now > ceiling) {
+                list.append(" — MUST LOSE AT LEAST ").append(now - ceiling).append(" characters");
+            }
+            list.append("\n    text: ").append(b.text()).append("\n\n");
         }
 
         String prompt = """
@@ -468,8 +477,13 @@ public abstract class BaseLlmClient implements LlmClient {
                 %s## RULES
 
                   - Return EVERY bullet listed below, each carrying back the SAME id it was given.
-                  - Keep the same facts, metrics, technologies and meaning. This is a rephrasing to
-                    hit a length: change the wording and the level of detail, nothing else.
+                  - Keep the metrics and technologies. Rephrasing alone will NOT save a bullet that
+                    has to lose a quarter of its length: when the cut is that deep, delete its
+                    weakest supporting clause outright rather than compressing every clause. One
+                    sharp claim inside the band beats a dense one that misses it and is discarded.
+                  - The length target is the requirement, not a suggestion. A rewrite still over
+                    the ceiling is thrown away and the original long bullet kept, so a bullet you
+                    shorten only slightly is wasted work.
                   - NEVER invent a number, percentage, duration or scale that is not already in the
                     bullet you were given. If you cannot reach the band without one, cut detail
                     instead. A rewrite carrying a new number will be rejected.

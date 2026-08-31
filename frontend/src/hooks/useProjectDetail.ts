@@ -116,7 +116,7 @@ export function useProjectDetail(id: string | undefined) {
     if (fields.userImpact !== undefined) setUserImpact(fields.userImpact);
     if (fields.securityPosture !== undefined) setSecurityPosture(fields.securityPosture);
     if (fields.description !== undefined) setEditDescription(fields.description);
-    setPasteMsg(`Filled ${keys.length}/6 fields — review below, then SAVE CONTEXT.`);
+    setPasteMsg(`Filled ${keys.length} field${keys.length === 1 ? "" : "s"} — review below, then SAVE CONTEXT.`);
     setPasteOpen(false);
     setPasteText('');
   }
