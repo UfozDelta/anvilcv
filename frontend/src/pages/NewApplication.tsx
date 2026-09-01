@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
+import { CATEGORIES } from '../lib/api';
 
+// Derived from CATEGORIES so the emphasis slugs stay identical to the lens slugs the bank was
+// generated under — roleEmphasis can only pick between framings that already exist, so an
+// emphasis with no matching lens ("ml" when the lens is "ai-ml") had nothing to select.
+// "generalist" is the deliberate extra: no lens, meaning no angle preference.
 const EMPHASES = [
-  { value: 'backend',    label: 'Backend' },
-  { value: 'frontend',   label: 'Frontend' },
-  { value: 'ml',         label: 'ML / AI' },
+  ...CATEGORIES.map(c => ({ value: c.slug, label: c.label })),
   { value: 'generalist', label: 'Generalist' },
 ];
 

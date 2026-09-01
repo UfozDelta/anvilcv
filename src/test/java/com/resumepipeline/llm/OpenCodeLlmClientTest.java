@@ -135,6 +135,38 @@ class OpenCodeLlmClientTest {
     }
 
     @Test
+    void shortBatchWithNothingFilteredDoesNotTriggerRecovery() {
+        // Both bullets are in the single-line band (84 chars, band is 81-96 at the default
+        // 11-13 word settings) and open with strong verbs, so the filter cuts nothing. Two
+        // bullets is under the PROJECT target of 4, but the shortfall is the model's own
+        // judgement, not the filter's doing — recovery must not fire and ask for more.
+        GenerationConfig cfg = new GenerationConfig();   // word filter on, the default
+        GenerationConfigService configService = new GenerationConfigService(null) {
+            @Override
+            public GenerationConfig get(UUID userId) {
+                return cfg;
+            }
+        };
+
+        OpenCodeLlmClient client = client(configService);
+        server.expect(ExpectedCount.once(), anyRequest())
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Built a payment reconciliation service spanning three regional ledgers with retries.\\",\\"tags\\":[]},{\\"text\\":\\"Designed a schema migration path that moved every tenant onto shared indexes safely.\\",\\"tags\\":[]}]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.BulletGenerationResult result = client.generateBullets(
+                new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
+                        "general", "proj", "desc", null, "Java", null, null, null, null,
+                        null, null, null,
+                        null, null, null, null, List.of(), List.of()),
+                ProgressLog.noOp(), new TokenAccumulator());
+
+        assertEquals(2, result.bullets().size());
+        server.verify();   // fails if a second (recovery) call was made
+    }
+
+    @Test
     void serverErrorBecomesRuntimeException() {
         OpenCodeLlmClient client = client(null);
         // callJsonWithRetry retries a failed call once, so the server sees two requests

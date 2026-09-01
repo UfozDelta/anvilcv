@@ -168,6 +168,33 @@ public final class BulletTextRules {
         return existing.stream().anyMatch(t -> isSameClaim(t, text));
     }
 
+    /**
+     * Jaccard floor for the cross-lens check in {@code BulletService.saveDeduped}, deliberately
+     * far above {@link #NEAR_DUPLICATE_THRESHOLD}.
+     *
+     * <p>Two lenses generating from one project SHOULD both describe the same underlying work —
+     * that is the whole point of the fan-out. A backend-framed and a security-framed bullet about
+     * one auth system are the pair the application-time {@code roleEmphasis} picker chooses
+     * between, and {@code BulletSelector} already refuses to put both on the same resume
+     * (selectedTexts + isNearDuplicate, checked before every add in all four passes). Killing
+     * them at persist time deletes the choice permanently to prevent a collision that is already
+     * prevented non-destructively downstream.
+     *
+     * <p>So cross-lens only rejects near-identical prose — the case where a second lens added no
+     * new framing and there is nothing to choose between. Within one lens, and against the bullets
+     * already banked, {@link #NEAR_DUPLICATE_THRESHOLD} still applies.
+     */
+    public static final double CROSS_LENS_THRESHOLD = 0.85;
+
+    /**
+     * {@link #isNearDuplicate} at a caller-chosen Jaccard floor. The quantity-overlap signal is
+     * deliberately NOT applied here: it exists to catch heavy rewordings of one claim, which is
+     * exactly what a sibling lens is supposed to produce.
+     */
+    public static boolean isNearDuplicate(String text, Collection<String> existing, double threshold) {
+        return existing.stream().anyMatch(t -> similarity(t, text) >= threshold);
+    }
+
     private static boolean isSameClaim(String a, String b) {
         double sim = similarity(a, b);
         if (sim >= NEAR_DUPLICATE_THRESHOLD) return true;

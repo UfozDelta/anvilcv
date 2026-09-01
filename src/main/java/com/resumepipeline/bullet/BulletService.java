@@ -311,20 +311,45 @@ public class BulletService {
     }
 
     /**
-     * Dedup + persist one category's generated bullets against {@code seenTexts}, which is
-     * mutated in place so callers can chain this across categories in a batch. Must be called
-     * serially — it is not safe to call concurrently against a shared seenTexts list.
+     * Dedup + persist one category's generated bullets.
+     *
+     * <p>Two dedup strengths, because the two collisions are not the same thing:
+     *
+     * <ul>
+     *   <li>{@code bankTexts} — what is already stored, plus what this same lens has produced
+     *       so far in this call. A collision here is a genuine repeat, rejected at the normal
+     *       {@link BulletTextRules#NEAR_DUPLICATE_THRESHOLD}. Mutated in place, so the list a
+     *       caller passes must not be shared with a concurrent call.
+     *   <li>{@code siblingTexts} — what OTHER lenses produced in this same run. A collision here
+     *       is usually the fan-out working: the same work seen through two lenses, which is the
+     *       choice {@code roleEmphasis} makes at application time. Only near-identical prose is
+     *       rejected ({@link BulletTextRules#CROSS_LENS_THRESHOLD}); see that constant for why
+     *       the resume itself is protected without deleting the variant.
+     * </ul>
+     *
+     * <p>Must be called serially — neither list is safe to mutate concurrently.
      */
     private List<Bullet> saveDeduped(UUID userId, UUID projectId, RawGeneration gen,
-                                     List<String> seenTexts, ProgressLog progress) {
+                                     List<String> bankTexts, List<String> siblingTexts,
+                                     ProgressLog progress) {
         int maxBold = BulletTextRules.maxBoldSpans(configService.get(userId));
         List<Bullet> saved = new ArrayList<>();
         int dupDropped = 0;
+        int variantsKept = 0;
         for (LlmClient.GeneratedBullet g : gen.result().bullets()) {
-            if (BulletTextRules.isNearDuplicate(g.text(), seenTexts)) {
+            if (BulletTextRules.isNearDuplicate(g.text(), bankTexts)) {
                 dupDropped++;
                 continue;
             }
+            if (BulletTextRules.isNearDuplicate(g.text(), siblingTexts,
+                    BulletTextRules.CROSS_LENS_THRESHOLD)) {
+                dupDropped++;
+                continue;
+            }
+            // Overlaps a sibling lens but is not near-identical prose: a real alternative framing
+            // of the same work, kept on purpose. Counted so the log can show the fan-out earning
+            // its cost rather than just producing collisions.
+            if (BulletTextRules.isNearDuplicate(g.text(), siblingTexts)) variantsKept++;
             // Capped here, once, right before storage: every generation path (single-category
             // and the parallel bank fan-out) funnels through this method, so this is the one
             // place that guarantees every persisted bullet has been bold-capped regardless of
@@ -332,19 +357,23 @@ public class BulletService {
             // already strips ** internally (see wordSet/quantityTokens), so capping first vs.
             // after cannot change a dedup decision either way.
             String text = BulletTextRules.capBoldSpans(g.text(), maxBold);
-            seenTexts.add(text);
+            bankTexts.add(text);
             saved.add(repo.save(new Bullet(projectId, text, g.tags().toArray(new String[0]), gen.category())));
         }
+        // Published to the siblings only after this lens is done, so a lens is never compared
+        // against its own output twice (bankTexts already covers that at the stricter floor).
+        siblingTexts.addAll(saved.stream().map(Bullet::getText).toList());
         if (dupDropped > 0) {
             progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
         }
         // The companion to BULLET_GEN in BaseLlmClient: that line reports what survived the
         // filter, this one what survived dedup against the bank and its sibling categories.
-        // dup_dropped is the number that decides whether the parallel-category collision is
-        // worth restructuring generateBank for — it is bullets we paid full output tokens to
-        // generate and then binned.
-        log.info("BULLET_PERSIST project={} category={} generated={} saved={} dup_dropped={}",
-                projectId, gen.category(), gen.result().bullets().size(), saved.size(), dupDropped);
+        // dup_dropped is now only true repeats and near-identical prose; variants_kept is the
+        // number that says whether the fan-out is producing alternative framings worth paying
+        // for, and it is the pair to watch when tuning CROSS_LENS_THRESHOLD.
+        log.info("BULLET_PERSIST project={} category={} generated={} saved={} dup_dropped={} variants_kept={}",
+                projectId, gen.category(), gen.result().bullets().size(), saved.size(),
+                dupDropped, variantsKept);
         return saved;
     }
 
@@ -354,9 +383,10 @@ public class BulletService {
         RawGeneration gen = generateBulletsOnly(userId, projectId, category, List.of(), progress);
         // Fetched fresh here (not passed in) so this standalone entry point still sees any
         // bullets saved by other calls in the meantime — same behavior as before the split.
-        List<String> seenTexts = new ArrayList<>(
+        List<String> bankTexts = new ArrayList<>(
                 repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
-        return saveDeduped(userId, projectId, gen, seenTexts, progress);
+        // No siblings in flight, so nothing to compare at the cross-lens floor.
+        return saveDeduped(userId, projectId, gen, bankTexts, new ArrayList<>(), progress);
     }
 
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, ProgressLog progress) {
@@ -393,11 +423,18 @@ public class BulletService {
             throw new RuntimeException(cause.getMessage(), cause);
         }
 
-        List<String> seenTexts = new ArrayList<>(
-                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList());
+        // Every lens judges itself against the SAME stored-bank snapshot at the strict floor —
+        // hence a fresh copy per lens, not one shared mutable list. Sharing it would put lens 1's
+        // output into lens 2's strict comparison and reinstate exactly the cross-lens deletion
+        // this split exists to stop. Sibling output travels in siblingTexts instead, judged at
+        // CROSS_LENS_THRESHOLD, so a second framing of the same work survives.
+        List<String> bankSnapshot =
+                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList();
+        List<String> siblingTexts = new ArrayList<>();
         List<Bullet> combined = new ArrayList<>();
         for (RawGeneration gen : results) {
-            combined.addAll(saveDeduped(userId, projectId, gen, seenTexts, progress));
+            combined.addAll(saveDeduped(userId, projectId, gen,
+                    new ArrayList<>(bankSnapshot), siblingTexts, progress));
         }
         progress.emit("Done — generated " + combined.size() + " bullets across " + total + " categories.");
         return combined;
