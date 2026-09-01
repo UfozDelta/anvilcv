@@ -72,7 +72,11 @@ public class PdfCompiler {
             }
 
             byte[] pdf = Files.readAllBytes(tmp.resolve("in.pdf"));
-            return Result.success(pdf, output);
+            // in.log is also read on success: it is the only place the real page count
+            // appears, and the case that matters is a compile that succeeded but spilled
+            // onto a second page. The stored log stays the stdout, as before.
+            Integer pages = Result.parsePageCount(readIfExists(tmp.resolve("in.log")));
+            return new Result(true, pdf, output, null, pages);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             return Result.failure(e.getClass().getSimpleName() + ": " + e.getMessage(), "");
@@ -93,8 +97,26 @@ public class PdfCompiler {
         } catch (IOException ignored) {}
     }
 
-    public record Result(boolean success, byte[] pdf, String log, String error) {
-        public static Result success(byte[] pdf, String log) { return new Result(true, pdf, log, null); }
-        public static Result failure(String err, String log) { return new Result(false, null, log, err); }
+    public record Result(boolean success, byte[] pdf, String log, String error, Integer pageCount) {
+        public static Result success(byte[] pdf, String log) {
+            return new Result(true, pdf, log, null, parsePageCount(log));
+        }
+        public static Result failure(String err, String log) {
+            return new Result(false, null, log, err, null);
+        }
+
+        /**
+         * Page count off LaTeX's own summary line, e.g.
+         * {@code Output written on in.pdf (1 page, 48512 bytes).} — null when the line is
+         * absent or unparseable. Never guessed: a wrong count is worse than no count.
+         */
+        public static Integer parsePageCount(String log) {
+            if (log == null) return null;
+            java.util.regex.Matcher m = PAGE_COUNT.matcher(log);
+            return m.find() ? Integer.valueOf(m.group(1)) : null;
+        }
     }
+
+    private static final java.util.regex.Pattern PAGE_COUNT =
+            java.util.regex.Pattern.compile("\\((\\d+) pages?,");
 }

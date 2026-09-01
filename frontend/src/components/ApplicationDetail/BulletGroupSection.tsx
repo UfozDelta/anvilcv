@@ -1,14 +1,15 @@
-import type { Bullet } from '../../lib/api';
+import type { Bullet, BulletVerdict } from '../../lib/api';
 import type { BulletGroup } from '../../lib/groupBullets';
 import { estimatedLines } from '../../lib/bulletLength';
 import { RankedBulletRow } from './RankedBulletRow';
 
-export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, previewing, previewBusy, onToggleOpen, onToggleSelect, onToggleWhy, onPreview }: {
+export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, onToggleOpen, onToggleSelect, onToggleWhy, onPreview }: {
   g: BulletGroup;
   open: boolean;
   selectedIds: Set<string>;
   expandedWhys: Set<string>;
   bullets: Record<string, Bullet>;
+  verdicts: Record<string, BulletVerdict>;
   previewing: boolean;
   previewBusy: boolean;
   onToggleOpen: () => void;
@@ -51,6 +52,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
           bullet={bullets[r.bulletId]}
           isSelected={selectedIds.has(r.bulletId)}
           whyOpen={expandedWhys.has(r.bulletId)}
+          verdict={verdicts[r.bulletId]}
           onToggleSelect={() => onToggleSelect(r.bulletId)}
           onToggleWhy={() => onToggleWhy(r.bulletId)}
         />

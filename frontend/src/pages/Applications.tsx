@@ -55,7 +55,9 @@ export function Applications() {
                   {new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
                 </div>
               </div>
-              {a.fitScore !== null && <span className="tag tag--acid">{a.fitScore}</span>}
+              {/* Both badges are labelled — two bare numbers side by side read as one. */}
+              {a.fitScore !== null && <span className="tag tag--acid">FIT {a.fitScore}</span>}
+              {a.recruiterScore !== null && <span className="tag">PAGE {a.recruiterScore}</span>}
               <span className={`outcome outcome--${a.outcome}`}>{a.outcome}</span>
               <button
                 className="btn btn--ghost btn--sm"

@@ -18,6 +18,17 @@ export function ApplicationDetail() {
   const texUrl = api.pdfUrl(`/api/applications/${app.id}/tex`);
   const ogSelection = new Set(app.selectedBulletIds);
   const dirty = !setsEqual(s.selectedIds, ogSelection);
+  const verdicts = Object.fromEntries(app.recruiterBulletVerdicts.map(v => [v.bulletId, v]));
+  // Coverage comes from the deterministic ATS pass, never from the LLM.
+  const atsTotal = app.atsMatched.length + app.atsMissing.length;
+  const coverage = atsTotal === 0 ? 0 : Math.round((app.atsMatched.length / atsTotal) * 100);
+  // The recruiter names its own weakest bullet; fall back to the verdict list for
+  // applications scored before that field was stored.
+  const weakestId = app.recruiterWeakestBulletId;
+  const weakLinks = [
+    ...app.recruiterBulletVerdicts.filter(v => v.verdict === 'drop'),
+    ...app.recruiterBulletVerdicts.filter(v => v.verdict === 'weak'),
+  ];
 
   return (
     <div className="shell">
@@ -64,6 +75,7 @@ export function ApplicationDetail() {
                   bullet={s.bullets[r.bulletId]}
                   isSelected={s.selectedIds.has(r.bulletId)}
                   whyOpen={s.expandedWhys.has(r.bulletId)}
+                  verdict={verdicts[r.bulletId]}
                   onToggleSelect={() => s.toggleBullet(r.bulletId)}
                   onToggleWhy={() => s.toggleWhy(r.bulletId)}
                 />
@@ -82,6 +94,7 @@ export function ApplicationDetail() {
                       selectedIds={s.selectedIds}
                       expandedWhys={s.expandedWhys}
                       bullets={s.bullets}
+                      verdicts={verdicts}
                       previewing={s.previewKey === g.key}
                       previewBusy={s.previewBusy}
                       onToggleOpen={() => s.toggleGroup(g.key)}
@@ -103,6 +116,7 @@ export function ApplicationDetail() {
                       selectedIds={s.selectedIds}
                       expandedWhys={s.expandedWhys}
                       bullets={s.bullets}
+                      verdicts={verdicts}
                       previewing={s.previewKey === g.key}
                       previewBusy={s.previewBusy}
                       onToggleOpen={() => s.toggleGroup(g.key)}
@@ -202,6 +216,85 @@ export function ApplicationDetail() {
                       {app.fitGaps.map(t => <li key={t}>{t}</li>)}
                     </ul>
                   </>
+                )}
+              </div>
+            </>
+          )}
+
+          {app.recruiterScore !== null && (
+            <>
+              <Section num="03.D2" title="Recruiter Pass" />
+              <div style={{ marginBottom: 20 }}>
+                <div className="label muted" style={{ marginBottom: 6 }}>
+                  HOW THIS PAGE SELLS YOU — NOT WHETHER YOU FIT
+                </div>
+                {app.recruiterStale && (
+                  <div className="err" style={{ marginBottom: 8 }}>
+                    SCORED FOR THE PREVIOUS SELECTION — re-generate to re-score.
+                  </div>
+                )}
+
+                {/* The critique leads: it is the actionable output, the score is context. */}
+                {app.recruiterThinnestRequirement && (
+                  <>
+                    <div className="label muted" style={{ marginBottom: 6 }}>THINNEST SUPPORT</div>
+                    <div style={{ marginBottom: 12 }}>{app.recruiterThinnestRequirement}</div>
+                  </>
+                )}
+
+                {weakestId && (
+                  <>
+                    <div className="label muted" style={{ marginBottom: 6 }}>WEAKEST BULLET</div>
+                    <div style={{ marginBottom: 12 }}>
+                      <span className="tag tag--rust">WEAKEST</span>
+                      &nbsp;{s.bullets[weakestId]?.text ?? weakestId}
+                      {verdicts[weakestId] && (
+                        <div className="muted" style={{ fontSize: 12 }}>{verdicts[weakestId].reason}</div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {app.recruiterWeaknesses.length > 0 && (
+                  <>
+                    <div className="label muted" style={{ marginBottom: 6 }}>OBJECTIONS</div>
+                    <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
+                      {app.recruiterWeaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </>
+                )}
+
+                <div className="label muted" style={{ marginBottom: 6 }}>WEAK OR DROPPABLE</div>
+                {weakLinks.length > 0 ? (
+                  <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
+                    {weakLinks.map(v => (
+                      <li key={v.bulletId}>
+                        <span className={`tag ${v.verdict === 'drop' ? 'tag--rust' : ''}`}>{v.verdict.toUpperCase()}</span>
+                        &nbsp;{s.bullets[v.bulletId]?.text ?? v.bulletId}
+                        <div className="muted" style={{ fontSize: 12 }}>{v.reason}</div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="muted" style={{ marginBottom: 12 }}>
+                    Nothing on the page was marked weak or droppable.
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 8 }}>
+                  <span className="tag tag--acid">PAGE {app.recruiterScore}/100</span>
+                  <span className="tag">{app.recruiterVerdict}</span>
+                </div>
+                <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
+                  evidence {app.recruiterDimensions.evidenceStrength ?? '—'}
+                  {' · '}relevance {app.recruiterDimensions.relevanceDensity ?? '—'}
+                  {' · '}JD coverage {coverage}% ({app.atsMatched.length}/{atsTotal})
+                </div>
+                {app.pageCount !== null && (
+                  <div style={app.pageCount === 1 ? undefined : { color: 'var(--rust)', fontWeight: 700 }}>
+                    {app.pageCount} page{app.pageCount === 1 ? '' : 's'}
+                    {app.pageCount === 1 ? '' : ' — trim the selection'}
+                  </div>
                 )}
               </div>
             </>

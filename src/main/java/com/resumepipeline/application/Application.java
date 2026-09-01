@@ -81,6 +81,49 @@ public class Application {
     @Column(name = "fit_gaps", columnDefinition = "text[]", nullable = false)
     private String[] fitGaps = new String[0];
 
+    /**
+     * Recruiter pass on the RENDERED page — a different question from {@link #fitScore},
+     * which grades the candidate. Null when the call failed — distinct from a genuine 0.
+     */
+    @Column(name = "recruiter_score")
+    private Integer recruiterScore;
+
+    @Column(name = "recruiter_verdict", columnDefinition = "text")
+    private String recruiterVerdict;
+
+    /** JSON map: {evidenceStrength: n, relevanceDensity: n} */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "recruiter_dimensions", columnDefinition = "jsonb", nullable = false)
+    private String recruiterDimensions = "{}";
+
+    /** JSON array: [{bulletId, verdict, reason}, ...] */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "recruiter_bullet_verdicts", columnDefinition = "jsonb", nullable = false)
+    private String recruiterBulletVerdicts = "[]";
+
+    /**
+     * The recruiter pass's forced-negative output: it has no "looks fine" option and must
+     * name a weakest bullet, the thinnest-supported JD requirement, and its objections.
+     */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "recruiter_weaknesses", columnDefinition = "text[]", nullable = false)
+    private String[] recruiterWeaknesses = new String[0];
+
+    @Column(name = "recruiter_thinnest_requirement", columnDefinition = "text")
+    private String recruiterThinnestRequirement;
+
+    /** Always one of the bullets that was actually rendered; validated before it is stored. */
+    @Column(name = "recruiter_weakest_bullet_id")
+    private UUID recruiterWeakestBulletId;
+
+    /** True once a rerender changed the selection the recruiter pass was scored against. */
+    @Column(name = "recruiter_stale", nullable = false)
+    private boolean recruiterStale = false;
+
+    /** Pages in the compiled PDF, from tectonic's log. Null when unknown. */
+    @Column(name = "page_count")
+    private Integer pageCount;
+
     @Column(name = "tex_blob")
     private byte[] texBlob;
 
@@ -154,6 +197,24 @@ public class Application {
     public void setFitStrengths(String[] fitStrengths) { this.fitStrengths = fitStrengths == null ? new String[0] : fitStrengths; }
     public String[] getFitGaps() { return fitGaps; }
     public void setFitGaps(String[] fitGaps) { this.fitGaps = fitGaps == null ? new String[0] : fitGaps; }
+    public Integer getRecruiterScore() { return recruiterScore; }
+    public void setRecruiterScore(Integer recruiterScore) { this.recruiterScore = recruiterScore; }
+    public String getRecruiterVerdict() { return recruiterVerdict; }
+    public void setRecruiterVerdict(String recruiterVerdict) { this.recruiterVerdict = recruiterVerdict; }
+    public String getRecruiterDimensions() { return recruiterDimensions; }
+    public void setRecruiterDimensions(String recruiterDimensions) { this.recruiterDimensions = recruiterDimensions == null ? "{}" : recruiterDimensions; }
+    public String getRecruiterBulletVerdicts() { return recruiterBulletVerdicts; }
+    public void setRecruiterBulletVerdicts(String recruiterBulletVerdicts) { this.recruiterBulletVerdicts = recruiterBulletVerdicts == null ? "[]" : recruiterBulletVerdicts; }
+    public String[] getRecruiterWeaknesses() { return recruiterWeaknesses; }
+    public void setRecruiterWeaknesses(String[] w) { this.recruiterWeaknesses = w == null ? new String[0] : w; }
+    public String getRecruiterThinnestRequirement() { return recruiterThinnestRequirement; }
+    public void setRecruiterThinnestRequirement(String r) { this.recruiterThinnestRequirement = r; }
+    public UUID getRecruiterWeakestBulletId() { return recruiterWeakestBulletId; }
+    public void setRecruiterWeakestBulletId(UUID id) { this.recruiterWeakestBulletId = id; }
+    public boolean isRecruiterStale() { return recruiterStale; }
+    public void setRecruiterStale(boolean recruiterStale) { this.recruiterStale = recruiterStale; }
+    public Integer getPageCount() { return pageCount; }
+    public void setPageCount(Integer pageCount) { this.pageCount = pageCount; }
     public byte[] getTexBlob() { return texBlob; }
     public void setTexBlob(byte[] texBlob) { this.texBlob = texBlob; }
     public byte[] getPdfBlob() { return pdfBlob; }

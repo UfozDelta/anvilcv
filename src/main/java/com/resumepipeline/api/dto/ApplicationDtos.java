@@ -36,12 +36,16 @@ public class ApplicationDtos {
         }
     }
 
+    /** One recruiter verdict on one rendered bullet. verdict: keep | weak | drop. */
+    public record BulletVerdictDto(String bulletId, String verdict, String reason) {}
+
     public record ApplicationSummary(
-            UUID id, String company, String role, String outcome, Instant createdAt, Integer fitScore
+            UUID id, String company, String role, String outcome, Instant createdAt, Integer fitScore,
+            Integer recruiterScore
     ) {
         public static ApplicationSummary from(Application a) {
             return new ApplicationSummary(a.getId(), a.getCompany(), a.getRole(),
-                    a.getOutcome(), a.getCreatedAt(), a.getFitScore());
+                    a.getOutcome(), a.getCreatedAt(), a.getFitScore(), a.getRecruiterScore());
         }
     }
 
@@ -53,6 +57,10 @@ public class ApplicationDtos {
             List<String> selectedCourses, Map<String, List<String>> selectedSkills,
             Integer fitScore, String fitVerdict, Map<String, Integer> fitDimensions,
             List<String> fitStrengths, List<String> fitGaps,
+            Integer recruiterScore, String recruiterVerdict, Map<String, Integer> recruiterDimensions,
+            List<BulletVerdictDto> recruiterBulletVerdicts, List<String> recruiterWeaknesses,
+            String recruiterThinnestRequirement, UUID recruiterWeakestBulletId,
+            boolean recruiterStale, Integer pageCount,
             boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
         private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -76,8 +84,23 @@ public class ApplicationDtos {
                     Arrays.asList(a.getSelectedCourses()), skillsMap,
                     a.getFitScore(), a.getFitVerdict(), parseDimensions(a.getFitDimensions()),
                     Arrays.asList(a.getFitStrengths()), Arrays.asList(a.getFitGaps()),
+                    a.getRecruiterScore(), a.getRecruiterVerdict(),
+                    parseDimensions(a.getRecruiterDimensions()),
+                    parseBulletVerdicts(a.getRecruiterBulletVerdicts()),
+                    Arrays.asList(a.getRecruiterWeaknesses()),
+                    a.getRecruiterThinnestRequirement(), a.getRecruiterWeakestBulletId(),
+                    a.isRecruiterStale(), a.getPageCount(),
                     a.getPdfBlob() != null && a.getPdfBlob().length > 0,
                     b64, a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
+        }
+
+        private static List<BulletVerdictDto> parseBulletVerdicts(String json) {
+            if (json == null || json.isBlank() || json.equals("[]")) return List.of();
+            try {
+                return MAPPER.readValue(json, new TypeReference<>() {});
+            } catch (Exception e) {
+                return List.of();
+            }
         }
 
         private static Map<String, Integer> parseDimensions(String json) {

@@ -63,6 +63,11 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
+    public RecruiterResult reviewResume(RecruiterRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        return current().reviewResume(req, progress, tokens);
+    }
+
+    @Override
     public RefitResult refitBullets(RefitRequest req, ProgressLog progress, TokenAccumulator tokens) {
         return current().refitBullets(req, progress, tokens);
     }

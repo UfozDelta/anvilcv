@@ -1,10 +1,11 @@
-import type { Bullet, RankedBullet } from '../../lib/api';
+import type { Bullet, BulletVerdict, RankedBullet } from '../../lib/api';
 
-export function RankedBulletRow({ r, bullet, isSelected, whyOpen, onToggleSelect, onToggleWhy }: {
+export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, onToggleSelect, onToggleWhy }: {
   r: RankedBullet;
   bullet: Bullet | undefined;
   isSelected: boolean;
   whyOpen: boolean;
+  verdict?: BulletVerdict;
   onToggleSelect: () => void;
   onToggleWhy: () => void;
 }) {
@@ -23,6 +24,12 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, onToggleSelect
         {isSelected && bullet && (
           <div className="bullet__tags" style={{ marginTop: 4 }}>
             {bullet.tags.map(t => <span key={t} className="tag">{t}</span>)}
+            {verdict && (
+              <span
+                className={`tag ${verdict.verdict === 'keep' ? 'tag--acid' : verdict.verdict === 'drop' ? 'tag--rust' : ''}`}
+                title={verdict.reason}
+              >{verdict.verdict.toUpperCase()}</span>
+            )}
           </div>
         )}
         {r.why && (

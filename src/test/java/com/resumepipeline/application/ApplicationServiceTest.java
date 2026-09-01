@@ -146,6 +146,10 @@ class ApplicationServiceTest {
                     List.of("java"), List.of(), List.of(), Map.of()));
             when(llm.scoreFit(any(), any(), any())).thenReturn(new LlmClient.FitResult(
                     80, 70, 75, "Strong Fit", List.of("owns the stack"), List.of("no Terraform")));
+            when(llm.reviewResume(any(), any(), any())).thenReturn(new LlmClient.RecruiterResult(
+                    80, 60, 70, "Solid", bullet.getId().toString(), "Kubernetes at scale",
+                    List.of("no metrics", "no ownership"),
+                    List.of(new LlmClient.BulletVerdict(bullet.getId().toString(), "weak", "vague"))));
             when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\documentclass{article}");
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         }
@@ -187,6 +191,41 @@ class ApplicationServiceTest {
             assertNull(out.getFitScore());
             assertNull(out.getFitVerdict());
             assertEquals(0, out.getFitStrengths().length);
+        }
+
+        @Test
+        void recruiterScorecardPersistsOnHappyPath() {
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(
+                    new byte[]{1}, "Output written on in.pdf (1 page, 4096 bytes)."));
+
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            assertEquals(70, out.getRecruiterScore());
+            assertEquals("Solid", out.getRecruiterVerdict());
+            assertTrue(out.getRecruiterDimensions().contains("\"evidenceStrength\":80"));
+            assertTrue(out.getRecruiterBulletVerdicts().contains("\"verdict\":\"weak\""));
+            assertFalse(out.isRecruiterStale());
+            assertEquals(1, out.getPageCount());
+            assertArrayEquals(new String[]{"no metrics", "no ownership"}, out.getRecruiterWeaknesses());
+            assertEquals("Kubernetes at scale", out.getRecruiterThinnestRequirement());
+            assertEquals(bullet.getId(), out.getRecruiterWeakestBulletId());
+        }
+
+        @Test
+        void recruiterFailureDoesNotFailThePipeline() {
+            when(llm.reviewResume(any(), any(), any())).thenThrow(new RuntimeException("recruiter model down"));
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{4, 5}, "log"));
+
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            assertArrayEquals(new byte[]{4, 5}, out.getPdfBlob());
+            assertNull(out.getRecruiterScore());
+            assertNull(out.getRecruiterVerdict());
+            assertEquals("{}", out.getRecruiterDimensions());
+            assertEquals("[]", out.getRecruiterBulletVerdicts());
+            assertEquals(0, out.getRecruiterWeaknesses().length);
+            assertNull(out.getRecruiterThinnestRequirement());
+            assertNull(out.getRecruiterWeakestBulletId());
         }
 
         @Test
@@ -257,6 +296,41 @@ class ApplicationServiceTest {
             service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
 
             verifyNoInteractions(llm);
+        }
+
+        @Test
+        void rerenderMarksScorecardStaleAndRefreshesTheFreeHalf() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Application a = new Application();
+            // Scored against the previous selection; the LLM half must survive untouched.
+            a.setRecruiterScore(70);
+            a.setRecruiterVerdict("Solid");
+            a.setRecruiterDimensions("{\"evidenceStrength\":80}");
+            a.setRecruiterBulletVerdicts("[{\"bulletId\":\"x\"}]");
+            // Neither keyword appears in the fixture bullet text, so the literal check drops both.
+            a.setAtsMatched(new String[]{"kubernetes"});
+            a.setAtsMissing(new String[]{"java"});
+
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
+            when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(
+                    new byte[]{1}, "Output written on in.pdf (2 pages, 8192 bytes)."));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
+
+            verify(llm, never()).reviewResume(any(), any(), any());
+            assertTrue(out.isRecruiterStale());
+            assertEquals(70, out.getRecruiterScore());          // kept, not blanked
+            assertEquals("Solid", out.getRecruiterVerdict());
+            assertEquals(2, out.getPageCount());                // recomputed from the new compile
+            // "kubernetes" was LLM-claimed but is not literally on the new page, so it moves to missing.
+            assertEquals(0, out.getAtsMatched().length);
+            assertEquals(2, out.getAtsMissing().length);
         }
     }
 }

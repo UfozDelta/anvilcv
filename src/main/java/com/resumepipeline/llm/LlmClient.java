@@ -37,6 +37,15 @@ public interface LlmClient {
      */
     FitResult scoreFit(FitRequest req, ProgressLog progress, TokenAccumulator tokens);
 
+    /**
+     * Grade the RENDERED page against the job description — a different question from
+     * {@link #scoreFit}, which grades the candidate. This call deliberately sees only the
+     * bullets that were selected onto the PDF: never the bullet bank, never the ranking,
+     * never the rank order. It judges what a recruiter actually holds in their hand.
+     * Writes no resume content: the result is advisory only and never feeds the rendered PDF.
+     */
+    RecruiterResult reviewResume(RecruiterRequest req, ProgressLog progress, TokenAccumulator tokens);
+
     // --- types ---
 
     enum SourceKind { PROJECT, EXPERIENCE }
@@ -90,4 +99,15 @@ public interface LlmClient {
                       List<SkillCategory> skillCategories, List<ProjectSummary> projects) {}
     record FitResult(int technical, int experience, int overall, String verdict,
                      List<String> strengths, List<String> gaps) {}
+
+    /** A bullet as it appears on the compiled PDF. */
+    record RenderedBullet(String bulletId, String text, String projectName) {}
+    /** verdict: keep | weak | drop */
+    record BulletVerdict(String bulletId, String verdict, String reason) {}
+    record RecruiterRequest(String cleanJd, String company, String role, List<String> keywords,
+                            String roleEmphasis, List<RenderedBullet> bullets,
+                            java.util.Map<String, List<String>> skills, List<String> courses) {}
+    record RecruiterResult(int evidenceStrength, int relevanceDensity, int overall, String verdict,
+                           String weakestBulletId, String thinnestRequirement,
+                           List<String> weaknesses, List<BulletVerdict> bulletVerdicts) {}
 }

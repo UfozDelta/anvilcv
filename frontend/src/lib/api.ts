@@ -136,6 +136,8 @@ export interface ApplicationSummary {
   createdAt: string;
   /** Overall fit 0-100, or null for applications generated before scoring existed. */
   fitScore: number | null;
+  /** Recruiter pass on the rendered page 0-100 — a different question from fitScore. */
+  recruiterScore: number | null;
 }
 
 export interface OutcomeHistoryEntry {
@@ -183,6 +185,13 @@ export interface ParseResumeResponse {
   projects: ParsedProject[];
 }
 
+/** One recruiter verdict on one rendered bullet. */
+export interface BulletVerdict {
+  bulletId: string;
+  verdict: 'keep' | 'weak' | 'drop';
+  reason: string;
+}
+
 export interface ApplicationResponse {
   id: string;
   company: string | null;
@@ -203,6 +212,22 @@ export interface ApplicationResponse {
   fitDimensions: Record<string, number>;
   fitStrengths: string[];
   fitGaps: string[];
+  /**
+   * Recruiter pass on the RENDERED page 0-100 — grades the resume, not the candidate.
+   * Null when the call failed / timed out / predates the feature.
+   */
+  recruiterScore: number | null;
+  recruiterVerdict: string | null;
+  recruiterDimensions: Record<string, number>;
+  recruiterBulletVerdicts: BulletVerdict[];
+  /** The forced-negative half: the call cannot decline to name these. */
+  recruiterWeaknesses: string[];
+  recruiterThinnestRequirement: string | null;
+  recruiterWeakestBulletId: string | null;
+  /** True when the selection was hand-edited after the recruiter pass ran. */
+  recruiterStale: boolean;
+  /** Pages in the compiled PDF, from tectonic's log. Null when unknown. */
+  pageCount: number | null;
   pdfAvailable: boolean;
   tectonicLog: string | null;
   outcome: string;

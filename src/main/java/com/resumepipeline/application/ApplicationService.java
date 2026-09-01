@@ -256,6 +256,23 @@ public class ApplicationService {
                 + " db=" + filledSkills.get("databases").size()
                 + " devops=" + filledSkills.get("devops").size());
 
+        // Recruiter pass grades the page, so it needs exactly what lands on it — the post-select
+        // bullets, the filled skills and the selected courses, never the bank or the rank order.
+        // Fired here so its latency hides inside the LaTeX render + tectonic compile.
+        List<LlmClient.RenderedBullet> renderedBullets = selected.stream()
+                .map(b -> new LlmClient.RenderedBullet(
+                        b.getId().toString(), b.getText(),
+                        projectById.containsKey(b.getProjectId()) ? projectById.get(b.getProjectId()).getName() : ""))
+                .toList();
+        // orTimeout: callJsonWithRetry retries over a 120s provider timeout, so an unbounded
+        // join can add minutes AFTER the PDF is already compiled — the user would sit on a
+        // finished resume waiting for a badge. A timeout is treated as any other failure.
+        CompletableFuture<LlmClient.RecruiterResult> recruiterFuture = CompletableFuture.supplyAsync(() ->
+                llm.reviewResume(new LlmClient.RecruiterRequest(clean.cleanJd(), clean.company(), clean.role(),
+                        clean.keywords(), roleEmphasis, renderedBullets, filledSkills, selectedCourses),
+                        progress, tokens), PARALLEL_EXECUTOR)
+                .orTimeout(15, java.util.concurrent.TimeUnit.SECONDS);
+
         // ATS report, narrowed to what actually lands on the page.
         //
         // The LLM is asked for keywords appearing in "the top 8 bullets", but the rendered
@@ -268,25 +285,10 @@ public class ApplicationService {
         // The corpus is everything the template emits, not just bullets: the skills block and
         // coursework render too (see ApplicationRenderer), so a keyword living only in
         // skills_devops is on the PDF and must not be reported missing.
-        List<String> renderedParts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
-        filledSkills.values().forEach(renderedParts::addAll);
-        renderedParts.addAll(selectedCourses);
-        String renderedText = String.join("\n", renderedParts);
-
         Set<String> llmMatched = rank.atsMatched().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        // Iterate clean.keywords(), not kwLower — these strings render as chips in the UI and
-        // should keep the JD's own casing ("PostgreSQL", not "postgresql").
-        List<String> atsMatched = new ArrayList<>();
-        List<String> atsMissing = new ArrayList<>();
-        for (String k : clean.keywords()) {
-            if (llmMatched.contains(k.toLowerCase()) && KeywordScorer.mentions(renderedText, k)) {
-                atsMatched.add(k);
-            } else {
-                atsMissing.add(k);
-            }
-        }
-        progress.emit("ATS on rendered page: " + atsMatched.size() + "/" + clean.keywords().size()
+        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, filledSkills, selectedCourses);
+        progress.emit("ATS on rendered page: " + ats.matched().size() + "/" + clean.keywords().size()
                 + " matched (LLM claimed " + rank.atsMatched().size() + ")");
 
         // Stage: render LaTeX
@@ -325,6 +327,24 @@ public class ApplicationService {
         }
         tPdf.stop("success=" + r.success());
 
+        // Same policy as the fit score: a missing scorecard is a nuisance, a lost resume is a
+        // bug — so a failed, malformed or timed-out recruiter pass never fails the pipeline.
+        // The null check matters as much as the catch: a mocked/unstubbed client returns null
+        // from join() without ever throwing.
+        LlmClient.RecruiterResult recruiter = null;
+        try {
+            recruiter = recruiterFuture.join();
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            log.warn("Recruiter pass failed: {}", cause.getMessage());
+            progress.emit("Recruiter pass unavailable: " + cause.getMessage());
+        }
+
+        // Estimate and truth side by side, so BulletTextRules.estimatedLines can be
+        // recalibrated later against real compiles instead of guesses.
+        log.info("Page budget: estimated {} lines (max {}), tectonic reported {} page(s)",
+                estimatedLines, BulletSelector.MAX_TOTAL_LINES, r.pageCount());
+
         a.setUserId(userId);
         a.setJdText(jdText);
         a.setJdUrl(jdUrl);
@@ -359,8 +379,30 @@ public class ApplicationService {
                 a.setFitDimensions("{}");
             }
         }
-        a.setAtsMatched(atsMatched.toArray(new String[0]));
-        a.setAtsMissing(atsMissing.toArray(new String[0]));
+        if (recruiter != null) {
+            a.setRecruiterScore(recruiter.overall());
+            a.setRecruiterVerdict(recruiter.verdict());
+            try {
+                a.setRecruiterDimensions(mapper.writeValueAsString(Map.of(
+                        "evidenceStrength", recruiter.evidenceStrength(),
+                        "relevanceDensity", recruiter.relevanceDensity())));
+            } catch (JsonProcessingException e) {
+                a.setRecruiterDimensions("{}");
+            }
+            try {
+                a.setRecruiterBulletVerdicts(mapper.writeValueAsString(recruiter.bulletVerdicts()));
+            } catch (JsonProcessingException e) {
+                a.setRecruiterBulletVerdicts("[]");
+            }
+            a.setRecruiterWeaknesses(recruiter.weaknesses() == null
+                    ? new String[0] : recruiter.weaknesses().toArray(new String[0]));
+            a.setRecruiterThinnestRequirement(recruiter.thinnestRequirement());
+            a.setRecruiterWeakestBulletId(parseUuid(recruiter.weakestBulletId()));
+        }
+        a.setRecruiterStale(false);
+        a.setPageCount(r.success() ? r.pageCount() : null);
+        a.setAtsMatched(ats.matched().toArray(new String[0]));
+        a.setAtsMissing(ats.missing().toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
         a.setSelectedCourses(selectedCourses.toArray(new String[0]));
         try {
@@ -433,6 +475,22 @@ public class ApplicationService {
 
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
         a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
+
+        // The deterministic half of the scorecard is recomputed here for free. The LLM half is
+        // not — rerender makes no LLM calls (POST /{id}/rerender blocks a request thread) — so
+        // the old score is kept and flagged stale rather than blanked, which would pull the
+        // feedback away at exactly the moment the user is editing against it.
+        a.setPageCount(r.success() ? r.pageCount() : null);
+        a.setRecruiterStale(true);
+        Set<String> priorKeywords = new LinkedHashSet<>(Arrays.asList(a.getAtsMatched()));
+        priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
+        Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
+                .map(String::toLowerCase).collect(Collectors.toSet());
+        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
+                selectedSkills, selectedCourses);
+        a.setAtsMatched(ats.matched().toArray(new String[0]));
+        a.setAtsMissing(ats.missing().toArray(new String[0]));
+
         if (r.success()) {
             a.setPdfBlob(r.pdf());
             a.setTectonicLog(r.log());
@@ -451,6 +509,38 @@ public class ApplicationService {
         }
         a.setPipelineDurationMs(tRerender.stop());
         return repo.save(a);
+    }
+
+    private record AtsReport(List<String> matched, List<String> missing) {}
+
+    /**
+     * ATS report narrowed to what actually lands on the page: a keyword counts as matched only
+     * if the LLM claimed it AND the rendered text literally contains it. The corpus is
+     * everything the template emits — bullets, the skills block and coursework all render (see
+     * ApplicationRenderer), so a keyword living only in skills_devops is on the PDF and must
+     * not be reported missing. Shared by create and rerender so a hand-edited selection is
+     * scored by the identical rule.
+     */
+    private static AtsReport atsReport(List<String> keywords, Set<String> llmMatchedLower,
+                                       List<Bullet> selected, Map<String, List<String>> skills,
+                                       List<String> courses) {
+        List<String> renderedParts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
+        if (skills != null) skills.values().forEach(renderedParts::addAll);
+        renderedParts.addAll(courses);
+        String renderedText = String.join("\n", renderedParts);
+
+        // Iterate the caller's keywords, not a lowercased copy — these strings render as chips
+        // in the UI and should keep the JD's own casing ("PostgreSQL", not "postgresql").
+        List<String> matched = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (String k : keywords) {
+            if (llmMatchedLower.contains(k.toLowerCase()) && KeywordScorer.mentions(renderedText, k)) {
+                matched.add(k);
+            } else {
+                missing.add(k);
+            }
+        }
+        return new AtsReport(matched, missing);
     }
 
     private List<LlmClient.SkillCategory> buildSkillCategories(com.resumepipeline.profile.Profile p) {
@@ -490,6 +580,16 @@ public class ApplicationService {
     }
 
     private static String nz(String s) { return s == null ? "" : s; }
+
+    /** The id is validated against the rendered set before it gets here; parse defensively anyway. */
+    private static UUID parseUuid(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return UUID.fromString(s);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
 
     private static List<String> splitCsv(String csv) {
         if (csv == null || csv.isBlank()) return List.of();
