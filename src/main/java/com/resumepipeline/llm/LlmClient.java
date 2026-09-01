@@ -28,6 +28,15 @@ public interface LlmClient {
 
     String coverLetter(CoverLetterRequest req, ProgressLog progress, TokenAccumulator tokens);
 
+    /**
+     * Score how well the job description fits the candidate, judged against their profile
+     * skills and their project/experience history — NOT against the bullet-bank slice
+     * {@link #rankBullets} sees, which is already filtered to this JD and would score every
+     * application highly by construction. Writes no resume content: the result is advisory
+     * only and never feeds the rendered PDF.
+     */
+    FitResult scoreFit(FitRequest req, ProgressLog progress, TokenAccumulator tokens);
+
     // --- types ---
 
     enum SourceKind { PROJECT, EXPERIENCE }
@@ -75,4 +84,10 @@ public interface LlmClient {
     record SkillCategory(String name, List<String> items) {}
     record RankResult(List<RankedBullet> rankedBullets, List<String> atsMatched, List<String> atsMissing, List<String> selectedCourses, java.util.Map<String, List<String>> selectedSkills) {}
     record RankedBullet(String bulletId, int rank, String why) {}
+
+    record ProjectSummary(String name, String kind, String role, String dates, String description) {}
+    record FitRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis,
+                      List<SkillCategory> skillCategories, List<ProjectSummary> projects) {}
+    record FitResult(int technical, int experience, int overall, String verdict,
+                     List<String> strengths, List<String> gaps) {}
 }

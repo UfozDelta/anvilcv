@@ -134,8 +134,9 @@ public class ApplicationService {
         List<Bullet> candidates = allBullets.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId))
                 .values().stream()
-                .flatMap(group -> group.stream()
+                .flatMap(group -> collapseVariants(group.stream()
                         .sorted(Comparator.comparingLong(keywordScore).reversed())
+                        .toList()).stream()
                         .limit(4))
                 .sorted(Comparator.comparingLong(keywordScore).reversed())
                 .limit(25)
@@ -171,6 +172,17 @@ public class ApplicationService {
         // Collect the 4 selectable skill categories (interests excluded — personal, not JD-matchable).
         List<LlmClient.SkillCategory> skillCategories = buildSkillCategories(profile);
 
+        // Fit score runs against the whole profile and project history, so it does not depend
+        // on the ranking. Fire it now so its latency hides inside the ranking call.
+        List<LlmClient.ProjectSummary> projectSummaries = projectById.values().stream()
+                .map(p -> new LlmClient.ProjectSummary(
+                        nz(p.getName()), p.getKind().name(), nz(p.getTitle()), nz(p.getDates()), nz(p.getDescription())))
+                .toList();
+        CompletableFuture<LlmClient.FitResult> fitFuture = CompletableFuture.supplyAsync(() ->
+                llm.scoreFit(new LlmClient.FitRequest(clean.cleanJd(), clean.company(), clean.role(),
+                        clean.keywords(), roleEmphasis, skillCategories, projectSummaries), progress, tokens),
+                PARALLEL_EXECUTOR);
+
         LlmClient.RankRequest rankReq = new LlmClient.RankRequest(
                 clean.cleanJd(), clean.company(), clean.role(),
                 clean.keywords(), roleEmphasis, bulletsForMatch, allCourses, skillCategories);
@@ -178,6 +190,17 @@ public class ApplicationService {
         PipelineTimer tRank = PipelineTimer.start("rank (" + candidates.size() + " bullets)");
         LlmClient.RankResult rank = llm.rankBullets(rankReq, progress, tokens);
         tRank.stop();
+
+        // A missing badge is a nuisance; a lost resume is a bug — so a failed or malformed
+        // fit score never fails the pipeline. Score and verdict stay null, arrays stay empty.
+        LlmClient.FitResult fit = null;
+        try {
+            fit = fitFuture.join();
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            log.warn("Fit scoring failed: {}", cause.getMessage());
+            progress.emit("Fit score unavailable: " + cause.getMessage());
+        }
 
         // Server-side selection: greedy top-N capped per project, then kind-floor + min-fill.
         // Logic lives in BulletSelector so it can be unit-tested without the LLM/DB stubs.
@@ -324,6 +347,18 @@ public class ApplicationService {
                     + String.join(", ", coverFlags) + ") - verify before sending");
         }
         a.setCoverLetterFlags(coverFlags.toArray(new String[0]));
+        if (fit != null) {
+            a.setFitScore(fit.overall());
+            a.setFitVerdict(fit.verdict());
+            a.setFitStrengths(fit.strengths().toArray(new String[0]));
+            a.setFitGaps(fit.gaps().toArray(new String[0]));
+            try {
+                a.setFitDimensions(mapper.writeValueAsString(
+                        Map.of("technical", fit.technical(), "experience", fit.experience())));
+            } catch (JsonProcessingException e) {
+                a.setFitDimensions("{}");
+            }
+        }
         a.setAtsMatched(atsMatched.toArray(new String[0]));
         a.setAtsMissing(atsMissing.toArray(new String[0]));
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
@@ -426,6 +461,35 @@ public class ApplicationService {
         addSkillCategory(cats, "devops", p.getSkillsDevops());
         return cats;
     }
+
+    /**
+     * Drop bullets that restate a claim an earlier bullet in {@code byScoreDesc} already makes,
+     * keeping the first — which, given the caller sorts by keyword score, is the framing that
+     * matches THIS job description best.
+     *
+     * <p>The bank deliberately holds several framings of the same work, one per category lens
+     * (see {@code BulletTextRules.CROSS_LENS_THRESHOLD}). That is what makes a project reusable
+     * across different jobs, but all of those framings score similarly on raw keyword overlap,
+     * so without this the per-project top-4 could be four wordings of one achievement — spending
+     * the ranking LLM's candidate slots on a choice it has already been made for it, and starving
+     * the other work on the project.
+     *
+     * <p>This is where the variant set collapses, and it is the right place: the JD is known
+     * here and it is what decides which framing survives. {@code BulletSelector} still runs its
+     * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
+     */
+    private static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
+        List<Bullet> kept = new ArrayList<>();
+        List<String> keptTexts = new ArrayList<>();
+        for (Bullet b : byScoreDesc) {
+            if (BulletTextRules.isNearDuplicate(b.getText(), keptTexts)) continue;
+            kept.add(b);
+            keptTexts.add(b.getText());
+        }
+        return kept;
+    }
+
+    private static String nz(String s) { return s == null ? "" : s; }
 
     private static List<String> splitCsv(String csv) {
         if (csv == null || csv.isBlank()) return List.of();

@@ -144,6 +144,8 @@ class ApplicationServiceTest {
             when(llm.rankBullets(any(), any(), any())).thenReturn(new LlmClient.RankResult(
                     List.of(new LlmClient.RankedBullet(bullet.getId().toString(), 1, "fits")),
                     List.of("java"), List.of(), List.of(), Map.of()));
+            when(llm.scoreFit(any(), any(), any())).thenReturn(new LlmClient.FitResult(
+                    80, 70, 75, "Strong Fit", List.of("owns the stack"), List.of("no Terraform")));
             when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\documentclass{article}");
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         }
@@ -159,6 +161,32 @@ class ApplicationServiceTest {
             assertEquals(1, out.getSelectedBulletIds().length);
             verify(llm, never()).coverLetter(any(), any(), any()); // not requested
             verify(llmUsageService).record(eq(user), eq("application_pipeline"), any(), any(), isNull());
+        }
+
+        @Test
+        void fitScorePersistsOnHappyPath() {
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            assertEquals(75, out.getFitScore());
+            assertEquals("Strong Fit", out.getFitVerdict());
+            assertTrue(out.getFitDimensions().contains("\"technical\":80"));
+            assertArrayEquals(new String[]{"owns the stack"}, out.getFitStrengths());
+            assertArrayEquals(new String[]{"no Terraform"}, out.getFitGaps());
+        }
+
+        @Test
+        void fitScoreFailureDoesNotFailThePipeline() {
+            when(llm.scoreFit(any(), any(), any())).thenThrow(new RuntimeException("fit model down"));
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1, 2}, "log"));
+
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            assertArrayEquals(new byte[]{1, 2}, out.getPdfBlob());
+            assertNull(out.getFitScore());
+            assertNull(out.getFitVerdict());
+            assertEquals(0, out.getFitStrengths().length);
         }
 
         @Test

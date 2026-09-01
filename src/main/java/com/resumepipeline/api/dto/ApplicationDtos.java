@@ -37,11 +37,11 @@ public class ApplicationDtos {
     }
 
     public record ApplicationSummary(
-            UUID id, String company, String role, String outcome, Instant createdAt
+            UUID id, String company, String role, String outcome, Instant createdAt, Integer fitScore
     ) {
         public static ApplicationSummary from(Application a) {
             return new ApplicationSummary(a.getId(), a.getCompany(), a.getRole(),
-                    a.getOutcome(), a.getCreatedAt());
+                    a.getOutcome(), a.getCreatedAt(), a.getFitScore());
         }
     }
 
@@ -51,6 +51,8 @@ public class ApplicationDtos {
             String coverLetter, List<String> coverLetterFlags,
             List<String> atsMatched, List<String> atsMissing,
             List<String> selectedCourses, Map<String, List<String>> selectedSkills,
+            Integer fitScore, String fitVerdict, Map<String, Integer> fitDimensions,
+            List<String> fitStrengths, List<String> fitGaps,
             boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
         private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -72,8 +74,19 @@ public class ApplicationDtos {
                     a.getCoverLetter(), Arrays.asList(a.getCoverLetterFlags()),
                     Arrays.asList(a.getAtsMatched()), Arrays.asList(a.getAtsMissing()),
                     Arrays.asList(a.getSelectedCourses()), skillsMap,
+                    a.getFitScore(), a.getFitVerdict(), parseDimensions(a.getFitDimensions()),
+                    Arrays.asList(a.getFitStrengths()), Arrays.asList(a.getFitGaps()),
                     a.getPdfBlob() != null && a.getPdfBlob().length > 0,
                     b64, a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
+        }
+
+        private static Map<String, Integer> parseDimensions(String json) {
+            if (json == null || json.isBlank() || json.equals("{}")) return Map.of();
+            try {
+                return MAPPER.readValue(json, new TypeReference<>() {});
+            } catch (Exception e) {
+                return Map.of();
+            }
         }
 
         private static Map<String, List<String>> parseSkills(String json) {

@@ -61,6 +61,26 @@ public class Application {
     @Column(name = "selected_skills", columnDefinition = "jsonb", nullable = false)
     private String selectedSkills = "{}";
 
+    /** Overall fit 0-100. Null when the scoring call failed — distinct from a genuine 0. */
+    @Column(name = "fit_score")
+    private Integer fitScore;
+
+    @Column(name = "fit_verdict", columnDefinition = "text")
+    private String fitVerdict;
+
+    /** JSON map: {technical: n, experience: n} */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "fit_dimensions", columnDefinition = "jsonb", nullable = false)
+    private String fitDimensions = "{}";
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "fit_strengths", columnDefinition = "text[]", nullable = false)
+    private String[] fitStrengths = new String[0];
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "fit_gaps", columnDefinition = "text[]", nullable = false)
+    private String[] fitGaps = new String[0];
+
     @Column(name = "tex_blob")
     private byte[] texBlob;
 
@@ -124,6 +144,16 @@ public class Application {
     public void setSelectedCourses(String[] selectedCourses) { this.selectedCourses = selectedCourses == null ? new String[0] : selectedCourses; }
     public String getSelectedSkills() { return selectedSkills; }
     public void setSelectedSkills(String selectedSkills) { this.selectedSkills = selectedSkills == null ? "{}" : selectedSkills; }
+    public Integer getFitScore() { return fitScore; }
+    public void setFitScore(Integer fitScore) { this.fitScore = fitScore; }
+    public String getFitVerdict() { return fitVerdict; }
+    public void setFitVerdict(String fitVerdict) { this.fitVerdict = fitVerdict; }
+    public String getFitDimensions() { return fitDimensions; }
+    public void setFitDimensions(String fitDimensions) { this.fitDimensions = fitDimensions == null ? "{}" : fitDimensions; }
+    public String[] getFitStrengths() { return fitStrengths; }
+    public void setFitStrengths(String[] fitStrengths) { this.fitStrengths = fitStrengths == null ? new String[0] : fitStrengths; }
+    public String[] getFitGaps() { return fitGaps; }
+    public void setFitGaps(String[] fitGaps) { this.fitGaps = fitGaps == null ? new String[0] : fitGaps; }
     public byte[] getTexBlob() { return texBlob; }
     public void setTexBlob(byte[] texBlob) { this.texBlob = texBlob; }
     public byte[] getPdfBlob() { return pdfBlob; }

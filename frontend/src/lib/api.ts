@@ -134,6 +134,8 @@ export interface ApplicationSummary {
   role: string | null;
   outcome: string;
   createdAt: string;
+  /** Overall fit 0-100, or null for applications generated before scoring existed. */
+  fitScore: number | null;
 }
 
 export interface OutcomeHistoryEntry {
@@ -195,6 +197,12 @@ export interface ApplicationResponse {
   coverLetterFlags: string[];
   atsMatched: string[];
   atsMissing: string[];
+  /** Overall fit 0-100, or null when the scoring call failed / predates the feature. */
+  fitScore: number | null;
+  fitVerdict: string | null;
+  fitDimensions: Record<string, number>;
+  fitStrengths: string[];
+  fitGaps: string[];
   pdfAvailable: boolean;
   tectonicLog: string | null;
   outcome: string;

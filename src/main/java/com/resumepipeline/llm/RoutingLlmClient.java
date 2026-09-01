@@ -58,6 +58,11 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
+    public FitResult scoreFit(FitRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        return current().scoreFit(req, progress, tokens);
+    }
+
+    @Override
     public RefitResult refitBullets(RefitRequest req, ProgressLog progress, TokenAccumulator tokens) {
         return current().refitBullets(req, progress, tokens);
     }

@@ -176,7 +176,38 @@ export function ApplicationDetail() {
             {app.coverLetter || <span className="muted">No cover letter.</span>}
           </div>
 
-          <Section num="03.D" title="ATS" />
+          {app.fitScore !== null && (
+            <>
+              <Section num="03.D" title="Fit" />
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <span className="tag tag--acid">{app.fitScore}/100</span>
+                  <span className="tag">{app.fitVerdict}</span>
+                  <span className="muted">
+                    &nbsp;technical {app.fitDimensions.technical ?? '—'} · experience {app.fitDimensions.experience ?? '—'}
+                  </span>
+                </div>
+                {app.fitStrengths.length > 0 && (
+                  <>
+                    <div className="label muted" style={{ marginBottom: 6 }}>STRENGTHS</div>
+                    <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
+                      {app.fitStrengths.map(t => <li key={t}>{t}</li>)}
+                    </ul>
+                  </>
+                )}
+                {app.fitGaps.length > 0 && (
+                  <>
+                    <div className="label muted" style={{ marginBottom: 6 }}>GAPS</div>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {app.fitGaps.map(t => <li key={t}>{t}</li>)}
+                    </ul>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          <Section num="03.E" title="ATS" />
           <div>
             <div className="label muted" style={{ marginBottom: 6 }}>MATCHED</div>
             <div style={{ marginBottom: 12 }}>

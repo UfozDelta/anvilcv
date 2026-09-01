@@ -55,6 +55,7 @@ export function Applications() {
                   {new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
                 </div>
               </div>
+              {a.fitScore !== null && <span className="tag tag--acid">{a.fitScore}</span>}
               <span className={`outcome outcome--${a.outcome}`}>{a.outcome}</span>
               <button
                 className="btn btn--ghost btn--sm"
