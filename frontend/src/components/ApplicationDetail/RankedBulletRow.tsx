@@ -1,14 +1,23 @@
-import type { Bullet, BulletVerdict, RankedBullet } from '../../lib/api';
+import type { Bullet, BulletVerdict, GenerationConfig, RankedBullet } from '../../lib/api';
+import { EditBullet } from '../ProjectDetail/EditBullet';
 
-export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, onToggleSelect, onToggleWhy }: {
+export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet }: {
   r: RankedBullet;
   bullet: Bullet | undefined;
   isSelected: boolean;
   whyOpen: boolean;
   verdict?: BulletVerdict;
+  editing: boolean;
+  cfg: GenerationConfig;
   onToggleSelect: () => void;
   onToggleWhy: () => void;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveBullet: (text: string, tags: string[]) => void;
 }) {
+  if (editing && bullet) {
+    return <EditBullet bullet={bullet} cfg={cfg} onCancel={onCancelEdit} onSave={onSaveBullet} />;
+  }
   return (
     <div className="bullet" style={{ opacity: isSelected ? 1 : 0.45 }}>
       <div
@@ -30,6 +39,17 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, onTog
                 title={verdict.reason}
               >{verdict.verdict.toUpperCase()}</span>
             )}
+          </div>
+        )}
+        {bullet && (
+          <div className="row" style={{ marginTop: 4 }}>
+            <button
+              className="btn btn--ghost btn--sm"
+              style={{ fontSize: 10, padding: '2px 6px' }}
+              onClick={onEdit}
+            >
+              EDIT
+            </button>
           </div>
         )}
         {r.why && (

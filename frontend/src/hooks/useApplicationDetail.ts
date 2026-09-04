@@ -4,6 +4,7 @@ import { groupRankedByProject } from '../lib/groupBullets';
 import { estimatedLines } from '../lib/bulletLength';
 import { useBulletPreview } from './useBulletPreview';
 import { parseRanking } from '../lib/ranking';
+import { useGenerationConfig } from './useGenerationConfig';
 
 const TOP_N = 15;
 /** Mirrors `BulletSelector.MAX_TOTAL_LINES` — rendered bullet lines that fit one page. */
@@ -25,6 +26,9 @@ export function useApplicationDetail(id: string | undefined) {
   // Which project group the open preview belongs to; the PDF itself lives in the shared hook.
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const preview = useBulletPreview();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const { cfg } = useGenerationConfig();
 
   async function load() {
     if (!id) return;
@@ -135,6 +139,23 @@ export function useApplicationDetail(id: string | undefined) {
     [selectedIds, bullets],
   );
 
+  /** Saves straight to the bullet bank (same endpoint the Project page uses), so the
+   * edit is visible on both /projects/:id and every application referencing this bullet. */
+  async function saveBullet(b: Bullet, text: string, tags: string[]) {
+    const updated = await api.put<Bullet>(`/api/bullets/${b.id}`, { text, tags });
+    setBullets(prev => ({ ...prev, [b.id]: updated }));
+    setEditingId(null);
+  }
+
+  /** Same endpoint the Project page uses. Sends the full current project merged with the
+   * patch — the backend nulls out any field missing from the body, so a partial PUT would
+   * wipe techStack/enrichment data that isn't shown in this header editor. */
+  async function saveProject(project: Project, patch: Partial<Project>) {
+    const updated = await api.put<Project>(`/api/projects/${project.id}`, { ...project, ...patch });
+    setProjectById(prev => ({ ...prev, [project.id]: updated }));
+    setEditingProjectId(null);
+  }
+
   function toggleWhy(bid: string) {
     setExpandedWhys(prev => {
       const next = new Set(prev);
@@ -148,6 +169,8 @@ export function useApplicationDetail(id: string | undefined) {
     pdfBlobUrl, pdfVersion, setPdfVersion, expandedWhys, showTail, setShowTail,
     expandedGroups, selectedIds, ranking, bulletsReady, grouped,
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
+    editingId, setEditingId, saveBullet, cfg,
+    editingProjectId, setEditingProjectId, saveProject,
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,
     selectedLines, MAX_TOTAL_LINES,

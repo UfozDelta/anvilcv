@@ -76,8 +76,16 @@ export function ApplicationDetail() {
                   isSelected={s.selectedIds.has(r.bulletId)}
                   whyOpen={s.expandedWhys.has(r.bulletId)}
                   verdict={verdicts[r.bulletId]}
+                  editing={s.editingId === r.bulletId}
+                  cfg={s.cfg}
                   onToggleSelect={() => s.toggleBullet(r.bulletId)}
                   onToggleWhy={() => s.toggleWhy(r.bulletId)}
+                  onEdit={() => s.setEditingId(r.bulletId)}
+                  onCancelEdit={() => s.setEditingId(null)}
+                  onSaveBullet={(text, tags) => {
+                    const b = s.bullets[r.bulletId];
+                    if (b) s.saveBullet(b, text, tags);
+                  }}
                 />
               ))}
             </div>
@@ -97,10 +105,19 @@ export function ApplicationDetail() {
                       verdicts={verdicts}
                       previewing={s.previewKey === g.key}
                       previewBusy={s.previewBusy}
+                      editingId={s.editingId}
+                      cfg={s.cfg}
+                      editingProjectId={s.editingProjectId}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
                       onPreview={ids => s.previewGroup(g.key, ids)}
+                      onEdit={bid => s.setEditingId(bid)}
+                      onCancelEdit={() => s.setEditingId(null)}
+                      onSaveBullet={(b, text, tags) => s.saveBullet(b, text, tags)}
+                      onEditProject={pid => s.setEditingProjectId(pid)}
+                      onCancelEditProject={() => s.setEditingProjectId(null)}
+                      onSaveProject={(p, patch) => s.saveProject(p, patch)}
                     />
                   ))}
                 </div>
@@ -119,10 +136,19 @@ export function ApplicationDetail() {
                       verdicts={verdicts}
                       previewing={s.previewKey === g.key}
                       previewBusy={s.previewBusy}
+                      editingId={s.editingId}
+                      cfg={s.cfg}
+                      editingProjectId={s.editingProjectId}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
                       onPreview={ids => s.previewGroup(g.key, ids)}
+                      onEdit={bid => s.setEditingId(bid)}
+                      onCancelEdit={() => s.setEditingId(null)}
+                      onSaveBullet={(b, text, tags) => s.saveBullet(b, text, tags)}
+                      onEditProject={pid => s.setEditingProjectId(pid)}
+                      onCancelEditProject={() => s.setEditingProjectId(null)}
+                      onSaveProject={(p, patch) => s.saveProject(p, patch)}
                     />
                   ))}
                 </div>
