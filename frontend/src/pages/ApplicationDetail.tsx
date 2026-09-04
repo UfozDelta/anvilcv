@@ -164,7 +164,7 @@ export function ApplicationDetail() {
               {' · '}
               {dirty ? 'SELECTION CHANGED · RE-RENDER PDF' : 'NO CHANGES'}
             </span>
-            <button className="btn btn--acid" disabled={!dirty} onClick={() => s.setRerenderStreaming(true)}>
+            <button className="btn btn--acid" onClick={() => s.setRerenderStreaming(true)}>
               RE-RENDER PDF &nbsp;→
             </button>
           </div>

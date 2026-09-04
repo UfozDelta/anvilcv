@@ -58,9 +58,10 @@ export function useApplicationDetail(id: string | undefined) {
       all.forEach(b => { map[b.id] = b; });
       setBullets(map);
       // Open the groups that already contribute a selected bullet; collapse the rest.
-      // Key must match groupRankedByProject's bucket key.
+      // Key must match groupRankedByProject's bucket key. Uses `sel` directly (not the
+      // ranked-only list) so a selected bullet missing from bulletRanking still opens its group.
       setExpandedGroups(new Set(
-        ranking.filter(r => sel.has(r.bulletId)).map(r => map[r.bulletId]?.projectId ?? '__other__'),
+        [...sel].map(bid => map[bid]?.projectId ?? '__other__'),
       ));
     }
   }
@@ -84,8 +85,18 @@ export function useApplicationDetail(id: string | undefined) {
 
   const ranking = useMemo(() => {
     if (!app) return [];
-    return parseRanking(app.bulletRanking).sort((a, b) => a.rank - b.rank);
-  }, [app]);
+    const parsed = parseRanking(app.bulletRanking).sort((a, b) => a.rank - b.rank);
+    // Bullets can end up in `selectedBulletIds` (and so in the rendered PDF, which renders
+    // straight off that list) without ever having been ranked — e.g. a stale selection
+    // carried across a regenerate. Those bullets had no row here and so couldn't be seen,
+    // counted, or deselected. Give them a synthetic trailing row instead of hiding them.
+    const rankedIds = new Set(parsed.map(r => r.bulletId));
+    let nextRank = parsed.length > 0 ? Math.max(...parsed.map(r => r.rank)) + 1 : 1;
+    const orphans = [...selectedIds]
+      .filter(bid => !rankedIds.has(bid) && bullets[bid])
+      .map(bid => ({ bulletId: bid, rank: nextRank++, why: '' }));
+    return [...parsed, ...orphans];
+  }, [app, selectedIds, bullets]);
 
   const bulletsReady = Object.keys(bullets).length > 0 && Object.keys(projectById).length > 0;
 
