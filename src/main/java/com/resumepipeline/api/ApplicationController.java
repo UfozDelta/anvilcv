@@ -125,6 +125,17 @@ public class ApplicationController {
         return new SubmitResponse(jobId);
     }
 
+    @PatchMapping("/{id}/locks")
+    public ApplicationResponse setLocked(Authentication auth, @PathVariable UUID id,
+                                         @RequestBody LockRequest req) {
+        return ApplicationResponse.from(service.setLocked(AuthUtils.userId(auth), id, req.lockedBulletIds()));
+    }
+
+    @PostMapping("/{id}/refit-selection")
+    public ApplicationResponse refitSelection(Authentication auth, @PathVariable UUID id) {
+        return ApplicationResponse.from(service.refitSelection(AuthUtils.userId(auth), id, ProgressLog.noOp()));
+    }
+
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> pdf(Authentication auth, @PathVariable UUID id) {
         Application a = service.get(AuthUtils.userId(auth), id);

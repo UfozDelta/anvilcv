@@ -78,6 +78,7 @@ export function ApplicationDetail() {
                   verdict={verdicts[r.bulletId]}
                   editing={s.editingId === r.bulletId}
                   cfg={s.cfg}
+                  locked={s.lockedIds.has(r.bulletId)}
                   onToggleSelect={() => s.toggleBullet(r.bulletId)}
                   onToggleWhy={() => s.toggleWhy(r.bulletId)}
                   onEdit={() => s.setEditingId(r.bulletId)}
@@ -86,6 +87,7 @@ export function ApplicationDetail() {
                     const b = s.bullets[r.bulletId];
                     if (b) s.saveBullet(b, text, tags);
                   }}
+                  onToggleLock={() => s.toggleLock(r.bulletId)}
                 />
               ))}
             </div>
@@ -108,6 +110,7 @@ export function ApplicationDetail() {
                       editingId={s.editingId}
                       cfg={s.cfg}
                       editingProjectId={s.editingProjectId}
+                      lockedIds={s.lockedIds}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
@@ -118,6 +121,7 @@ export function ApplicationDetail() {
                       onEditProject={pid => s.setEditingProjectId(pid)}
                       onCancelEditProject={() => s.setEditingProjectId(null)}
                       onSaveProject={(p, patch) => s.saveProject(p, patch)}
+                      onToggleLock={bid => s.toggleLock(bid)}
                     />
                   ))}
                 </div>
@@ -139,6 +143,7 @@ export function ApplicationDetail() {
                       editingId={s.editingId}
                       cfg={s.cfg}
                       editingProjectId={s.editingProjectId}
+                      lockedIds={s.lockedIds}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
@@ -149,6 +154,7 @@ export function ApplicationDetail() {
                       onEditProject={pid => s.setEditingProjectId(pid)}
                       onCancelEditProject={() => s.setEditingProjectId(null)}
                       onSaveProject={(p, patch) => s.saveProject(p, patch)}
+                      onToggleLock={bid => s.toggleLock(bid)}
                     />
                   ))}
                 </div>
@@ -163,7 +169,17 @@ export function ApplicationDetail() {
               </span>
               {' · '}
               {dirty ? 'SELECTION CHANGED · RE-RENDER PDF' : 'NO CHANGES'}
+              {s.lockedIds.size > 0 && ` · ${s.lockedIds.size} LOCKED`}
             </span>
+            <button
+              className="btn btn--ghost btn--sm"
+              disabled={s.refitting}
+              title="Re-pick bullets from the bank, keeping locked ones pinned"
+              onClick={() => s.refitSelection()}
+              style={{ marginRight: 8 }}
+            >
+              {s.refitting ? 'REFITTING...' : 'REFIT SELECTION'}
+            </button>
             <button className="btn btn--acid" onClick={() => s.setRerenderStreaming(true)}>
               RE-RENDER PDF &nbsp;→
             </button>

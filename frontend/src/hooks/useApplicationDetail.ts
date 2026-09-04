@@ -16,6 +16,9 @@ export function useApplicationDetail(id: string | undefined) {
   const [projectById, setProjectById] = useState<Record<string, Project>>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
+  const [locksSaving, setLocksSaving] = useState(false);
+  const [refitting, setRefitting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rerenderStreaming, setRerenderStreaming] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -40,6 +43,7 @@ export function useApplicationDetail(id: string | undefined) {
       ? new Set(a.selectedBulletIds)
       : new Set(ranking.slice(0, TOP_N).map(r => r.bulletId));
     setSelectedIds(sel);
+    setLockedIds(new Set(a.lockedBulletIds));
 
     // Pull all bullets referenced in the ranking so we can display text
     const ids = ranking.map(r => r.bulletId);
@@ -167,6 +171,40 @@ export function useApplicationDetail(id: string | undefined) {
     setEditingProjectId(null);
   }
 
+  /** Locks are saved immediately (not batched with the PDF selection), since REFIT SELECTION
+   * reads them straight off the Application row and a stale save would silently un-pin a bullet. */
+  async function toggleLock(bid: string) {
+    if (!app) return;
+    const next = new Set(lockedIds);
+    if (next.has(bid)) next.delete(bid); else next.add(bid);
+    setLockedIds(next);
+    setLocksSaving(true);
+    try {
+      const updated = await api.patch<ApplicationResponse>(`/api/applications/${app.id}/locks`, {
+        lockedBulletIds: [...next],
+      });
+      setApp(updated);
+      setLockedIds(new Set(updated.lockedBulletIds));
+    } finally {
+      setLocksSaving(false);
+    }
+  }
+
+  /** Re-picks the selection from the current bank, keeping locked bullets pinned and
+   * deduping against them — no LLM call, reuses the ranking already stored from creation. */
+  async function refitSelection() {
+    if (!app) return;
+    setRefitting(true);
+    try {
+      const updated = await api.post<ApplicationResponse>(`/api/applications/${app.id}/refit-selection`);
+      setApp(updated);
+      setSelectedIds(new Set(updated.selectedBulletIds));
+      setPdfVersion(v => v + 1);
+    } finally {
+      setRefitting(false);
+    }
+  }
+
   function toggleWhy(bid: string) {
     setExpandedWhys(prev => {
       const next = new Set(prev);
@@ -182,6 +220,7 @@ export function useApplicationDetail(id: string | undefined) {
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
     editingId, setEditingId, saveBullet, cfg,
     editingProjectId, setEditingProjectId, saveProject,
+    lockedIds, toggleLock, locksSaving, refitting, refitSelection,
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,
     selectedLines, MAX_TOTAL_LINES,

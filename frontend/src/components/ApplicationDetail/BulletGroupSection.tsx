@@ -4,7 +4,7 @@ import { estimatedLines } from '../../lib/bulletLength';
 import { RankedBulletRow } from './RankedBulletRow';
 import { EditProjectHeader } from './EditProjectHeader';
 
-export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, editingId, cfg, editingProjectId, onToggleOpen, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject }: {
+export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, editingId, cfg, editingProjectId, lockedIds, onToggleOpen, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock }: {
   g: BulletGroup;
   open: boolean;
   selectedIds: Set<string>;
@@ -16,6 +16,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   editingId: string | null;
   cfg: GenerationConfig;
   editingProjectId: string | null;
+  lockedIds: Set<string>;
   onToggleOpen: () => void;
   onToggleSelect: (bulletId: string) => void;
   onToggleWhy: (bulletId: string) => void;
@@ -26,6 +27,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   onEditProject: (projectId: string) => void;
   onCancelEditProject: () => void;
   onSaveProject: (project: Project, patch: Partial<Project>) => void;
+  onToggleLock: (bulletId: string) => void;
 }) {
   const name = g.project?.name ?? 'Other';
   const selected = g.items.filter(r => selectedIds.has(r.bulletId));
@@ -84,6 +86,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
           verdict={verdicts[r.bulletId]}
           editing={editingId === r.bulletId}
           cfg={cfg}
+          locked={lockedIds.has(r.bulletId)}
           onToggleSelect={() => onToggleSelect(r.bulletId)}
           onToggleWhy={() => onToggleWhy(r.bulletId)}
           onEdit={() => onEdit(r.bulletId)}
@@ -92,6 +95,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
             const b = bullets[r.bulletId];
             if (b) onSaveBullet(b, text, tags);
           }}
+          onToggleLock={() => onToggleLock(r.bulletId)}
         />
       ))}
     </div>

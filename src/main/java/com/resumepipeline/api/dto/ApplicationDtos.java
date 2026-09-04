@@ -30,6 +30,8 @@ public class ApplicationDtos {
 
     public record RerenderRequest(List<UUID> selectedBulletIds) {}
 
+    public record LockRequest(List<UUID> lockedBulletIds) {}
+
     public record OutcomeHistoryEntry(UUID applicationId, String outcome, Instant changedAt) {
         public static OutcomeHistoryEntry from(OutcomeHistory h) {
             return new OutcomeHistoryEntry(h.getApplicationId(), h.getOutcome(), h.getChangedAt());
@@ -51,7 +53,7 @@ public class ApplicationDtos {
 
     public record ApplicationResponse(
             UUID id, String company, String role, String jdText, String jdUrl, String roleEmphasis,
-            String bulletRanking, List<UUID> selectedBulletIds,
+            String bulletRanking, List<UUID> selectedBulletIds, List<UUID> lockedBulletIds,
             String coverLetter, List<String> coverLetterFlags,
             List<String> atsMatched, List<String> atsMissing,
             List<String> selectedCourses, Map<String, List<String>> selectedSkills,
@@ -79,6 +81,7 @@ public class ApplicationDtos {
                     a.getId(), a.getCompany(), a.getRole(), a.getJdText(), a.getJdUrl(),
                     a.getRoleEmphasis(), a.getBulletRanking(),
                     Arrays.asList(a.getSelectedBulletIds()),
+                    Arrays.asList(a.getLockedBulletIds()),
                     a.getCoverLetter(), Arrays.asList(a.getCoverLetterFlags()),
                     Arrays.asList(a.getAtsMatched()), Arrays.asList(a.getAtsMissing()),
                     Arrays.asList(a.getSelectedCourses()), skillsMap,

@@ -36,6 +36,11 @@ public class Application {
     @Column(name = "selected_bullet_ids", columnDefinition = "uuid[]", nullable = false)
     private UUID[] selectedBulletIds = new UUID[0];
 
+    /** Bullets pinned onto this application — refit-selection never drops them. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "locked_bullet_ids", columnDefinition = "uuid[]", nullable = false)
+    private UUID[] lockedBulletIds = new UUID[0];
+
     @Column(name = "cover_letter", columnDefinition = "text")
     private String coverLetter;
 
@@ -154,6 +159,12 @@ public class Application {
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
+    /** Optimistic lock: rerender and refit both read-modify-write the whole row (pdfBlob
+     * included), so two concurrent saves need to conflict instead of silently clobbering. */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     public Application() {}
 
     public UUID getId() { return id; }
@@ -175,6 +186,11 @@ public class Application {
     public void setSelectedBulletIds(UUID[] selectedBulletIds) {
         this.selectedBulletIds = selectedBulletIds == null ? new UUID[0] : selectedBulletIds;
     }
+    public UUID[] getLockedBulletIds() { return lockedBulletIds; }
+    public void setLockedBulletIds(UUID[] lockedBulletIds) {
+        this.lockedBulletIds = lockedBulletIds == null ? new UUID[0] : lockedBulletIds;
+    }
+    public long getVersion() { return version; }
     public String getCoverLetter() { return coverLetter; }
     public String[] getCoverLetterFlags() { return coverLetterFlags; }
     public void setCoverLetterFlags(String[] f) { this.coverLetterFlags = f == null ? new String[0] : f; }

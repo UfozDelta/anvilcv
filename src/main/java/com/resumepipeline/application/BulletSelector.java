@@ -113,7 +113,32 @@ public final class BulletSelector {
                                       Map<UUID, Project> projectById,
                                       List<Bullet> allBullets,
                                       Set<String> keywordsLower) {
+        return select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, List.of());
+    }
+
+    /**
+     * Same as {@link #select(List, Map, Map, List, Set)}, but with a set of bullets that must
+     * survive every pass regardless of rank, budget, or per-project cap — used by application
+     * refit, where the user has pinned specific bullets onto the resume. Locked bullets seed
+     * {@code selected} before pass 1 runs, so every downstream cap (per-project, entry, line
+     * budget, dedup) already accounts for them exactly as if pass 1 had chosen them itself; the
+     * trim loop (pass 4's tail) is additionally forbidden from touching a project holding a
+     * locked bullet, since dropping one whole would silently discard a pin the caller promised
+     * to keep.
+     *
+     * @param locked bullets that must appear in the result; may exceed {@link #MAX_PER_PROJECT}
+     *               for one project, in which case that project keeps all of them (the cap is a
+     *               selection rule, not a hard render limit)
+     */
+    public static List<Bullet> select(List<LlmClient.RankedBullet> rankedSorted,
+                                      Map<UUID, Bullet> bulletById,
+                                      Map<UUID, Project> projectById,
+                                      List<Bullet> allBullets,
+                                      Set<String> keywordsLower,
+                                      List<Bullet> locked) {
         ToLongFunction<Bullet> tagScore = tagScore(keywordsLower);
+        Set<UUID> lockedProjectIds = locked.stream().map(Bullet::getProjectId)
+                .collect(Collectors.toCollection(HashSet::new));
 
         // Pass 1: greedy top-N, capped per project and by rendered-line budget.
         //
@@ -130,6 +155,15 @@ public final class BulletSelector {
         List<Bullet> selected = new ArrayList<>();
         List<String> selectedTexts = new ArrayList<>();
         int lines = 0;
+        // Locked bullets seed every pass — never re-picked (loops below skip anything already
+        // in `selected`/`selectedIds`/`liveIds`), never evicted (eviction only raids projects
+        // with a spare bullet above 1, and the trim loop below refuses to touch their project).
+        for (Bullet b : locked) {
+            perProject.merge(b.getProjectId(), 1, Integer::sum);
+            selected.add(b);
+            selectedTexts.add(b.getText());
+            lines += BulletTextRules.estimatedLines(b.getText());
+        }
         for (LlmClient.RankedBullet rb : rankedSorted) {
             if (selected.size() >= MAX_TOTAL) break;
             UUID bid = parseUuid(rb.bulletId());
@@ -183,7 +217,7 @@ public final class BulletSelector {
                 // (the evicted bullet was shorter than the one we're trying to add), move on to
                 // the next candidate rather than giving up on the whole pass.
                 if (selected.size() >= MAX_TOTAL || lines + bLines > MAX_TOTAL_LINES) {
-                    Bullet evicted = evictWeakestFromFullestProject(selected);
+                    Bullet evicted = evictWeakestFromFullestProject(selected, lockedProjectIds);
                     if (evicted == null) break;
                     lines -= BulletTextRules.estimatedLines(evicted.getText());
                     // The evicted bullet no longer renders, so it must stop blocking later
@@ -315,15 +349,17 @@ public final class BulletSelector {
             UUID victim = null;
             for (int i = order.size() - 1; i >= 0 && victim == null; i--) {
                 UUID pid = order.get(i);
+                if (lockedProjectIds.contains(pid)) continue; // never drop a project holding a pin
                 Project p = projectById.get(pid);
                 if (p == null) { victim = pid; break; } // unknown kind holds no floor up
                 long floor = p.getKind() == Project.Kind.EXPERIENCE
                         ? MIN_EXPERIENCE_PROJECTS : MIN_PROJECT_ENTRIES;
                 if (distinctProjectsOfKind(selected, projectById, p.getKind()) > floor) victim = pid;
             }
-            // Every remaining entry is holding up a kind floor: overrun the page rather than
-            // silently abandon the diversity guarantee. Unreachable while the floors sum below
-            // MAX_ENTRIES, but the loop must not spin if that ever stops being true.
+            // Every remaining entry is holding up a kind floor (or a lock): overrun the page
+            // rather than silently abandon the diversity guarantee or drop a pinned bullet.
+            // Unreachable while the floors sum below MAX_ENTRIES, but the loop must not spin
+            // if that ever stops being true.
             if (victim == null) break;
             UUID v = victim;
             List<Bullet> doomed = selected.stream().filter(b -> b.getProjectId().equals(v)).toList();
@@ -416,13 +452,16 @@ public final class BulletSelector {
      * to raid a project at the floor could leave the kind floor unsatisfiable. Revisit only if
      * the churn shows up in a real render.
      *
+     * @param lockedProjectIds projects holding a pinned bullet — never raided, since the
+     *                         (fullest-project, last-in-list) heuristic below has no way to tell
+     *                         a pinned bullet apart from a rank-added one within the same project
      * @return the evicted bullet if a slot was freed; null when no project has a spare bullet to give up
      */
-    private static Bullet evictWeakestFromFullestProject(List<Bullet> selected) {
+    private static Bullet evictWeakestFromFullestProject(List<Bullet> selected, Set<UUID> lockedProjectIds) {
         Map<UUID, Long> counts = selected.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId, Collectors.counting()));
         UUID fullest = counts.entrySet().stream()
-                .filter(e -> e.getValue() > 1)
+                .filter(e -> e.getValue() > 1 && !lockedProjectIds.contains(e.getKey()))
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
                 .orElse(null);

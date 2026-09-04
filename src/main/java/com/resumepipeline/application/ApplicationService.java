@@ -511,6 +511,89 @@ public class ApplicationService {
         return repo.save(a);
     }
 
+    /**
+     * Replace this application's locked-bullet set. Silently drops any id that doesn't resolve
+     * to a bullet the user actually owns (deleted since, or never theirs) — the caller can't
+     * tell the difference from a race, and either way it's not a lockable bullet.
+     */
+    public Application setLocked(UUID userId, UUID applicationId, List<UUID> lockedBulletIds) {
+        Application a = get(userId, applicationId);
+        List<UUID> ids = lockedBulletIds == null ? List.of() : lockedBulletIds;
+        Set<UUID> owned = bulletRepo.findByIdsAndProjectUserId(ids.toArray(new UUID[0]), userId).stream()
+                .map(Bullet::getId).collect(Collectors.toSet());
+        a.setLockedBulletIds(ids.stream().filter(owned::contains).distinct().toArray(UUID[]::new));
+        return repo.save(a);
+    }
+
+    /**
+     * Re-pick the selection from the current bank without calling the LLM again: reuses the
+     * ranking already stored from creation (bank drift only — the JD hasn't changed, so the
+     * rank order is still valid for the bullets that were ranked), and the same ATS keyword set
+     * already stored as {@code atsMatched}/{@code atsMissing}. Locked bullets are pinned via
+     * {@link BulletSelector#select(List, Map, Map, List, Set, List)} — the same four-pass
+     * selection algorithm the initial generation uses, so per-project caps, entry caps, the
+     * kind floor and dedup all still hold; refit only adds the guarantee that locked bullets
+     * survive every pass.
+     */
+    public Application refitSelection(UUID userId, UUID applicationId, ProgressLog progress) {
+        Application a = get(userId, applicationId);
+        List<Bullet> allBullets = bulletRepo.findSelectableByProjectUserId(userId);
+        Map<UUID, Bullet> bulletById = allBullets.stream()
+                .collect(Collectors.toMap(Bullet::getId, b -> b));
+        Map<UUID, Project> projectById = projectRepo.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+                .collect(Collectors.toMap(Project::getId, p -> p));
+
+        List<LlmClient.RankedBullet> rankedSorted;
+        try {
+            rankedSorted = mapper.readValue(a.getBulletRanking(), new com.fasterxml.jackson.core.type.TypeReference<List<LlmClient.RankedBullet>>() {})
+                    .stream().sorted(Comparator.comparingInt(LlmClient.RankedBullet::rank)).toList();
+        } catch (JsonProcessingException e) {
+            rankedSorted = List.of();
+        }
+
+        List<Bullet> locked = Arrays.stream(a.getLockedBulletIds())
+                .map(bulletById::get).filter(Objects::nonNull).toList();
+
+        // Same JD keyword set the original ranking pass used, recovered from what was stored
+        // rather than re-derived — matched + missing together are the full keyword list.
+        Set<String> keywordsLower = new LinkedHashSet<>();
+        Arrays.stream(a.getAtsMatched()).map(String::toLowerCase).forEach(keywordsLower::add);
+        Arrays.stream(a.getAtsMissing()).map(String::toLowerCase).forEach(keywordsLower::add);
+
+        progress.emit("Refitting selection from " + allBullets.size() + " bank bullets ("
+                + locked.size() + " locked)...");
+        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked);
+
+        List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
+        Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
+        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills);
+        progress.emit("Compiling PDF via tectonic...");
+        PdfCompiler.Result r = compiler.compile(tex);
+
+        a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
+        a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
+        a.setPageCount(r.success() ? r.pageCount() : null);
+        a.setRecruiterStale(true);
+
+        Set<String> priorKeywords = new LinkedHashSet<>(Arrays.asList(a.getAtsMatched()));
+        priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
+        Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
+                .map(String::toLowerCase).collect(Collectors.toSet());
+        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected, selectedSkills, selectedCourses);
+        a.setAtsMatched(ats.matched().toArray(new String[0]));
+        a.setAtsMissing(ats.missing().toArray(new String[0]));
+
+        if (r.success()) {
+            a.setPdfBlob(r.pdf());
+            a.setTectonicLog(r.log());
+            progress.emit("Done - PDF compiled (" + r.pdf().length / 1024 + " KB).");
+        } else {
+            a.setTectonicLog("FAILED: " + r.error() + "\n\n" + r.log());
+            progress.emit("PDF compile failed: " + r.error());
+        }
+        return repo.save(a);
+    }
+
     private record AtsReport(List<String> matched, List<String> missing) {}
 
     /**

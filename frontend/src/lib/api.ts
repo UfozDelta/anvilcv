@@ -201,6 +201,7 @@ export interface ApplicationResponse {
   roleEmphasis: string;
   bulletRanking: string; // JSON string of RankedBullet[]
   selectedBulletIds: string[];
+  lockedBulletIds: string[];
   coverLetter: string | null;
   /** Figures the letter states that are in neither the selected bullets nor the JD. */
   coverLetterFlags: string[];
