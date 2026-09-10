@@ -136,6 +136,24 @@ public class ApplicationController {
         return ApplicationResponse.from(service.refitSelection(AuthUtils.userId(auth), id, ProgressLog.noOp()));
     }
 
+    @PostMapping("/{id}/refit-selection/submit")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SubmitResponse refitSelectionSubmit(Authentication auth, @PathVariable UUID id) {
+        UUID userId = AuthUtils.userId(auth);
+        UUID jobId = UUID.randomUUID();
+        jobStore.start(jobId, userId);
+        ASYNC_EXECUTOR.submit(() -> {
+            ProgressLog progress = msg -> jobStore.append(jobId, msg);
+            try {
+                Application a = service.refitSelection(userId, id, progress);
+                jobStore.complete(jobId, a.getId());
+            } catch (Exception e) {
+                jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            }
+        });
+        return new SubmitResponse(jobId);
+    }
+
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> pdf(Authentication auth, @PathVariable UUID id) {
         Application a = service.get(AuthUtils.userId(auth), id);

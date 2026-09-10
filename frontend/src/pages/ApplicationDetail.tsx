@@ -173,12 +173,11 @@ export function ApplicationDetail() {
             </span>
             <button
               className="btn btn--ghost btn--sm"
-              disabled={s.refitting}
               title="Re-pick bullets from the bank, keeping locked ones pinned"
-              onClick={() => s.refitSelection()}
+              onClick={() => s.setRefitStreaming(true)}
               style={{ marginRight: 8 }}
             >
-              {s.refitting ? 'REFITTING...' : 'REFIT SELECTION'}
+              REFIT SELECTION
             </button>
             <button className="btn btn--acid" onClick={() => s.setRerenderStreaming(true)}>
               RE-RENDER PDF &nbsp;→
@@ -366,6 +365,18 @@ export function ApplicationDetail() {
           onDone={async () => { await s.load(); s.setPdfVersion(v => v + 1); s.setRerenderStreaming(false); }}
           onClose={() => s.setRerenderStreaming(false)}
           title="RE-RENDERING PDF..."
+          doneLabel="DONE →"
+        />
+      )}
+
+      {s.refitStreaming && (
+        <EventStream
+          submitUrl={`/api/applications/${app.id}/refit-selection/submit`}
+          submitBody={{}}
+          pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
+          onDone={async () => { await s.load(); s.setPdfVersion(v => v + 1); s.setRefitStreaming(false); }}
+          onClose={() => s.setRefitStreaming(false)}
+          title="REFITTING SELECTION..."
           doneLabel="DONE →"
         />
       )}

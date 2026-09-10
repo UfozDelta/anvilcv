@@ -18,9 +18,9 @@ export function useApplicationDetail(id: string | undefined) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
   const [locksSaving, setLocksSaving] = useState(false);
-  const [refitting, setRefitting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rerenderStreaming, setRerenderStreaming] = useState(false);
+  const [refitStreaming, setRefitStreaming] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const [pdfVersion, setPdfVersion] = useState(0);
@@ -190,21 +190,6 @@ export function useApplicationDetail(id: string | undefined) {
     }
   }
 
-  /** Re-picks the selection from the current bank, keeping locked bullets pinned and
-   * deduping against them — no LLM call, reuses the ranking already stored from creation. */
-  async function refitSelection() {
-    if (!app) return;
-    setRefitting(true);
-    try {
-      const updated = await api.post<ApplicationResponse>(`/api/applications/${app.id}/refit-selection`);
-      setApp(updated);
-      setSelectedIds(new Set(updated.selectedBulletIds));
-      setPdfVersion(v => v + 1);
-    } finally {
-      setRefitting(false);
-    }
-  }
-
   function toggleWhy(bid: string) {
     setExpandedWhys(prev => {
       const next = new Set(prev);
@@ -220,7 +205,7 @@ export function useApplicationDetail(id: string | undefined) {
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
     editingId, setEditingId, saveBullet, cfg,
     editingProjectId, setEditingProjectId, saveProject,
-    lockedIds, toggleLock, locksSaving, refitting, refitSelection,
+    lockedIds, toggleLock, locksSaving, refitStreaming, setRefitStreaming,
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,
     selectedLines, MAX_TOTAL_LINES,
