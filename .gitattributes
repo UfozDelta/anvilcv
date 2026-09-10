@@ -2,3 +2,4 @@
 # line endings must not depend on the checkout. core.autocrlf=true was rewriting them
 # to CRLF and breaking LatexRendererTest on Windows.
 *.tex text eol=lf
+*.sh  text eol=lf
