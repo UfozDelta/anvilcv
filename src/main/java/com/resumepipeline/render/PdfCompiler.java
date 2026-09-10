@@ -75,8 +75,10 @@ public class PdfCompiler {
             // in.log is also read on success: it is the only place the real page count
             // appears, and the case that matters is a compile that succeeded but spilled
             // onto a second page. The stored log stays the stdout, as before.
-            Integer pages = Result.parsePageCount(readIfExists(tmp.resolve("in.log")));
-            return new Result(true, pdf, output, null, pages);
+            String texLog = readIfExists(tmp.resolve("in.log"));
+            Integer pages = Result.parsePageCount(texLog);
+            boolean overfull = Result.hasOverfullHbox(texLog);
+            return new Result(true, pdf, output, null, pages, overfull);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             return Result.failure(e.getClass().getSimpleName() + ": " + e.getMessage(), "");
@@ -97,12 +99,13 @@ public class PdfCompiler {
         } catch (IOException ignored) {}
     }
 
-    public record Result(boolean success, byte[] pdf, String log, String error, Integer pageCount) {
+    public record Result(boolean success, byte[] pdf, String log, String error, Integer pageCount,
+                          boolean overfullHbox) {
         public static Result success(byte[] pdf, String log) {
-            return new Result(true, pdf, log, null, parsePageCount(log));
+            return new Result(true, pdf, log, null, parsePageCount(log), hasOverfullHbox(log));
         }
         public static Result failure(String err, String log) {
-            return new Result(false, null, log, err, null);
+            return new Result(false, null, log, err, null, false);
         }
 
         /**
@@ -115,8 +118,20 @@ public class PdfCompiler {
             java.util.regex.Matcher m = PAGE_COUNT.matcher(log);
             return m.find() ? Integer.valueOf(m.group(1)) : null;
         }
+
+        /**
+         * True when the engine itself reported a line too wide for its column — ground truth
+         * from XeTeX's real font metrics, unlike a char-count heuristic on the Java side. The
+         * skills-row macro in resume.tex auto-shrinks to avoid this, but a bullet or heading
+         * could still trip it, so this is checked regardless of which section caused it.
+         */
+        public static boolean hasOverfullHbox(String log) {
+            return log != null && OVERFULL_HBOX.matcher(log).find();
+        }
     }
 
     private static final java.util.regex.Pattern PAGE_COUNT =
             java.util.regex.Pattern.compile("\\((\\d+) pages?,");
+    private static final java.util.regex.Pattern OVERFULL_HBOX =
+            java.util.regex.Pattern.compile("Overfull \\\\hbox");
 }

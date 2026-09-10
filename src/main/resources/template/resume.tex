@@ -81,6 +81,28 @@
 \newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, itemsep=0pt, parsep=0pt, topsep=4pt, partopsep=0pt]}
 \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-4pt}}
 
+% Self-measuring skills row: guarantees a category line never wraps, instead of trusting a
+% char-count estimate on the Java side. Measures its own rendered width with \sbox and
+% steps the font down (small -> footnotesize -> scriptsize) until it fits \linewidth, so
+% the check is against the exact glyph metrics XeTeX will actually use for this run.
+\newcommand{\skillrowtext}[2]{\textbf{#1}{: #2}}
+\newlength{\skillrowbox}
+\newcommand{\skillrow}[2]{%
+  \setbox0=\hbox{\small\skillrowtext{#1}{#2}}%
+  \skillrowbox=\wd0
+  \ifdim\skillrowbox>\linewidth
+    \setbox0=\hbox{\footnotesize\skillrowtext{#1}{#2}}%
+    \skillrowbox=\wd0
+    \ifdim\skillrowbox>\linewidth
+      \scriptsize\skillrowtext{#1}{#2}\\
+    \else
+      \footnotesize\skillrowtext{#1}{#2}\\
+    \fi
+  \else
+    \small\skillrowtext{#1}{#2}\\
+  \fi
+}
+
 %-------------------------------------------
 \begin{document}
 
@@ -123,13 +145,13 @@
 %%SECTION:SKILLS_BLOCK%%
 \section{Technical Skills}
  \begin{itemize}[leftmargin=0.15in, label={}]
-    \small{\item{
-     \textbf{Languages}{: {{SKILLS_LANGUAGES}}} \\
-     \textbf{Frameworks}{: {{SKILLS_FRAMEWORKS}}} \\
-     \textbf{Databases \& AI}{: {{SKILLS_DATABASES}}} \\
-     \textbf{DevOps \& Tools}{: {{SKILLS_DEVOPS}}} \\
-     \textbf{Interests}{: {{SKILLS_INTERESTS}}} \\
-    }}
+    \item{
+     \skillrow{Languages}{{{SKILLS_LANGUAGES}}}
+     \skillrow{Frameworks}{{{SKILLS_FRAMEWORKS}}}
+     \skillrow{Databases \& AI}{{{SKILLS_DATABASES}}}
+     \skillrow{DevOps \& Tools}{{{SKILLS_DEVOPS}}}
+     \skillrow{Interests}{{{SKILLS_INTERESTS}}}
+    }
  \end{itemize}
 %%ENDSECTION%%
 
