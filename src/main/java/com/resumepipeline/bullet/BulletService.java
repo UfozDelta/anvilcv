@@ -504,7 +504,12 @@ public class BulletService {
         for (RawGeneration gen : results) {
             List<LlmClient.GeneratedBullet> bullets = gen.result().bullets();
             for (int i = 0; i < bullets.size(); i++) {
-                String id = gen.category() + "#" + i;
+                // Underscore, not "#": confirmed against a real compile that TeX's \write
+                // family DOUBLES a literal "#" for round-trip safety ("backend#0" becomes
+                // "backend##0" in the log), so BulletLineMeasurer.parse's id would never match
+                // this map's keys again -- every lookup silently missed despite the compile and
+                // regex both succeeding. "_" carries no such special meaning to \write.
+                String id = gen.category() + "_" + i;
                 textsById.put(id, bullets.get(i).text());
                 categoryById.put(id, gen.category());
             }

@@ -11,6 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Real-compile regression test for the bug fixed in this change: the original {@code \typeout}
@@ -44,6 +45,40 @@ class BulletLineMeasurerRealCompileTest {
         assertEquals(1, result.get("one-liner").lines());
         assertFalse(result.get("three-liner").lines() < 3,
                 "the long bullet must not be misreported as fitting in fewer lines");
+    }
+
+    /**
+     * Pinned behavior, not a bug in {@link BulletLineMeasurer} itself: TeX's {@code \write}
+     * family (which {@code \typeout} uses) DOUBLES a literal {@code #} for round-trip safety --
+     * {@code id=backend#0} becomes {@code id=backend##0} in the compiled log. This class is
+     * delimiter-agnostic (it just echoes back whatever id string the caller hands it), so the
+     * hazard lives entirely in choosing that id -- {@code BulletService.recordMeasureDiagnostics}
+     * originally used {@code category + "#" + index} and every lookup silently missed as a
+     * result, despite the compile and the id regex both succeeding. It now uses {@code "_"}.
+     * This test exists so a future id scheme reintroducing {@code #} fails loudly instead of
+     * silently returning nothing measured.
+     */
+    @Test
+    void aHashInTheIdIsDoubledByTexAndMustNeverBeUsedAsADelimiter() {
+        assumeTrue(tectonicAvailable(), "tectonic not on PATH -- skipping real-compile check");
+
+        PdfCompiler compiler = new PdfCompiler("tectonic", 30);
+        LatexEscaper escaper = new LatexEscaper();
+        LatexRenderer latexRenderer = new LatexRenderer(escaper);
+        ApplicationRenderer appRenderer = new ApplicationRenderer(latexRenderer, escaper, null);
+        BulletLineMeasurer measurer = new BulletLineMeasurer(latexRenderer, appRenderer, compiler);
+
+        Map<String, BulletLineMeasurer.Measured> result = measurer.measure(
+                Map.of("backend#0", "Added rate limiting."));
+
+        // The compile and the id regex both succeed -- a row IS parsed -- just keyed under the
+        // doubled id TeX actually wrote ("backend##0"), not the one the caller asked about. A
+        // caller doing exactly what BulletService did, map.get("backend#0"), gets null: this is
+        // the real, silent failure mode, not an empty map.
+        assertNull(result.get("backend#0"),
+                "a '#'-delimited id must NOT round-trip a lookup by the original id -- if this "
+                        + "ever starts passing, TeX's \\write doubling behavior has changed and "
+                        + "every id scheme built around avoiding '#' should be revisited");
     }
 
     private static boolean tectonicAvailable() {
