@@ -79,6 +79,7 @@ export function ApplicationDetail() {
                   editing={s.editingId === r.bulletId}
                   cfg={s.cfg}
                   locked={s.lockedIds.has(r.bulletId)}
+                  isNew={s.justAddedIds.has(r.bulletId)}
                   onToggleSelect={() => s.toggleBullet(r.bulletId)}
                   onToggleWhy={() => s.toggleWhy(r.bulletId)}
                   onEdit={() => s.setEditingId(r.bulletId)}
@@ -111,6 +112,7 @@ export function ApplicationDetail() {
                       cfg={s.cfg}
                       editingProjectId={s.editingProjectId}
                       lockedIds={s.lockedIds}
+                      newIds={s.justAddedIds}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
@@ -144,6 +146,7 @@ export function ApplicationDetail() {
                       cfg={s.cfg}
                       editingProjectId={s.editingProjectId}
                       lockedIds={s.lockedIds}
+                      newIds={s.justAddedIds}
                       onToggleOpen={() => s.toggleGroup(g.key)}
                       onToggleSelect={s.toggleBullet}
                       onToggleWhy={s.toggleWhy}
@@ -174,7 +177,7 @@ export function ApplicationDetail() {
             <button
               className="btn btn--ghost btn--sm"
               title="Re-pick bullets from the bank, keeping locked ones pinned"
-              onClick={() => s.setRefitStreaming(true)}
+              onClick={() => s.startRefit()}
               style={{ marginRight: 8 }}
             >
               REFIT SELECTION
@@ -374,7 +377,7 @@ export function ApplicationDetail() {
           submitUrl={`/api/applications/${app.id}/refit-selection/submit`}
           submitBody={{}}
           pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
-          onDone={async () => { await s.load(); s.setPdfVersion(v => v + 1); s.setRefitStreaming(false); }}
+          onDone={() => s.finishRefit()}
           onClose={() => s.setRefitStreaming(false)}
           title="REFITTING SELECTION..."
           doneLabel="DONE →"

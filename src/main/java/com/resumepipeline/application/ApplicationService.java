@@ -344,6 +344,13 @@ public class ApplicationService {
         // recalibrated later against real compiles instead of guesses.
         log.info("Page budget: estimated {} lines (max {}), tectonic reported {} page(s)",
                 estimatedLines, BulletSelector.MAX_TOTAL_LINES, r.pageCount());
+        // Ground truth from the engine's own font metrics, not a char-count guess: XeTeX
+        // itself couldn't fit a line in the column. The skills-row macro in resume.tex
+        // auto-shrinks to dodge this, but flag it regardless of which section triggered it.
+        if (r.success() && r.overfullHbox()) {
+            log.warn("tectonic reported an overfull hbox — a line may be clipped or spill past the margin.");
+            progress.emit("Warning: a line in the rendered PDF is too wide for its column (overfull hbox).");
+        }
 
         a.setUserId(userId);
         a.setJdText(jdText);
@@ -481,6 +488,9 @@ public class ApplicationService {
         // the old score is kept and flagged stale rather than blanked, which would pull the
         // feedback away at exactly the moment the user is editing against it.
         a.setPageCount(r.success() ? r.pageCount() : null);
+        if (r.success() && r.overfullHbox()) {
+            progress.emit("Warning: a line in the rendered PDF is too wide for its column (overfull hbox).");
+        }
         a.setRecruiterStale(true);
         Set<String> priorKeywords = new LinkedHashSet<>(Arrays.asList(a.getAtsMatched()));
         priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
@@ -554,6 +564,12 @@ public class ApplicationService {
         List<Bullet> locked = Arrays.stream(a.getLockedBulletIds())
                 .map(bulletById::get).filter(Objects::nonNull).toList();
 
+        // Steer passes 1-3 away from whatever was already on the page and isn't locked, so a
+        // refit with nothing newly pinned doesn't just reproduce the same deterministic pick.
+        Set<UUID> lockedIds = locked.stream().map(Bullet::getId).collect(Collectors.toSet());
+        Set<UUID> excluded = Arrays.stream(a.getSelectedBulletIds())
+                .filter(id -> !lockedIds.contains(id)).collect(Collectors.toSet());
+
         // Same JD keyword set the original ranking pass used, recovered from what was stored
         // rather than re-derived — matched + missing together are the full keyword list.
         Set<String> keywordsLower = new LinkedHashSet<>();
@@ -562,7 +578,7 @@ public class ApplicationService {
 
         progress.emit("Refitting selection from " + allBullets.size() + " bank bullets ("
                 + locked.size() + " locked)...");
-        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked);
+        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked, excluded);
 
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
         Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
@@ -573,6 +589,9 @@ public class ApplicationService {
         a.setSelectedBulletIds(selected.stream().map(Bullet::getId).toArray(UUID[]::new));
         a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
         a.setPageCount(r.success() ? r.pageCount() : null);
+        if (r.success() && r.overfullHbox()) {
+            progress.emit("Warning: a line in the rendered PDF is too wide for its column (overfull hbox).");
+        }
         a.setRecruiterStale(true);
 
         Set<String> priorKeywords = new LinkedHashSet<>(Arrays.asList(a.getAtsMatched()));

@@ -116,6 +116,16 @@ public final class BulletSelector {
         return select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, List.of());
     }
 
+    /** Same as {@link #select(List, Map, Map, List, Set, List)} with nothing excluded. */
+    public static List<Bullet> select(List<LlmClient.RankedBullet> rankedSorted,
+                                      Map<UUID, Bullet> bulletById,
+                                      Map<UUID, Project> projectById,
+                                      List<Bullet> allBullets,
+                                      Set<String> keywordsLower,
+                                      List<Bullet> locked) {
+        return select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked, Set.of());
+    }
+
     /**
      * Same as {@link #select(List, Map, Map, List, Set)}, but with a set of bullets that must
      * survive every pass regardless of rank, budget, or per-project cap — used by application
@@ -129,13 +139,19 @@ public final class BulletSelector {
      * @param locked bullets that must appear in the result; may exceed {@link #MAX_PER_PROJECT}
      *               for one project, in which case that project keeps all of them (the cap is a
      *               selection rule, not a hard render limit)
+     * @param excluded bullets to steer passes 1-3 away from — used by application refit so a
+     *                 re-pick with nothing newly locked doesn't just reproduce the prior
+     *                 selection verbatim. Not honored by pass 4: the floor guarantee outranks
+     *                 novelty, so a thin bank may still fall back to an excluded bullet rather
+     *                 than render a project under-filled.
      */
     public static List<Bullet> select(List<LlmClient.RankedBullet> rankedSorted,
                                       Map<UUID, Bullet> bulletById,
                                       Map<UUID, Project> projectById,
                                       List<Bullet> allBullets,
                                       Set<String> keywordsLower,
-                                      List<Bullet> locked) {
+                                      List<Bullet> locked,
+                                      Set<UUID> excluded) {
         ToLongFunction<Bullet> tagScore = tagScore(keywordsLower);
         Set<UUID> lockedProjectIds = locked.stream().map(Bullet::getProjectId)
                 .collect(Collectors.toCollection(HashSet::new));
@@ -167,7 +183,7 @@ public final class BulletSelector {
         for (LlmClient.RankedBullet rb : rankedSorted) {
             if (selected.size() >= MAX_TOTAL) break;
             UUID bid = parseUuid(rb.bulletId());
-            if (bid == null) continue;
+            if (bid == null || excluded.contains(bid)) continue;
             Bullet b = bulletById.get(bid);
             if (b == null) continue;
             int count = perProject.getOrDefault(b.getProjectId(), 0);
@@ -199,7 +215,7 @@ public final class BulletSelector {
             for (LlmClient.RankedBullet rb : rankedSorted) {
                 if (expDistinct >= MIN_EXPERIENCE_PROJECTS && projDistinct >= MIN_PROJECT_ENTRIES) break;
                 UUID bid = parseUuid(rb.bulletId());
-                if (bid == null || selectedIds.contains(bid)) continue;
+                if (bid == null || selectedIds.contains(bid) || excluded.contains(bid)) continue;
                 Bullet b = bulletById.get(bid);
                 if (b == null) continue;
                 Project p = projectById.get(b.getProjectId());
@@ -257,7 +273,7 @@ public final class BulletSelector {
             for (LlmClient.RankedBullet rb : rankedSorted) {
                 if (have >= MAX_PER_PROJECT || selected.size() >= MAX_TOTAL) break;
                 UUID bid = parseUuid(rb.bulletId());
-                if (bid == null || selectedIds.contains(bid)) continue;
+                if (bid == null || selectedIds.contains(bid) || excluded.contains(bid)) continue;
                 Bullet b = bulletById.get(bid);
                 if (b == null || !b.getProjectId().equals(pid)) continue;
                 if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
@@ -270,7 +286,7 @@ public final class BulletSelector {
             // Source 2: raw bank fallback for thin banks, by marginal keyword gain.
             if (have < MAX_PER_PROJECT && selected.size() < MAX_TOTAL) {
                 List<Bullet> bank = new ArrayList<>(allByProject.getOrDefault(pid, List.of()).stream()
-                        .filter(b -> !selectedIds.contains(b.getId()))
+                        .filter(b -> !selectedIds.contains(b.getId()) && !excluded.contains(b.getId()))
                         .toList());
                 while (have < MAX_PER_PROJECT && selected.size() < MAX_TOTAL && !bank.isEmpty()) {
                     Bullet b = bank.remove(bestByGainIndex(bank, covered, keywordsLower, tagScore));

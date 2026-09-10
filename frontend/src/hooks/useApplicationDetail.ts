@@ -21,6 +21,10 @@ export function useApplicationDetail(id: string | undefined) {
   const [busy, setBusy] = useState(false);
   const [rerenderStreaming, setRerenderStreaming] = useState(false);
   const [refitStreaming, setRefitStreaming] = useState(false);
+  /** Bullet ids newly picked by the last refit, for the "NEW" badge — cleared on next load/refit. */
+  const [justAddedIds, setJustAddedIds] = useState<Set<string>>(new Set());
+  /** selectedIds snapshot taken when refit starts, diffed against the result in finishRefit. */
+  const preRefitSelection = useRef<Set<string>>(new Set());
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const [pdfVersion, setPdfVersion] = useState(0);
@@ -37,6 +41,7 @@ export function useApplicationDetail(id: string | undefined) {
     if (!id) return;
     const a = await api.get<ApplicationResponse>(`/api/applications/${id}`);
     setApp(a);
+    return a;
     const ranking = parseRanking(a.bulletRanking).sort((x, y) => x.rank - y.rank);
     // Respect saved selection if user already re-rendered; otherwise pre-select top N.
     const sel = a.selectedBulletIds.length > 0
@@ -198,6 +203,21 @@ export function useApplicationDetail(id: string | undefined) {
     });
   }
 
+  function startRefit() {
+    preRefitSelection.current = new Set(selectedIds);
+    setRefitStreaming(true);
+  }
+
+  /** Reloads after a refit and flags bullets that weren't in the pre-refit selection. */
+  async function finishRefit() {
+    const a = await load();
+    setPdfVersion(v => v + 1);
+    if (a) {
+      setJustAddedIds(new Set(a.selectedBulletIds.filter(bid => !preRefitSelection.current.has(bid))));
+    }
+    setRefitStreaming(false);
+  }
+
   return {
     app, bullets, projectById, busy, rerenderStreaming, setRerenderStreaming,
     pdfBlobUrl, pdfVersion, setPdfVersion, expandedWhys, showTail, setShowTail,
@@ -206,6 +226,7 @@ export function useApplicationDetail(id: string | undefined) {
     editingId, setEditingId, saveBullet, cfg,
     editingProjectId, setEditingProjectId, saveProject,
     lockedIds, toggleLock, locksSaving, refitStreaming, setRefitStreaming,
+    justAddedIds, startRefit, finishRefit,
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,
     selectedLines, MAX_TOTAL_LINES,

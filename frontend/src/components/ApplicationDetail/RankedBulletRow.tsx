@@ -1,7 +1,7 @@
 import type { Bullet, BulletVerdict, GenerationConfig, RankedBullet } from '../../lib/api';
 import { EditBullet } from '../ProjectDetail/EditBullet';
 
-export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, locked, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet, onToggleLock }: {
+export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, locked, isNew, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet, onToggleLock }: {
   r: RankedBullet;
   bullet: Bullet | undefined;
   isSelected: boolean;
@@ -10,6 +10,7 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
   editing: boolean;
   cfg: GenerationConfig;
   locked: boolean;
+  isNew?: boolean;
   onToggleSelect: () => void;
   onToggleWhy: () => void;
   onEdit: () => void;
@@ -21,7 +22,7 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
     return <EditBullet bullet={bullet} cfg={cfg} onCancel={onCancelEdit} onSave={onSaveBullet} />;
   }
   return (
-    <div className="bullet" style={{ opacity: isSelected ? 1 : 0.45 }}>
+    <div className="bullet" style={{ opacity: isSelected ? 1 : 0.45, ...(isNew ? { outline: '2px solid var(--acid, #9fd83c)', outlineOffset: 2 } : {}) }}>
       <div
         className={`bullet__rank ${isSelected ? 'bullet__rank--selected' : ''}`}
         onClick={onToggleSelect}
@@ -33,6 +34,7 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
       <div style={{ width: '100%' }}>
         <div className="bullet__text">
           {locked && <span title="Locked — survives REFIT SELECTION" style={{ marginRight: 6 }}>🔒</span>}
+          {isNew && <span className="tag tag--acid" style={{ marginRight: 6, fontSize: 9 }}>NEW</span>}
           {bullet?.text || <em className="muted">— bullet missing —</em>}
         </div>
         {isSelected && bullet && (
