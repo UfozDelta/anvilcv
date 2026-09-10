@@ -41,7 +41,6 @@ export function useApplicationDetail(id: string | undefined) {
     if (!id) return;
     const a = await api.get<ApplicationResponse>(`/api/applications/${id}`);
     setApp(a);
-    return a;
     const ranking = parseRanking(a.bulletRanking).sort((x, y) => x.rank - y.rank);
     // Respect saved selection if user already re-rendered; otherwise pre-select top N.
     const sel = a.selectedBulletIds.length > 0
@@ -73,6 +72,7 @@ export function useApplicationDetail(id: string | undefined) {
         [...sel].map(bid => map[bid]?.projectId ?? '__other__'),
       ));
     }
+    return a;
   }
   useEffect(() => { load(); }, [id]);
 
