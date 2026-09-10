@@ -24,6 +24,14 @@ import java.util.regex.Pattern;
  * footnotesize/scriptsize shrink fallback. A compile failure never blocks rendering -- the
  * caller keeps whatever count it already had (see {@code BulletSelector.fillSkills}), same
  * policy as the bullet measurer.
+ *
+ * <p><b>Was silently a no-op.</b> The original {@code \typeout} line put {@code \the\wd0}
+ * directly against a following space and {@code lw=}; TeX swallows the space after a control
+ * word regardless of what it expands to, so the log printed {@code width=12.34ptlw=56.78pt}
+ * and {@link #MARKER} never matched a single row -- every call fell through the "compile failure
+ * never blocks rendering" path and every category silently stayed at its floor-filled count.
+ * Confirmed against a real tectonic compile and fixed with an explicit {@code \space} token;
+ * see {@link #buildTex}.
  */
 @Component
 public class SkillRowMeasurer {
@@ -92,8 +100,17 @@ public class SkillRowMeasurer {
             String items = appRenderer.escapeRich(row.itemsJoined());
             sb.append("\\setbox0=\\hbox{\\small\\skillrowtext{").append(row.label()).append("}{")
               .append(items).append("}}\n");
+            // Two layered TeX gotchas, confirmed against a real tectonic compile -- see the
+            // matching comment in BulletLineMeasurer.buildTex for the full mechanism: \wd takes
+            // an explicit register number, so a \space placed directly after \the\wd0 gets
+            // consumed by the register-number scanner itself before \typeout ever sees it;
+            // freezing it into \rpwidth via \edef first sidesteps that. Then \space is needed
+            // after \rpwidth too, since any control word (this one included) swallows one
+            // trailing literal space when the tokenizer reads it -- without it the log prints
+            // "width=12.34ptlw=56.78pt" and MARKER below never matches a single row.
+            sb.append("\\edef\\rpwidth{\\the\\wd0}\n");
             sb.append("\\typeout{RPSKILLROW id=").append(id)
-              .append(" width=\\the\\wd0 lw=\\the\\skrowlw}\n");
+              .append(" width=\\rpwidth\\space lw=\\the\\skrowlw}\n");
         }
         sb.append("\\end{document}\n");
         return sb.toString();

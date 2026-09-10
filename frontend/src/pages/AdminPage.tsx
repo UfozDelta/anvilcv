@@ -26,22 +26,20 @@ interface SettingsView {
   openai: ProviderView;
 }
 
-interface MeasureDisagreement {
+interface MeasuredBullet {
   category: string;
   bulletText: string;
   charCount: number;
-  declaredKept: boolean;
   measuredLines: number;
   measuredFill: number;
+  flagged: boolean;
   createdAt: string;
 }
 
 interface MeasureDiagnostics {
   measuredTotal: number;
   disagreements: number;
-  disagreementRate: number;
-  fillHistogram: Record<string, number>;
-  recentDisagreements: MeasureDisagreement[];
+  recentBullets: MeasuredBullet[];
 }
 
 interface TestResult {
@@ -273,39 +271,19 @@ export function AdminPage() {
         {!measure && !measureErr && <p style={note}>Loading…</p>}
         {measure && (
           <>
-            <div style={{ display: 'flex', gap: 32, marginTop: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ ...mono, fontSize: '1.4rem' }}>{measure.measuredTotal.toLocaleString()}</div>
-                <div style={note}>compared</div>
-              </div>
-              <div>
-                <div style={{ ...mono, fontSize: '1.4rem' }}>
-                  {(measure.disagreementRate * 100).toFixed(1)}%
-                </div>
-                <div style={note}>disagreement rate ({measure.disagreements.toLocaleString()})</div>
-              </div>
+            <div style={{ ...mono, fontSize: '1.4rem', marginTop: 12 }}>
+              {measure.disagreements.toLocaleString()} / {measure.measuredTotal.toLocaleString()}
             </div>
-
-            <p style={{ ...note, marginTop: 20 }}>Last-line fill ratio distribution (recent sample):</p>
-            {(['<0.3', '0.3-0.55', '0.55-0.8', '0.8-1.0'] as const).map(bucket => {
-              const count = measure.fillHistogram[bucket] ?? 0;
-              const max = Math.max(1, ...Object.values(measure.fillHistogram));
-              return (
-                <div key={bucket} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                  <span style={{ ...mono, fontSize: '0.7rem', width: 72 }}>{bucket}</span>
-                  <div style={{ background: 'var(--acid, #b8ff3d)', height: 10, width: `${(count / max) * 200}px` }} />
-                  <span style={{ ...mono, fontSize: '0.7rem', color: 'var(--ink-3)' }}>{count}</span>
-                </div>
-              );
-            })}
+            <div style={note}>flagged / total</div>
 
             <p style={{ ...note, marginTop: 20 }}>
-              Recent disagreements ({measure.recentDisagreements.length}):
+              Most recent {measure.recentBullets.length} measured bullets:
             </p>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ ...mono, fontSize: '0.7rem', width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--rule)' }}>
+                    <th style={{ padding: '4px 8px' }}>Flag</th>
                     <th style={{ padding: '4px 8px' }}>Category</th>
                     <th style={{ padding: '4px 8px' }}>Bullet</th>
                     <th style={{ padding: '4px 8px' }}>Chars</th>
@@ -314,8 +292,9 @@ export function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {measure.recentDisagreements.map((d, i) => (
+                  {measure.recentBullets.map((d, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid var(--rule-thin, #eee)' }}>
+                      <td style={{ padding: '4px 8px' }}>{d.flagged ? '⚑' : ''}</td>
                       <td style={{ padding: '4px 8px' }}>{d.category}</td>
                       <td style={{ padding: '4px 8px', maxWidth: 420 }}>
                         {d.bulletText.length > 90 ? d.bulletText.slice(0, 87) + '…' : d.bulletText}
@@ -325,8 +304,8 @@ export function AdminPage() {
                       <td style={{ padding: '4px 8px' }}>{(d.measuredFill * 100).toFixed(0)}%</td>
                     </tr>
                   ))}
-                  {measure.recentDisagreements.length === 0 && (
-                    <tr><td style={{ padding: '4px 8px' }} colSpan={5}>No disagreements recorded yet.</td></tr>
+                  {measure.recentBullets.length === 0 && (
+                    <tr><td style={{ padding: '4px 8px' }} colSpan={6}>No bullets measured yet.</td></tr>
                   )}
                 </tbody>
               </table>

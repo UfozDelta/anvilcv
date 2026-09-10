@@ -72,13 +72,18 @@ public class PdfCompiler {
             }
 
             byte[] pdf = Files.readAllBytes(tmp.resolve("in.pdf"));
-            // in.log is also read on success: it is the only place the real page count
-            // appears, and the case that matters is a compile that succeeded but spilled
-            // onto a second page. The stored log stays the stdout, as before.
+            // in.log, not the captured stdout, is the returned log on success. Two reasons:
+            // it is the only place the real page count and overfull-hbox warnings appear, and
+            // -- confirmed by hand against a real tectonic run -- \typeout output (what
+            // BulletLineMeasurer and SkillRowMeasurer read back their measurements from) is
+            // silently dropped from stdout entirely under --chatter minimal, appearing only in
+            // the log file. Using stdout here made both measurers parse zero rows, always,
+            // regardless of their own TeX formatting. The failure branch above already prefers
+            // the file for the same reason.
             String texLog = readIfExists(tmp.resolve("in.log"));
             Integer pages = Result.parsePageCount(texLog);
             boolean overfull = Result.hasOverfullHbox(texLog);
-            return new Result(true, pdf, output, null, pages, overfull);
+            return new Result(true, pdf, texLog, null, pages, overfull);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             return Result.failure(e.getClass().getSimpleName() + ": " + e.getMessage(), "");

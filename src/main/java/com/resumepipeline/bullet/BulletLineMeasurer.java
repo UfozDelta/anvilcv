@@ -34,10 +34,14 @@ import java.util.regex.Pattern;
  * fall back to the char-count check, same policy as the fit/recruiter LLM passes elsewhere in
  * this codebase -- a missing real measurement is a nuisance, not a reason to lose a bullet.
  *
- * <p><b>Unverified in this environment.</b> No tectonic binary was available to compile-test
- * the box arithmetic here (raggedright glue behavior, the natural-width repack, single-line
- * edge cases). Run {@code measure()} against a real bullet set and sanity-check the returned
- * fill ratios against the compiled PDF before trusting this in production.
+ * <p><b>Partially verified.</b> The {@code \typeout} marker format and {@link #MARKER} regex have
+ * been confirmed against a real tectonic compile -- the original version silently swallowed the
+ * space before {@code lw=} (TeX eats the space after a control word, {@code \rplines} and
+ * {@code \the\wd3} included, regardless of what they expand to), which meant {@link #parse}
+ * matched nothing, ever; see the {@code \space} tokens in {@link #buildTex}. The box arithmetic
+ * itself (raggedright glue behavior, the natural-width repack, single-line edge cases) is still
+ * unverified against a real bullet's paragraph-breaking -- sanity-check {@code measure()}'s
+ * fill ratios against a compiled PDF before trusting this in production.
  */
 @Component
 public class BulletLineMeasurer {
@@ -103,9 +107,16 @@ public class BulletLineMeasurer {
         for (var e : textsById.entrySet()) {
             String id = e.getKey();
             String escaped = appRenderer.escapeRich(e.getValue());
+            // \prevgraf must be captured INSIDE this \vbox's group, before its closing brace --
+            // confirmed against a real compile that reading it after the box closes reports a
+            // stale value from whatever paragraph was last broken in the OUTER vertical list,
+            // not this one. \vbox{...} opens a local group, and \prevgraf is an assignable
+            // internal quantity like any other: the paragraph builder's assignment to it during
+            // this box's construction is local to that group and is rolled back the moment the
+            // box closes. \xdef (a GLOBAL edef), not \edef, is what lets the frozen value
+            // survive the group closing even though the \prevgraf register itself reverts.
             sb.append("\\setbox0=\\vbox{\\hsize=\\bulletlw \\raggedright\\small\\noindent ")
-              .append(escaped).append("\\par}\n");
-            sb.append("\\edef\\rplines{\\the\\prevgraf}\n");
+              .append(escaped).append("\\par\n\\xdef\\rplines{\\the\\prevgraf}}\n");
             // Extract the last line, then repack it at natural width: a line box built by
             // the paragraph breaker is always set to exactly \hsize (raggedright pads the
             // slack with a \hskip 0pt plus 1fil), so the width of the box as extracted would
@@ -114,8 +125,22 @@ public class BulletLineMeasurer {
             // infinite-stretch glue's natural component is 0, so this yields real ink width.
             sb.append("\\setbox1=\\vbox{\\unvcopy0 \\global\\setbox2=\\lastbox}\n");
             sb.append("\\setbox3=\\hbox{\\unhbox2}\n");
+            // Two layered TeX gotchas, both confirmed against a real tectonic compile:
+            // (1) \the\wd3 used directly in the typeout line is unsafe -- \wd takes an
+            //     explicit register NUMBER, and while TeX scans that number for more digits
+            //     it expands the next token to check; an inserted \space gets consumed right
+            //     there as the number's own terminator and never reaches the output. Freezing
+            //     it into a plain \edef'd macro first (\rpwidth) sidesteps the register-number
+            //     scan entirely -- by the time \rpwidth is used below, it's just a macro name.
+            // (2) A plain control word -- \rplines and \rpwidth included, regardless of what
+            //     they expand to -- swallows one trailing literal space when the tokenizer
+            //     reads it. Without the explicit \space token here the log prints
+            //     "lines=7width=12.34ptlw=56.78pt", which MARKER below can never match.
+            //     \space is itself a control word expanding to a literal space character, so
+            //     there is no following space character for that rule to eat.
+            sb.append("\\edef\\rpwidth{\\the\\wd3}\n");
             sb.append("\\typeout{RPMEASURE id=").append(id)
-              .append(" lines=\\rplines width=\\the\\wd3 lw=\\the\\bulletlw}\n");
+              .append(" lines=\\rplines\\space width=\\rpwidth\\space lw=\\the\\bulletlw}\n");
         }
         sb.append("\\end{document}\n");
         return sb.toString();

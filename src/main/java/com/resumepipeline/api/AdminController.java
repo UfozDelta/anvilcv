@@ -2,7 +2,6 @@ package com.resumepipeline.api;
 
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRepository;
-import com.resumepipeline.bullet.BulletMeasureDiagnostic;
 import com.resumepipeline.bullet.BulletMeasureDiagnosticRepository;
 import com.resumepipeline.llm.LlmUsageLog;
 import com.resumepipeline.llm.LlmUsageLogRepository;
@@ -133,34 +132,17 @@ public class AdminController {
     public Map<String, Object> bulletMeasureDiagnostics() {
         long measuredTotal = measureDiagnosticRepo.countByMeasuredTrue();
         long disagreements = measureDiagnosticRepo.countByMeasuredTrueAndAgreeFalse();
-        double disagreementRate = measuredTotal == 0 ? 0.0 : (double) disagreements / measuredTotal;
 
-        // Fill-ratio histogram over a recent sample -- a shape to sanity-check MIN_FILL against,
-        // not an exact count over every row ever written.
-        List<BulletMeasureDiagnostic> sample =
-                measureDiagnosticRepo.findByMeasuredTrueOrderByCreatedAtDesc(Limit.of(2000));
-        int[] buckets = new int[4]; // <0.3, 0.3-0.55, 0.55-0.8, 0.8-1.0
-        for (BulletMeasureDiagnostic d : sample) {
-            double f = d.getMeasuredFill();
-            int idx = f < 0.3 ? 0 : f < 0.55 ? 1 : f < 0.8 ? 2 : 3;
-            buckets[idx]++;
-        }
-        Map<String, Integer> fillHistogram = new LinkedHashMap<>();
-        fillHistogram.put("<0.3", buckets[0]);
-        fillHistogram.put("0.3-0.55", buckets[1]);
-        fillHistogram.put("0.55-0.8", buckets[2]);
-        fillHistogram.put("0.8-1.0", buckets[3]);
-
-        List<Map<String, Object>> recentDisagreements =
-                measureDiagnosticRepo.findByMeasuredTrueAndAgreeFalseOrderByCreatedAtDesc(Limit.of(50)).stream()
+        List<Map<String, Object>> recentBullets =
+                measureDiagnosticRepo.findByMeasuredTrueOrderByCreatedAtDesc(Limit.of(50)).stream()
                         .map(d -> {
                             Map<String, Object> m = new LinkedHashMap<>();
                             m.put("category", d.getCategory());
                             m.put("bulletText", d.getBulletText());
                             m.put("charCount", d.getCharCount());
-                            m.put("declaredKept", d.isDeclaredKept());
                             m.put("measuredLines", d.getMeasuredLines());
                             m.put("measuredFill", d.getMeasuredFill());
+                            m.put("flagged", !d.isAgree());
                             m.put("createdAt", d.getCreatedAt());
                             return m;
                         })
@@ -169,9 +151,7 @@ public class AdminController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("measuredTotal", measuredTotal);
         result.put("disagreements", disagreements);
-        result.put("disagreementRate", disagreementRate);
-        result.put("fillHistogram", fillHistogram);
-        result.put("recentDisagreements", recentDisagreements);
+        result.put("recentBullets", recentBullets);
         return result;
     }
 }

@@ -12,9 +12,6 @@ public interface BulletMeasureDiagnosticRepository extends JpaRepository<BulletM
 
     long countByMeasuredTrueAndAgreeFalse();
 
-    List<BulletMeasureDiagnostic> findByMeasuredTrueAndAgreeFalseOrderByCreatedAtDesc(Limit limit);
-
-    /** Fill-ratio sample for the histogram — capped since the admin panel only needs a shape,
-     *  not every row ever written. */
+    /** Most recent measured bullets, flagged or not — the admin panel's "recent bullets" list. */
     List<BulletMeasureDiagnostic> findByMeasuredTrueOrderByCreatedAtDesc(Limit limit);
 }
