@@ -67,6 +67,19 @@ public class LatexRenderer {
     private static final Pattern SECTION_BLOCK = Pattern.compile(
             "%%SECTION:([A-Z_]+)%%\\R(.*?)%%ENDSECTION%%\\R?", Pattern.DOTALL);
 
+    /**
+     * The template's preamble (everything before {@code \begin{document}}) — the real
+     * {@code \documentclass}, margins and layout macros ({@code \resumeItem} etc.), sliced
+     * live from the template so a measurement doc built from it can never drift from what
+     * the actual resume renders with.
+     */
+    public String preambleOf(String templateClasspath) {
+        String tex = readTemplate(templateClasspath);
+        int cut = tex.indexOf("\\begin{document}");
+        if (cut < 0) throw new IllegalArgumentException("No \\begin{document} in " + templateClasspath);
+        return tex.substring(0, cut);
+    }
+
     private String readTemplate(String classpath) {
         try (var in = getClass().getClassLoader().getResourceAsStream(classpath)) {
             if (in == null) throw new IllegalArgumentException("Template not found: " + classpath);

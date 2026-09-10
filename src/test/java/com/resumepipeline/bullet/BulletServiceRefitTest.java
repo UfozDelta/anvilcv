@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,6 +36,8 @@ class BulletServiceRefitTest {
     @Mock LlmClient llm;
     @Mock LlmUsageService llmUsageService;
     @Mock GenerationConfigService configService;
+    @Mock BulletLineMeasurer measurer;
+    @Mock BulletMeasureDiagnosticRepository diagnosticRepo;
     @InjectMocks BulletService service;
 
     private final UUID user = UUID.randomUUID();
@@ -79,6 +82,9 @@ class BulletServiceRefitTest {
                 .thenReturn(new Project(user, Project.Kind.PROJECT, "P", "desc", null, "Eng", "Acme", "NYC", "2024"));
         when(configService.get(user)).thenReturn(CFG);
         when(repo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(bullets));
+        // No live tectonic in this test: measurer always misses, so BulletService falls back
+        // to the char-count band under test here, same as before BulletLineMeasurer existed.
+        when(measurer.measure(any())).thenReturn(Map.of());
     }
 
     /** Reply the stubbed LLM sends back for the first (only) bullet it is asked to refit. */

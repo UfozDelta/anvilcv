@@ -48,6 +48,7 @@ class ApplicationServiceTest {
     @Mock PdfCompiler compiler;
     @Mock ProfileService profileService;
     @Mock LlmUsageService llmUsageService;
+    @Mock SkillRowMeasurer skillRowMeasurer;
     @InjectMocks ApplicationService service;
 
     @Nested

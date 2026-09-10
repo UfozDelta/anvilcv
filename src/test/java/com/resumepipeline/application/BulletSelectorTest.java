@@ -645,4 +645,25 @@ class BulletSelectorTest {
             assertEquals(eight, out.get("languages"), "over-floor selection left intact, no raw padding");
         }
     }
+
+    @Nested
+    class PaddingCandidates {
+
+        @Test
+        void appendsUnseenRawAfterFloor() {
+            List<String> floor = List.of("Java", "Python");
+            List<String> raw = List.of("Java", "Go", "Python", "Rust");
+
+            List<String> out = BulletSelector.paddingCandidates(floor, raw);
+
+            assertEquals(List.of("Java", "Python", "Go", "Rust"), out);
+        }
+
+        @Test
+        void nullsTreatedAsEmpty() {
+            assertEquals(List.of(), BulletSelector.paddingCandidates(null, null));
+            assertEquals(List.of("Java"), BulletSelector.paddingCandidates(List.of("Java"), null));
+            assertEquals(List.of("Java"), BulletSelector.paddingCandidates(null, List.of("Java")));
+        }
+    }
 }

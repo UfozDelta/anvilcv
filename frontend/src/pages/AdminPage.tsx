@@ -26,6 +26,24 @@ interface SettingsView {
   openai: ProviderView;
 }
 
+interface MeasureDisagreement {
+  category: string;
+  bulletText: string;
+  charCount: number;
+  declaredKept: boolean;
+  measuredLines: number;
+  measuredFill: number;
+  createdAt: string;
+}
+
+interface MeasureDiagnostics {
+  measuredTotal: number;
+  disagreements: number;
+  disagreementRate: number;
+  fillHistogram: Record<string, number>;
+  recentDisagreements: MeasureDisagreement[];
+}
+
 interface TestResult {
   ok: boolean;
   provider: string;
@@ -74,6 +92,9 @@ export function AdminPage() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  const [measure, setMeasure] = useState<MeasureDiagnostics | null>(null);
+  const [measureErr, setMeasureErr] = useState<string | null>(null);
+
   const load = (v: SettingsView) => {
     setView(v);
     setDraft(toDraft(v));
@@ -86,6 +107,13 @@ export function AdminPage() {
       .then(load)
       .catch(e => setErr(e.message))
       .finally(() => setLoading(false));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.get<MeasureDiagnostics>('/api/admin/bullet-measure-diagnostics')
+      .then(setMeasure)
+      .catch(e => setMeasureErr(e.message));
   }, [isAdmin]);
 
   // The nav link is already hidden for non-admins; this covers someone typing the URL.
@@ -233,6 +261,79 @@ export function AdminPage() {
         save first, then test. Last change: {view.updatedAt ? new Date(view.updatedAt).toLocaleString() : 'never'}
         {view.updatedBy ? ` by ${view.updatedBy}` : ''}.
       </p>
+
+      <Section num="08" title="Bullet Measurement Diagnostics" />
+      <div style={styles.section}>
+        <p style={note}>
+          Shadow mode: compares the real tectonic-measured line fit against the char-count band
+          generation already gates on. Nothing here has ever dropped or changed a bullet — this
+          is the evidence for whether the real measurement is trustworthy enough to eventually act on.
+        </p>
+        {measureErr && <div className="err" style={{ marginTop: 8 }}>{measureErr}</div>}
+        {!measure && !measureErr && <p style={note}>Loading…</p>}
+        {measure && (
+          <>
+            <div style={{ display: 'flex', gap: 32, marginTop: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ ...mono, fontSize: '1.4rem' }}>{measure.measuredTotal.toLocaleString()}</div>
+                <div style={note}>compared</div>
+              </div>
+              <div>
+                <div style={{ ...mono, fontSize: '1.4rem' }}>
+                  {(measure.disagreementRate * 100).toFixed(1)}%
+                </div>
+                <div style={note}>disagreement rate ({measure.disagreements.toLocaleString()})</div>
+              </div>
+            </div>
+
+            <p style={{ ...note, marginTop: 20 }}>Last-line fill ratio distribution (recent sample):</p>
+            {(['<0.3', '0.3-0.55', '0.55-0.8', '0.8-1.0'] as const).map(bucket => {
+              const count = measure.fillHistogram[bucket] ?? 0;
+              const max = Math.max(1, ...Object.values(measure.fillHistogram));
+              return (
+                <div key={bucket} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <span style={{ ...mono, fontSize: '0.7rem', width: 72 }}>{bucket}</span>
+                  <div style={{ background: 'var(--acid, #b8ff3d)', height: 10, width: `${(count / max) * 200}px` }} />
+                  <span style={{ ...mono, fontSize: '0.7rem', color: 'var(--ink-3)' }}>{count}</span>
+                </div>
+              );
+            })}
+
+            <p style={{ ...note, marginTop: 20 }}>
+              Recent disagreements ({measure.recentDisagreements.length}):
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ ...mono, fontSize: '0.7rem', width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--rule)' }}>
+                    <th style={{ padding: '4px 8px' }}>Category</th>
+                    <th style={{ padding: '4px 8px' }}>Bullet</th>
+                    <th style={{ padding: '4px 8px' }}>Chars</th>
+                    <th style={{ padding: '4px 8px' }}>Measured lines</th>
+                    <th style={{ padding: '4px 8px' }}>Fill</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {measure.recentDisagreements.map((d, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--rule-thin, #eee)' }}>
+                      <td style={{ padding: '4px 8px' }}>{d.category}</td>
+                      <td style={{ padding: '4px 8px', maxWidth: 420 }}>
+                        {d.bulletText.length > 90 ? d.bulletText.slice(0, 87) + '…' : d.bulletText}
+                      </td>
+                      <td style={{ padding: '4px 8px' }}>{d.charCount}</td>
+                      <td style={{ padding: '4px 8px' }}>{d.measuredLines}</td>
+                      <td style={{ padding: '4px 8px' }}>{(d.measuredFill * 100).toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                  {measure.recentDisagreements.length === 0 && (
+                    <tr><td style={{ padding: '4px 8px' }} colSpan={5}>No disagreements recorded yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -426,6 +426,11 @@ public final class BulletSelector {
     static final int MIN_SKILLS_PER_CATEGORY = 6;
     static final String[] SKILL_KEYS = {"languages", "frameworks", "databases", "devops"};
 
+    /** Upper bound on how much of {@code \skillrow}'s {@code \linewidth} (at {@code \small}) a
+     *  stretched row may claim -- leaves headroom so growing the row doesn't land right at
+     *  {@code \skillrow}'s own footnotesize/scriptsize shrink threshold. */
+    public static final double MAX_SKILLS_FILL = 0.95;
+
     /**
      * Skill-floor pass: each category must carry at least {@link #MIN_SKILLS_PER_CATEGORY}
      * items. The LLM's selected skills come first; the remainder is padded from the raw
@@ -449,6 +454,25 @@ public final class BulletSelector {
             filled.put(key, sel);
         }
         return filled;
+    }
+
+    /**
+     * Orders the full padding pool for one category: the floor-filled selection first (never
+     * reordered or dropped), then any remaining raw-profile skills not already included. A
+     * caller width-tests successive prefixes of this list (via {@link SkillRowMeasurer}) to
+     * find how far the row can stretch before it would need {@code \skillrow}'s shrink
+     * fallback -- this method only decides the trial order, not which prefix wins.
+     *
+     * @param floorFilled this category's list after {@link #fillSkills}
+     * @param raw         this category's full raw profile list, same source {@link #fillSkills} pads from
+     */
+    public static List<String> paddingCandidates(List<String> floorFilled, List<String> raw) {
+        List<String> seq = new ArrayList<>(floorFilled == null ? List.of() : floorFilled);
+        Set<String> seen = new LinkedHashSet<>(seq);
+        for (String item : raw == null ? List.<String>of() : raw) {
+            if (seen.add(item)) seq.add(item);
+        }
+        return seq;
     }
 
     /**

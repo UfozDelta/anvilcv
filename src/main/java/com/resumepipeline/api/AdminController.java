@@ -2,8 +2,11 @@ package com.resumepipeline.api;
 
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.bullet.BulletMeasureDiagnostic;
+import com.resumepipeline.bullet.BulletMeasureDiagnosticRepository;
 import com.resumepipeline.llm.LlmUsageLog;
 import com.resumepipeline.llm.LlmUsageLogRepository;
+import org.springframework.data.domain.Limit;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,10 +25,13 @@ public class AdminController {
 
     private final ApplicationRepository repo;
     private final LlmUsageLogRepository usageRepo;
+    private final BulletMeasureDiagnosticRepository measureDiagnosticRepo;
 
-    public AdminController(ApplicationRepository repo, LlmUsageLogRepository usageRepo) {
+    public AdminController(ApplicationRepository repo, LlmUsageLogRepository usageRepo,
+                           BulletMeasureDiagnosticRepository measureDiagnosticRepo) {
         this.repo = repo;
         this.usageRepo = usageRepo;
+        this.measureDiagnosticRepo = measureDiagnosticRepo;
     }
 
     @GetMapping("/stats")
@@ -114,6 +120,58 @@ public class AdminController {
         result.put("perApplication", perApp);
         result.put("usageLogTotalCostUsd", totalLogCost);
         result.put("usageLogBySource", usageBySource);
+        return result;
+    }
+
+    /**
+     * Shadow-mode view of {@link com.resumepipeline.bullet.BulletLineMeasurer} vs the char-count
+     * band generation already gates on. Nothing here drops or changes a bullet -- this is the
+     * evidence dashboard for whether the real measurement is trustworthy enough to ever act on.
+     * See BulletMeasureDiagnostic's javadoc for the schema.
+     */
+    @GetMapping("/bullet-measure-diagnostics")
+    public Map<String, Object> bulletMeasureDiagnostics() {
+        long measuredTotal = measureDiagnosticRepo.countByMeasuredTrue();
+        long disagreements = measureDiagnosticRepo.countByMeasuredTrueAndAgreeFalse();
+        double disagreementRate = measuredTotal == 0 ? 0.0 : (double) disagreements / measuredTotal;
+
+        // Fill-ratio histogram over a recent sample -- a shape to sanity-check MIN_FILL against,
+        // not an exact count over every row ever written.
+        List<BulletMeasureDiagnostic> sample =
+                measureDiagnosticRepo.findByMeasuredTrueOrderByCreatedAtDesc(Limit.of(2000));
+        int[] buckets = new int[4]; // <0.3, 0.3-0.55, 0.55-0.8, 0.8-1.0
+        for (BulletMeasureDiagnostic d : sample) {
+            double f = d.getMeasuredFill();
+            int idx = f < 0.3 ? 0 : f < 0.55 ? 1 : f < 0.8 ? 2 : 3;
+            buckets[idx]++;
+        }
+        Map<String, Integer> fillHistogram = new LinkedHashMap<>();
+        fillHistogram.put("<0.3", buckets[0]);
+        fillHistogram.put("0.3-0.55", buckets[1]);
+        fillHistogram.put("0.55-0.8", buckets[2]);
+        fillHistogram.put("0.8-1.0", buckets[3]);
+
+        List<Map<String, Object>> recentDisagreements =
+                measureDiagnosticRepo.findByMeasuredTrueAndAgreeFalseOrderByCreatedAtDesc(Limit.of(50)).stream()
+                        .map(d -> {
+                            Map<String, Object> m = new LinkedHashMap<>();
+                            m.put("category", d.getCategory());
+                            m.put("bulletText", d.getBulletText());
+                            m.put("charCount", d.getCharCount());
+                            m.put("declaredKept", d.isDeclaredKept());
+                            m.put("measuredLines", d.getMeasuredLines());
+                            m.put("measuredFill", d.getMeasuredFill());
+                            m.put("createdAt", d.getCreatedAt());
+                            return m;
+                        })
+                        .toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("measuredTotal", measuredTotal);
+        result.put("disagreements", disagreements);
+        result.put("disagreementRate", disagreementRate);
+        result.put("fillHistogram", fillHistogram);
+        result.put("recentDisagreements", recentDisagreements);
         return result;
     }
 }

@@ -238,7 +238,10 @@ public class ApplicationRenderer {
         return escaper.escape(s);
     }
 
-    String escapeRich(String s) {
+    /** Markdown-bold-to-\textbf plus LaTeX escaping — the exact transform a bullet renders
+     *  through on the real page. Public so other measurement paths (BulletLineMeasurer) can
+     *  reuse it instead of approximating it. */
+    public String escapeRich(String s) {
         if (s == null || s.isEmpty()) return "";
         Matcher m = BOLD_PATTERN.matcher(s);
         String withSentinels = m.replaceAll(BOLD_OPEN + "$1" + BOLD_CLOSE);

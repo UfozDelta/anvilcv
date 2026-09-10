@@ -43,13 +43,22 @@ public class ApplicationService {
     private final PdfCompiler compiler;
     private final ProfileService profileService;
     private final LlmUsageService llmUsageService;
+    private final SkillRowMeasurer skillRowMeasurer;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    private static final Map<String, String> SKILL_LABELS = Map.of(
+            "languages",  "Languages",
+            "frameworks", "Frameworks",
+            "databases",  "Databases \\& AI",
+            "devops",     "DevOps \\& Tools"
+    );
 
     public ApplicationService(ApplicationRepository repo, OutcomeHistoryRepository outcomeHistoryRepo,
                               BulletRepository bulletRepo,
                               ProjectRepository projectRepo, JdFetcher jdFetcher, LlmClient llm,
                               ApplicationRenderer renderer, PdfCompiler compiler,
-                              ProfileService profileService, LlmUsageService llmUsageService) {
+                              ProfileService profileService, LlmUsageService llmUsageService,
+                              SkillRowMeasurer skillRowMeasurer) {
         this.repo = repo;
         this.outcomeHistoryRepo = outcomeHistoryRepo;
         this.bulletRepo = bulletRepo;
@@ -58,6 +67,7 @@ public class ApplicationService {
         this.llm = llm;
         this.renderer = renderer;
         this.compiler = compiler;
+        this.skillRowMeasurer = skillRowMeasurer;
         this.profileService = profileService;
         this.llmUsageService = llmUsageService;
     }
@@ -250,7 +260,8 @@ public class ApplicationService {
                 "databases",  splitCsv(profile.getSkillsDatabases()),
                 "devops",     splitCsv(profile.getSkillsDevops())
         );
-        Map<String, List<String>> filledSkills = BulletSelector.fillSkills(rank.selectedSkills(), rawSkills);
+        Map<String, List<String>> floorFilledSkills = BulletSelector.fillSkills(rank.selectedSkills(), rawSkills);
+        Map<String, List<String>> filledSkills = stretchSkillsToWidth(floorFilledSkills, rawSkills);
         progress.emit("Skills filled: languages=" + filledSkills.get("languages").size()
                 + " fw=" + filledSkills.get("frameworks").size()
                 + " db=" + filledSkills.get("databases").size()
@@ -652,6 +663,57 @@ public class ApplicationService {
         addSkillCategory(cats, "databases", p.getSkillsDatabases());
         addSkillCategory(cats, "devops", p.getSkillsDevops());
         return cats;
+    }
+
+    /**
+     * Grows each skill category past {@link BulletSelector#fillSkills}'s floor with more raw
+     * profile skills, one at a time, stopping at the largest prefix that still renders within
+     * {@link BulletSelector#MAX_SKILLS_FILL} of {@code \linewidth} at {@code \skillrow}'s
+     * {@code \small} size (see {@link SkillRowMeasurer}). This is what stretches a short skills
+     * row toward the right margin instead of leaving it wherever the fixed 6-item floor happened
+     * to land, while staying clear of {@code \skillrow}'s own shrink-to-fit fallback.
+     *
+     * <p>One compile covers every category and every candidate count at once. A compile failure
+     * (or any category with no headroom to grow) falls back to {@code floorFilled} unchanged —
+     * a resume with a shorter-than-ideal skills row is fine; losing the render is not.
+     */
+    private Map<String, List<String>> stretchSkillsToWidth(Map<String, List<String>> floorFilled,
+                                                            Map<String, List<String>> rawSkills) {
+        Map<String, List<String>> candidates = new LinkedHashMap<>();
+        for (String key : BulletSelector.SKILL_KEYS) {
+            candidates.put(key, BulletSelector.paddingCandidates(floorFilled.get(key), rawSkills.get(key)));
+        }
+
+        Map<String, SkillRowMeasurer.Row> rows = new LinkedHashMap<>();
+        for (String key : BulletSelector.SKILL_KEYS) {
+            List<String> seq = candidates.get(key);
+            int floorCount = floorFilled.getOrDefault(key, List.of()).size();
+            for (int count = Math.max(floorCount, 1); count <= seq.size(); count++) {
+                rows.put(key + "_" + count,
+                        new SkillRowMeasurer.Row(SKILL_LABELS.get(key), String.join(", ", seq.subList(0, count))));
+            }
+        }
+        if (rows.isEmpty()) return floorFilled;
+
+        Map<String, SkillRowMeasurer.Measured> measured = skillRowMeasurer.measure(rows);
+        if (measured.isEmpty()) return floorFilled;
+
+        Map<String, List<String>> stretched = new LinkedHashMap<>();
+        for (String key : BulletSelector.SKILL_KEYS) {
+            List<String> seq = candidates.get(key);
+            int floorCount = floorFilled.getOrDefault(key, List.of()).size();
+            int best = floorCount;
+            for (int count = Math.max(floorCount, 1); count <= seq.size(); count++) {
+                SkillRowMeasurer.Measured m = measured.get(key + "_" + count);
+                if (m == null) break;
+                // Widths only grow with more items, so the first count that no longer fits
+                // ends the search — everything beyond it would fit even less.
+                if (!m.fits(BulletSelector.MAX_SKILLS_FILL)) break;
+                best = count;
+            }
+            stretched.put(key, seq.subList(0, best));
+        }
+        return stretched;
     }
 
     /**

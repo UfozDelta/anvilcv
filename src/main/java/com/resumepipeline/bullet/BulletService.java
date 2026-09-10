@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -49,15 +50,22 @@ public class BulletService {
     private final ProjectRepository projectRepo;
     private final ApplicationRenderer renderer;
     private final PdfCompiler compiler;
+    // Ground-truth line-fit check used at persist/refit time (batch, not the hot generation
+    // retry loop — see BulletLineMeasurer's class javadoc for why).
+    private final BulletLineMeasurer measurer;
+    private final BulletMeasureDiagnosticRepository diagnosticRepo;
 
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
                          LlmUsageService llmUsageService, GenerationConfigService configService,
-                         ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler) {
+                         ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler,
+                         BulletLineMeasurer measurer, BulletMeasureDiagnosticRepository diagnosticRepo) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
         this.llmUsageService = llmUsageService;
         this.configService = configService;
+        this.measurer = measurer;
+        this.diagnosticRepo = diagnosticRepo;
         this.projectRepo = projectRepo;
         this.renderer = renderer;
         this.compiler = compiler;
@@ -164,9 +172,14 @@ public class BulletService {
                 .filter(b -> !APPROVED.equals(b.getStatus()))
                 .toList();
 
+        // Real render check first (see BulletLineMeasurer): falls back to the char-count band
+        // per-bullet for anything the compile didn't return (compile failure, or a bullet the
+        // parser couldn't match) so a measurement outage never blocks a refit.
+        Map<String, String> eligibleTexts = eligible.stream()
+                .collect(Collectors.toMap(b -> b.getId().toString(), Bullet::getText));
+        Map<String, BulletLineMeasurer.Measured> measured = measurer.measure(eligibleTexts);
         List<Bullet> offBand = eligible.stream()
-                .filter(b -> BulletTextRules.decide(BulletTextRules.charCount(b.getText()), cfg)
-                        != BulletTextRules.Decision.KEPT)
+                .filter(b -> !fitsCleanly(b.getId().toString(), b.getText(), measured, cfg))
                 .toList();
 
         int skipped = all.size() - eligible.size();
@@ -198,12 +211,21 @@ public class BulletService {
         // a bullet that already exists -- including one that was in band and never sent.
         List<String> otherTexts = new ArrayList<>(all.stream().map(Bullet::getText).toList());
 
+        // Batch-measure every proposed rewrite in one compile up front, same as the off-band
+        // pass above — rejectRefit then reads the real fit instead of re-deciding per rewrite.
+        Map<String, String> rewriteTexts = new LinkedHashMap<>();
+        for (LlmClient.BulletToRefit r : result.bullets()) {
+            if (!byId.containsKey(r.id())) continue;
+            rewriteTexts.put(r.id(), BulletTextRules.capBoldSpans(BulletTextRules.ensureTerminalPeriod(r.text()), maxBold));
+        }
+        Map<String, BulletLineMeasurer.Measured> rewriteMeasured = measurer.measure(rewriteTexts);
+
         int rewritten = 0;
         for (LlmClient.BulletToRefit r : result.bullets()) {
             Bullet b = byId.remove(r.id());
             if (b == null) continue;                       // unknown or duplicated id
-            String text = BulletTextRules.capBoldSpans(BulletTextRules.ensureTerminalPeriod(r.text()), maxBold);
-            String reject = rejectRefit(text, b.getText(), cfg, otherTexts);
+            String text = rewriteTexts.get(r.id());
+            String reject = rejectRefit(text, b.getText(), cfg, otherTexts, rewriteMeasured.get(r.id()));
             if (reject != null) {
                 progress.emit("Kept original (" + reject + "): " + abbreviate(b.getText()));
                 continue;
@@ -212,7 +234,7 @@ public class BulletService {
             int after = BulletTextRules.charCount(text);
             int linesBefore = BulletTextRules.estimatedLines(b.getText());
             int linesAfter = BulletTextRules.estimatedLines(text);
-            boolean inBand = BulletTextRules.decide(after, cfg) == BulletTextRules.Decision.KEPT;
+            boolean inBand = fitsCleanly(r.id(), text, rewriteMeasured, cfg);
             otherTexts.remove(b.getText());
             otherTexts.add(text);
             b.setText(text);
@@ -236,7 +258,8 @@ public class BulletService {
      * Every check that guards generated bullets applies here too, plus one that only makes sense
      * for a rewrite: the replacement must not be measurably worse than what it replaces.
      */
-    private static String rejectRefit(String text, String original, GenerationConfig cfg, List<String> others) {
+    private String rejectRefit(String text, String original, GenerationConfig cfg, List<String> others,
+                                BulletLineMeasurer.Measured measured) {
         if (text.isBlank()) return "empty rewrite";
         if (text.equals(original)) return "unchanged by model";
         // Band misses are graded, not fatal. A rewrite that lands just outside the band is
@@ -245,8 +268,13 @@ public class BulletService {
         // bullet by the only measure that costs page space. The target stays strict -- the
         // model is still told the exact ceiling -- but the fallback prefers the better of the
         // two rather than demanding perfection.
-        if (BulletTextRules.decide(BulletTextRules.charCount(text), cfg) != BulletTextRules.Decision.KEPT
-                && BulletTextRules.estimatedLines(text) >= BulletTextRules.estimatedLines(original)) {
+        //
+        // "Fits" prefers the real render (measured) over the char-count band whenever the
+        // batch compile produced a value for this rewrite; see BulletLineMeasurer.
+        boolean fits = measured != null ? measurer.isCleanFit(measured)
+                : BulletTextRules.decide(BulletTextRules.charCount(text), cfg) == BulletTextRules.Decision.KEPT;
+        int linesAfter = measured != null ? measured.lines() : BulletTextRules.estimatedLines(text);
+        if (!fits && linesAfter >= BulletTextRules.estimatedLines(original)) {
             return "rewrite still off-band at " + BulletTextRules.charCount(text)
                     + "c and no shorter on the page";
         }
@@ -258,6 +286,14 @@ public class BulletService {
         rivals.remove(original);
         if (BulletTextRules.isNearDuplicate(text, rivals)) return "rewrite duplicates another bullet";
         return null;
+    }
+
+    /** Real render (when the batch compile covered this id) with a char-count fallback. */
+    private boolean fitsCleanly(String id, String text, Map<String, BulletLineMeasurer.Measured> measured,
+                                 GenerationConfig cfg) {
+        BulletLineMeasurer.Measured m = measured.get(id);
+        if (m != null) return measurer.isCleanFit(m);
+        return BulletTextRules.decide(BulletTextRules.charCount(text), cfg) == BulletTextRules.Decision.KEPT;
     }
 
     private static String abbreviate(String s) {
@@ -423,6 +459,8 @@ public class BulletService {
             throw new RuntimeException(cause.getMessage(), cause);
         }
 
+        recordMeasureDiagnostics(userId, projectId, results, progress);
+
         // Every lens judges itself against the SAME stored-bank snapshot at the strict floor —
         // hence a fresh copy per lens, not one shared mutable list. Sharing it would put lens 1's
         // output into lens 2's strict comparison and reinstate exactly the cross-lens deletion
@@ -442,5 +480,66 @@ public class BulletService {
 
     private static ProgressLog tagged(ProgressLog progress, String category) {
         return msg -> progress.emit("[" + category + "] " + msg);
+    }
+
+    /**
+     * Shadow mode only: compares the real tectonic measurement against the char-count band
+     * every one of these bullets already passed (they only reach here because callAndFilter
+     * already returned {@code KEPT}), and records the comparison -- agree and disagree alike,
+     * so a real disagreement RATE is computable later. Never drops or rewrites a bullet; see
+     * BulletLineMeasurer's class javadoc for why generation isn't allowed to act on this yet.
+     *
+     * <p>One compile for the whole bank across every category, not one per category -- a
+     * per-category compile would queue N deep on PdfCompiler's Semaphore(2), which is shared
+     * with the user-facing bullet-preview endpoint.
+     *
+     * <p>Skipped entirely when the user has turned length filtering off: that setting means
+     * they don't want a length gate applied to their bullets, and shadow-mode telemetry about
+     * a gate they explicitly disabled is not information worth collecting.
+     */
+    private void recordMeasureDiagnostics(UUID userId, UUID projectId, List<RawGeneration> results,
+                                          ProgressLog progress) {
+        Map<String, String> textsById = new LinkedHashMap<>();
+        Map<String, String> categoryById = new LinkedHashMap<>();
+        for (RawGeneration gen : results) {
+            List<LlmClient.GeneratedBullet> bullets = gen.result().bullets();
+            for (int i = 0; i < bullets.size(); i++) {
+                String id = gen.category() + "#" + i;
+                textsById.put(id, bullets.get(i).text());
+                categoryById.put(id, gen.category());
+            }
+        }
+        if (textsById.isEmpty()) return;
+        if (!configService.get(userId).isWordFilterEnabled()) return;
+
+        Map<String, BulletLineMeasurer.Measured> measured = measurer.measure(textsById);
+        if (measured.isEmpty() && !textsById.isEmpty()) {
+            progress.emit("Measurement diagnostics unavailable this run (compile failed) — skipped.");
+            return;
+        }
+
+        GenerationConfig cfg = configService.get(userId);
+        List<BulletMeasureDiagnostic> rows = new ArrayList<>();
+        int disagreements = 0;
+        for (var e : textsById.entrySet()) {
+            String id = e.getKey();
+            String text = e.getValue();
+            int cc = BulletTextRules.charCount(text);
+            // Always true today: only KEPT bullets reach saveDeduped. Stored anyway so the
+            // column means something if this is ever called on a wider set of candidates.
+            boolean declaredKept = BulletTextRules.decide(cc, cfg) == BulletTextRules.Decision.KEPT;
+            BulletLineMeasurer.Measured m = measured.get(id);
+            boolean isMeasured = m != null;
+            boolean agree = isMeasured && measurer.isCleanFit(m) == declaredKept;
+            if (isMeasured && !agree) disagreements++;
+            rows.add(new BulletMeasureDiagnostic(projectId, userId, categoryById.get(id), text, cc,
+                    declaredKept, isMeasured, isMeasured ? m.lines() : null,
+                    isMeasured ? m.lastLineFill() : null, agree));
+        }
+        diagnosticRepo.saveAll(rows);
+        if (disagreements > 0) {
+            progress.emit("Measurement diagnostics: " + disagreements + "/" + rows.size()
+                    + " bullet(s) disagreed with the real render (shadow mode — nothing dropped).");
+        }
     }
 }
