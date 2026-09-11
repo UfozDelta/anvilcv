@@ -4,7 +4,7 @@ import { estimatedLines } from '../../lib/bulletLength';
 import { RankedBulletRow } from './RankedBulletRow';
 import { EditProjectHeader } from './EditProjectHeader';
 
-export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, editingId, cfg, editingProjectId, lockedIds, newIds, onToggleOpen, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock }: {
+export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, refitBusy, editingId, cfg, editingProjectId, lockedIds, newIds, onToggleOpen, onRefit, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock }: {
   g: BulletGroup;
   open: boolean;
   selectedIds: Set<string>;
@@ -13,12 +13,15 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   verdicts: Record<string, BulletVerdict>;
   previewing: boolean;
   previewBusy: boolean;
+  /** Any refit is in flight — a second one would race the first onto the same selection. */
+  refitBusy: boolean;
   editingId: string | null;
   cfg: GenerationConfig;
   editingProjectId: string | null;
   lockedIds: Set<string>;
   newIds?: Set<string>;
   onToggleOpen: () => void;
+  onRefit: (projectId: string) => void;
   onToggleSelect: (bulletId: string) => void;
   onToggleWhy: (bulletId: string) => void;
   onPreview: (bulletIds: string[]) => void;
@@ -60,6 +63,21 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
             </div>
           </div>
           <div className="grouphead__right" onClick={e => e.stopPropagation()}>
+            {/* Scoped re-pick. The "Other" bucket has no project to scope to, so it only
+                ever gets the whole-page button in the action bar. */}
+            <button
+              type="button"
+              className="minibtn"
+              disabled={!g.project || refitBusy}
+              title={
+                g.project
+                  ? 'Re-pick this entry from the bank. Every other entry stays exactly as it is.'
+                  : 'These bullets have no project to re-pick against'
+              }
+              onClick={() => g.project && onRefit(g.project.id)}
+            >
+              Auto-pick this entry
+            </button>
             <button
               type="button"
               className={`minibtn ${previewing ? 'is-on' : ''}`}

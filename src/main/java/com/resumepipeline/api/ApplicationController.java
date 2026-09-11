@@ -132,26 +132,35 @@ public class ApplicationController {
     }
 
     @PostMapping("/{id}/refit-selection")
-    public ApplicationResponse refitSelection(Authentication auth, @PathVariable UUID id) {
-        return ApplicationResponse.from(service.refitSelection(AuthUtils.userId(auth), id, ProgressLog.noOp()));
+    public ApplicationResponse refitSelection(Authentication auth, @PathVariable UUID id,
+                                              @RequestBody(required = false) RefitRequest req) {
+        return ApplicationResponse.from(
+                service.refitSelection(AuthUtils.userId(auth), id, projectScope(req), ProgressLog.noOp()));
     }
 
     @PostMapping("/{id}/refit-selection/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public SubmitResponse refitSelectionSubmit(Authentication auth, @PathVariable UUID id) {
+    public SubmitResponse refitSelectionSubmit(Authentication auth, @PathVariable UUID id,
+                                               @RequestBody(required = false) RefitRequest req) {
         UUID userId = AuthUtils.userId(auth);
+        UUID scope = projectScope(req);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
         ASYNC_EXECUTOR.submit(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
-                Application a = service.refitSelection(userId, id, progress);
+                Application a = service.refitSelection(userId, id, scope, progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
         });
         return new SubmitResponse(jobId);
+    }
+
+    /** Absent body and absent projectId both mean "re-pick the whole page". */
+    private static UUID projectScope(RefitRequest req) {
+        return req == null ? null : req.projectId();
     }
 
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)

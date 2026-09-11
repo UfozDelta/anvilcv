@@ -181,12 +181,14 @@ export function ApplicationDetail() {
                     verdicts={verdicts}
                     previewing={s.previewKey === g.key}
                     previewBusy={s.previewBusy}
+                    refitBusy={s.refitTarget !== null}
                     editingId={s.editingId}
                     cfg={s.cfg}
                     editingProjectId={s.editingProjectId}
                     lockedIds={s.lockedIds}
                     newIds={s.justAddedIds}
                     onToggleOpen={() => s.toggleGroup(g.key)}
+                    onRefit={pid => s.startRefit(pid)}
                     onToggleSelect={s.toggleBullet}
                     onToggleWhy={s.toggleWhy}
                     onPreview={ids => { s.previewGroup(g.key, ids); setTab('page'); }}
@@ -223,10 +225,11 @@ export function ApplicationDetail() {
               <button
                 className="minibtn"
                 style={{ padding: '9px 12px' }}
-                title="Re-pick from your whole bullet bank, keeping locked bullets pinned"
+                disabled={s.refitTarget !== null}
+                title="Re-pick every entry from your whole bullet bank, keeping locked bullets pinned"
                 onClick={() => s.startRefit()}
               >
-                Auto-pick again
+                Auto-pick whole page
               </button>
               <button
                 className="btn btn--sm"
@@ -278,14 +281,18 @@ export function ApplicationDetail() {
         />
       )}
 
-      {s.refitStreaming && (
+      {s.refitTarget && (
         <EventStream
           submitUrl={`/api/applications/${app.id}/refit-selection/submit`}
-          submitBody={{}}
+          submitBody={{ projectId: s.refitTarget.projectId }}
           pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
           onDone={() => s.finishRefit()}
-          onClose={() => s.setRefitStreaming(false)}
-          title="REFITTING SELECTION..."
+          onClose={() => s.setRefitTarget(null)}
+          title={
+            s.refitTarget.projectId
+              ? `REFITTING ${(s.projectById[s.refitTarget.projectId]?.name ?? 'ENTRY').toUpperCase()}...`
+              : 'REFITTING WHOLE PAGE...'
+          }
           doneLabel="DONE →"
         />
       )}

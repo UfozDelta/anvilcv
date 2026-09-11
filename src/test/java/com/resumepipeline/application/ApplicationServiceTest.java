@@ -334,4 +334,126 @@ class ApplicationServiceTest {
             assertEquals(2, out.getAtsMissing().length);
         }
     }
+
+    /**
+     * Scoped refit. The contract under test is narrow and easy to regress: when a project id is
+     * given, no entry other than that one may change — not even by gaining a bullet, which is
+     * what pass 4's floor would otherwise do to any under-filled entry it finds.
+     */
+    @Nested
+    class RefitSelection {
+
+        private final UUID user = UUID.randomUUID();
+        private final UUID appId = UUID.randomUUID();
+        private final UUID expA = UUID.randomUUID();
+        private final UUID projB = UUID.randomUUID();
+        private final UUID projC = UUID.randomUUID();
+
+        /** Four bullets per project so every entry has bank depth left to be topped up from. */
+        private List<Bullet> bank(UUID... projects) {
+            List<Bullet> out = new java.util.ArrayList<>();
+            for (UUID p : projects) {
+                for (int i = 0; i < 4; i++) out.add(TestFixtures.bullet(UUID.randomUUID(), p, new String[0]));
+            }
+            return out;
+        }
+
+        private String rankingJson(List<Bullet> bank) {
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < bank.size(); i++) {
+                if (i > 0) sb.append(',');
+                sb.append("{\"bulletId\":\"").append(bank.get(i).getId())
+                  .append("\",\"rank\":").append(i + 1).append(",\"why\":\"w\"}");
+            }
+            return sb.append(']').toString();
+        }
+
+        private Application stub(List<Bullet> bank, List<Bullet> onPage, List<Bullet> locked) {
+            Application a = new Application();
+            a.setBulletRanking(rankingJson(bank));
+            a.setSelectedBulletIds(onPage.stream().map(Bullet::getId).toArray(UUID[]::new));
+            a.setLockedBulletIds(locked.stream().map(Bullet::getId).toArray(UUID[]::new));
+
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(bank);
+            when(projectRepo.findAllByUserIdOrderByCreatedAtDesc(user)).thenReturn(List.of(
+                    TestFixtures.project(expA, Project.Kind.EXPERIENCE, "Experience A"),
+                    TestFixtures.project(projB, Project.Kind.PROJECT, "Project B"),
+                    TestFixtures.project(projC, Project.Kind.PROJECT, "Project C")));
+            when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            return a;
+        }
+
+        private List<UUID> idsIn(Application a, UUID projectId, List<Bullet> bank) {
+            Map<UUID, Bullet> byId = bank.stream().collect(java.util.stream.Collectors.toMap(Bullet::getId, b -> b));
+            return java.util.Arrays.stream(a.getSelectedBulletIds())
+                    .filter(id -> byId.containsKey(id) && projectId.equals(byId.get(id).getProjectId()))
+                    .toList();
+        }
+
+        @Test
+        void scopedRefitLeavesEveryOtherEntryUntouched() {
+            List<Bullet> bank = bank(expA, projB, projC);
+            // expA deliberately under-filled at 2: pass 4's floor tops surviving projects up to
+            // MAX_PER_PROJECT, so without the post-filter this entry would silently gain a third.
+            List<Bullet> onPage = List.of(bank.get(0), bank.get(1),            // expA  x2
+                                          bank.get(4), bank.get(5), bank.get(6), // projB x3
+                                          bank.get(8));                          // projC x1
+            Application a = stub(bank, onPage, List.of());
+            List<UUID> expABefore = idsIn(a, expA, bank);
+            List<UUID> projBBefore = idsIn(a, projB, bank);
+
+            Application out = service.refitSelection(user, appId, projC, ProgressLog.noOp());
+
+            assertEquals(expABefore, idsIn(out, expA, bank), "experience entry must not change");
+            assertEquals(projBBefore, idsIn(out, projB, bank), "other project entry must not change");
+            assertEquals(2, expABefore.size(), "the under-filled entry stays under-filled");
+        }
+
+        @Test
+        void scopedRefitKeepsALockedBulletInsideTheTargetEntry() {
+            List<Bullet> bank = bank(expA, projB, projC);
+            Bullet pinnedInTarget = bank.get(8);   // projC
+            List<Bullet> onPage = List.of(bank.get(0), bank.get(4), pinnedInTarget);
+            stub(bank, onPage, List.of(pinnedInTarget));
+
+            Application out = service.refitSelection(user, appId, projC, ProgressLog.noOp());
+
+            assertTrue(java.util.Arrays.asList(out.getSelectedBulletIds()).contains(pinnedInTarget.getId()),
+                    "a locked bullet in the refitted entry must survive the re-pick");
+        }
+
+        @Test
+        void scopedRefitRejectsAProjectTheUserDoesNotOwn() {
+            List<Bullet> bank = bank(expA, projB, projC);
+            Application a = new Application();
+            a.setBulletRanking(rankingJson(bank));
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(bank);
+            when(projectRepo.findAllByUserIdOrderByCreatedAtDesc(user)).thenReturn(List.of(
+                    TestFixtures.project(expA, Project.Kind.EXPERIENCE, "Experience A")));
+
+            UUID someoneElse = UUID.randomUUID();
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.refitSelection(user, appId, someoneElse, ProgressLog.noOp()));
+            verify(repo, never()).save(any());
+            verifyNoInteractions(compiler);
+        }
+
+        @Test
+        void nullScopeStillRefitsEveryEntry() {
+            List<Bullet> bank = bank(expA, projB, projC);
+            // One bullet per entry, so a whole-page refit has room to grow all three.
+            List<Bullet> onPage = List.of(bank.get(0), bank.get(4), bank.get(8));
+            stub(bank, onPage, List.of());
+
+            Application out = service.refitSelection(user, appId, null, ProgressLog.noOp());
+
+            assertTrue(out.getSelectedBulletIds().length > onPage.size(),
+                    "an unscoped refit fills the page rather than preserving the prior entries");
+            assertTrue(out.isRecruiterStale());
+        }
+    }
 }

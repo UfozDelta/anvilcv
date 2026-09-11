@@ -557,6 +557,33 @@ public class ApplicationService {
      * survive every pass.
      */
     public Application refitSelection(UUID userId, UUID applicationId, ProgressLog progress) {
+        return refitSelection(userId, applicationId, null, progress);
+    }
+
+    /**
+     * Same, optionally scoped to a single entry.
+     *
+     * <p>When {@code onlyProjectId} is non-null, only that project's bullets may change; every
+     * other entry on the page comes back byte-identical. This is <b>not</b> done by running the
+     * selector over one project — the entry cap, kind floor, line budget and dedup check are all
+     * whole-page rules, and a per-project run would violate every one of them. Instead the same
+     * global four-pass selection runs with every <i>other</i> selected bullet handed to it as
+     * {@code locked}, which the selector already guarantees survives all four passes, and only
+     * the target entry's currently-shown bullets are excluded so passes 1-3 look elsewhere.
+     *
+     * <p>The result is then filtered back down to {pinned} ∪ {target entry}. That filter is the
+     * actual guarantee, and it is not redundant: pass 4's floor tops up <i>every</i> surviving
+     * project to {@link BulletSelector#MAX_PER_PROJECT}, so without it a scoped refit could
+     * quietly add bullets to entries the caller never asked about.
+     *
+     * <p>Two consequences the caller should surface rather than hide. The target entry only gets
+     * whatever line budget the pinned entries leave, so a full page can hand back a
+     * <i>smaller</i> entry than before. And pass 4 does not honour {@code excluded}, so an entry
+     * whose bank is thin can legitimately return the same bullets it started with.
+     *
+     * @param onlyProjectId project to re-pick, or null to re-pick the whole page
+     */
+    public Application refitSelection(UUID userId, UUID applicationId, UUID onlyProjectId, ProgressLog progress) {
         Application a = get(userId, applicationId);
         List<Bullet> allBullets = bulletRepo.findSelectableByProjectUserId(userId);
         Map<UUID, Bullet> bulletById = allBullets.stream()
@@ -572,14 +599,41 @@ public class ApplicationService {
             rankedSorted = List.of();
         }
 
-        List<Bullet> locked = Arrays.stream(a.getLockedBulletIds())
+        // Reject an unknown or someone else's project before anything expensive runs; silently
+        // falling back to a whole-page refit would rewrite entries the caller never named.
+        if (onlyProjectId != null && !projectById.containsKey(onlyProjectId)) {
+            throw new IllegalArgumentException("No such project on this account: " + onlyProjectId);
+        }
+
+        List<Bullet> userLocked = Arrays.stream(a.getLockedBulletIds())
+                .map(bulletById::get).filter(Objects::nonNull).toList();
+        Set<UUID> lockedIds = userLocked.stream().map(Bullet::getId).collect(Collectors.toSet());
+
+        List<Bullet> onPage = Arrays.stream(a.getSelectedBulletIds())
                 .map(bulletById::get).filter(Objects::nonNull).toList();
 
-        // Steer passes 1-3 away from whatever was already on the page and isn't locked, so a
-        // refit with nothing newly pinned doesn't just reproduce the same deterministic pick.
-        Set<UUID> lockedIds = locked.stream().map(Bullet::getId).collect(Collectors.toSet());
-        Set<UUID> excluded = Arrays.stream(a.getSelectedBulletIds())
-                .filter(id -> !lockedIds.contains(id)).collect(Collectors.toSet());
+        final List<Bullet> locked;
+        final Set<UUID> excluded;
+        if (onlyProjectId == null) {
+            locked = userLocked;
+            // Steer passes 1-3 away from whatever was already on the page and isn't locked, so a
+            // refit with nothing newly pinned doesn't just reproduce the same deterministic pick.
+            excluded = onPage.stream().map(Bullet::getId)
+                    .filter(id -> !lockedIds.contains(id)).collect(Collectors.toSet());
+        } else {
+            // Pin the rest of the page. LinkedHashMap so a bullet that is both user-locked and
+            // outside the target entry is pinned once, in a stable order.
+            LinkedHashMap<UUID, Bullet> pinned = new LinkedHashMap<>();
+            userLocked.forEach(b -> pinned.put(b.getId(), b));
+            onPage.stream().filter(b -> !onlyProjectId.equals(b.getProjectId()))
+                    .forEach(b -> pinned.put(b.getId(), b));
+            locked = List.copyOf(pinned.values());
+            excluded = onPage.stream()
+                    .filter(b -> onlyProjectId.equals(b.getProjectId()))
+                    .map(Bullet::getId)
+                    .filter(id -> !lockedIds.contains(id))
+                    .collect(Collectors.toSet());
+        }
 
         // Same JD keyword set the original ranking pass used, recovered from what was stored
         // rather than re-derived — matched + missing together are the full keyword list.
@@ -587,9 +641,25 @@ public class ApplicationService {
         Arrays.stream(a.getAtsMatched()).map(String::toLowerCase).forEach(keywordsLower::add);
         Arrays.stream(a.getAtsMissing()).map(String::toLowerCase).forEach(keywordsLower::add);
 
-        progress.emit("Refitting selection from " + allBullets.size() + " bank bullets ("
-                + locked.size() + " locked)...");
+        String scope = onlyProjectId == null
+                ? "whole page"
+                : "entry \"" + projectById.get(onlyProjectId).getName() + "\" only, "
+                  + locked.size() + " bullets pinned elsewhere";
+        progress.emit("Refitting " + scope + " from " + allBullets.size() + " bank bullets ("
+                + userLocked.size() + " locked)...");
         List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked, excluded);
+
+        if (onlyProjectId != null) {
+            // The guarantee: pass 4's floor tops up every surviving project, so drop anything it
+            // added outside the entry the caller named. Pinned bullets are in `selected` already
+            // (the selector seeds them before pass 1), so this only ever removes.
+            Set<UUID> pinnedIds = locked.stream().map(Bullet::getId).collect(Collectors.toSet());
+            selected = selected.stream()
+                    .filter(b -> pinnedIds.contains(b.getId()) || onlyProjectId.equals(b.getProjectId()))
+                    .toList();
+            long inEntry = selected.stream().filter(b -> onlyProjectId.equals(b.getProjectId())).count();
+            progress.emit("Entry re-picked: " + inEntry + " bullet(s) now included.");
+        }
 
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
         Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());

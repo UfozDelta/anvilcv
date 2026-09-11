@@ -20,7 +20,8 @@ export function useApplicationDetail(id: string | undefined) {
   const [locksSaving, setLocksSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rerenderStreaming, setRerenderStreaming] = useState(false);
-  const [refitStreaming, setRefitStreaming] = useState(false);
+  /** Which refit is running: `{ projectId: null }` for the whole page, a project id for one entry. */
+  const [refitTarget, setRefitTarget] = useState<{ projectId: string | null } | null>(null);
   /** Bullet ids newly picked by the last refit, for the "NEW" badge — cleared on next load/refit. */
   const [justAddedIds, setJustAddedIds] = useState<Set<string>>(new Set());
   /** selectedIds snapshot taken when refit starts, diffed against the result in finishRefit. */
@@ -203,9 +204,10 @@ export function useApplicationDetail(id: string | undefined) {
     });
   }
 
-  function startRefit() {
+  /** @param projectId re-pick only that entry; omit to re-pick the whole page. */
+  function startRefit(projectId: string | null = null) {
     preRefitSelection.current = new Set(selectedIds);
-    setRefitStreaming(true);
+    setRefitTarget({ projectId });
   }
 
   /** Reloads after a refit and flags bullets that weren't in the pre-refit selection. */
@@ -215,7 +217,7 @@ export function useApplicationDetail(id: string | undefined) {
     if (a) {
       setJustAddedIds(new Set(a.selectedBulletIds.filter(bid => !preRefitSelection.current.has(bid))));
     }
-    setRefitStreaming(false);
+    setRefitTarget(null);
   }
 
   return {
@@ -225,7 +227,7 @@ export function useApplicationDetail(id: string | undefined) {
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
     editingId, setEditingId, saveBullet, cfg,
     editingProjectId, setEditingProjectId, saveProject,
-    lockedIds, toggleLock, locksSaving, refitStreaming, setRefitStreaming,
+    lockedIds, toggleLock, locksSaving, refitTarget, setRefitTarget,
     justAddedIds, startRefit, finishRefit,
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,

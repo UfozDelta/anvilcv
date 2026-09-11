@@ -32,6 +32,9 @@ public class ApplicationDtos {
 
     public record LockRequest(List<UUID> lockedBulletIds) {}
 
+    /** Refit scope. A null body, or a null {@code projectId}, re-picks the whole page. */
+    public record RefitRequest(UUID projectId) {}
+
     public record OutcomeHistoryEntry(UUID applicationId, String outcome, Instant changedAt) {
         public static OutcomeHistoryEntry from(OutcomeHistory h) {
             return new OutcomeHistoryEntry(h.getApplicationId(), h.getOutcome(), h.getChangedAt());
