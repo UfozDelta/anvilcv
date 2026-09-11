@@ -1,0 +1,193 @@
+/* ---------------------------------------------------------------------------
+   Lab-only chrome for the /lab prototypes.
+
+   The shared primitives these prototypes introduced (stat, meter, approw, brow,
+   tabs, actionbar, …) now live in ui.css and ship on the real Applications
+   pages. What is left here is only the scaffolding that marks a page as a
+   prototype — the acid bar, the switcher, the explanatory note.
+   --------------------------------------------------------------------------- */
+
+.lab {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px var(--pad) 120px;
+}
+
+.lab-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 28px;
+  border: var(--rule-thick);
+  background: var(--acid);
+}
+
+.lab-bar__tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  background: var(--ink);
+  color: var(--acid);
+}
+
+.lab-bar a {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.lab-bar a:hover { border-bottom-color: var(--ink); }
+.lab-bar a.is-active { border-bottom-color: var(--ink); }
+
+.lab-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+  border-left: 3px solid var(--soft);
+  padding: 2px 0 2px 12px;
+  margin: 0 0 24px;
+  max-width: 70ch;
+}
+
+/* -------- lab index timeline -------- */
+
+.tl { display: grid; gap: 0; }
+
+.tl__entry {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 22px;
+  padding-bottom: 40px;
+}
+
+/* The rail is one continuous line down the whole log; the last entry stops it. */
+.tl__rail {
+  position: relative;
+  padding: 2px 0 0 20px;
+  border-left: 2px solid var(--ink);
+}
+
+.tl__entry:last-child .tl__rail { border-left-color: transparent; }
+
+.tl__dot {
+  position: absolute;
+  left: -9px;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--acid);
+  border: 2px solid var(--ink);
+}
+
+.tl__date {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+.tl__body {
+  border: var(--rule-thick);
+  background: var(--paper);
+  padding: 18px 20px;
+  min-width: 0;
+}
+
+.tl__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.tl__title { font-size: 28px; margin: 0; line-height: 1.05; }
+
+.tl__status {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border: 2px solid var(--ink);
+  white-space: nowrap;
+}
+
+.tl__status--shipped { background: var(--acid); }
+.tl__status--prototype { background: var(--paper-2); color: var(--muted); }
+.tl__status--abandoned { background: var(--rust); color: var(--paper); border-color: var(--rust); }
+
+.tl__summary {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0 0 16px;
+  max-width: 76ch;
+}
+
+.tl__summary code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--paper-2);
+  padding: 1px 4px;
+}
+
+.tl__protos { display: grid; gap: 8px; }
+
+.tl__proto {
+  display: block;
+  border: 2px solid var(--ink);
+  padding: 10px 12px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.tl__proto:hover { background: var(--acid); }
+
+.tl__proto-name {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tl__proto-line { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.tl__proto:hover .tl__proto-line { color: var(--ink); }
+
+.tl__landed { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.tl__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  max-width: 76ch;
+}
+
+.tl__list--principles { font-size: 13px; }
+
+@media (max-width: 720px) {
+  .tl__entry { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .tl__rail { border-left: none; padding: 0 0 0 24px; }
+  .tl__dot { left: 0; top: 1px; }
+  .tl__title { font-size: 23px; }
+}

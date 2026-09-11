@@ -44,37 +44,41 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
           onSave={patch => onSaveProject(g.project!, patch)}
         />
       ) : (
-        <div className="row row--between row--centered" style={{ marginBottom: 4, gap: 8 }}>
-          <button
-            type="button"
-            className="label"
-            aria-expanded={open}
-            onClick={onToggleOpen}
-            style={{ flex: 1, minWidth: 0, fontWeight: 700, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit', textAlign: 'left' }}
-          >
-            {open ? '▾' : '▸'} {name}
-          </button>
-          <span className="label muted" style={{ whiteSpace: 'nowrap' }}>~{lines}L · {selected.length}/{g.items.length}</span>
-          {g.project && (
+        <div
+          className="grouphead"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={onToggleOpen}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleOpen(); } }}
+        >
+          <div>
+            <div className="grouphead__name">{open ? '▾' : '▸'} {name}</div>
+            {/* Spelled out. "~4L · 3/7" needed a decoder ring. */}
+            <div className="grouphead__sub">
+              {selected.length} of {g.items.length} included · about {lines} line{lines === 1 ? '' : 's'}
+            </div>
+          </div>
+          <div className="grouphead__right" onClick={e => e.stopPropagation()}>
             <button
               type="button"
-              className="btn btn--ghost btn--sm"
-              style={{ fontSize: 10, padding: '2px 6px' }}
-              onClick={() => onEditProject(g.project!.id)}
+              className={`minibtn ${previewing ? 'is-on' : ''}`}
+              disabled={selected.length === 0 || previewBusy}
+              title={selected.length === 0 ? 'No bullets included' : 'Render just these bullets'}
+              onClick={() => onPreview(selected.map(r => r.bulletId))}
             >
-              EDIT
+              {previewBusy ? '…' : 'Preview just this'}
             </button>
-          )}
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            style={{ fontSize: 10, padding: '2px 6px', ...(previewing ? { textDecoration: 'underline', textUnderlineOffset: 4 } : {}) }}
-            disabled={selected.length === 0 || previewBusy}
-            title={selected.length === 0 ? 'No bullets included' : 'Render just these bullets'}
-            onClick={() => onPreview(selected.map(r => r.bulletId))}
-          >
-            {previewBusy ? '...' : 'TEST'}
-          </button>
+            {g.project && (
+              <button
+                type="button"
+                className="minibtn"
+                onClick={() => onEditProject(g.project!.id)}
+              >
+                Edit heading
+              </button>
+            )}
+          </div>
         </div>
       )}
       {open && g.items.map(r => (

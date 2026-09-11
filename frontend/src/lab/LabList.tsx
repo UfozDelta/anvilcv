@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { api, type ApplicationSummary } from '../lib/api';
-import { Section } from '../components/Section';
+import { useMemo, useState } from 'react';
+import type { ApplicationSummary } from '../lib/api';
+import { LAB_SUMMARIES } from './fixtures';
+import { LabChrome } from './LabChrome';
 
 const OUTCOMES = ['applied', 'interview', 'offer', 'rejected'] as const;
 
@@ -29,8 +29,7 @@ function ScoreBar({ k, v }: { k: string; v: number | null }) {
   );
 }
 
-/** Delete lives here, not in the row, so it can never be hit while aiming for the link. */
-function RowMenu({ onDelete }: { onDelete: () => void }) {
+function RowMenu({ onDelete, onDuplicate }: { onDelete: () => void; onDuplicate: () => void }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   return (
@@ -43,6 +42,7 @@ function RowMenu({ onDelete }: { onDelete: () => void }) {
       >⋯</button>
       {open && (
         <div className="rowmenu__pop">
+          <button onClick={() => { onDuplicate(); setOpen(false); }}>Duplicate</button>
           {confirming ? (
             <button className="is-danger" onClick={() => { onDelete(); setOpen(false); setConfirming(false); }}>
               Really delete?
@@ -56,25 +56,14 @@ function RowMenu({ onDelete }: { onDelete: () => void }) {
   );
 }
 
-export function Applications() {
-  const [rows, setRows] = useState<ApplicationSummary[]>([]);
-  const [outcome, setOutcome] = useState('');
+export function LabList() {
+  const [rows, setRows] = useState<ApplicationSummary[]>(LAB_SUMMARIES);
+  const [outcome, setOutcome] = useState<string>('');
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
-  const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // The whole set is fetched once and filtered here, so the tab counts describe
-  // everything you have rather than whatever the last filter left behind.
-  async function load() {
-    setLoading(true);
-    try {
-      setRows(await api.get<ApplicationSummary[]>('/api/applications'));
-    } finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, []);
-
+  // Counts come from the whole set, so the tabs stay stable while you filter.
   const counts = useMemo(() => {
     const c: Record<string, number> = { '': rows.length };
     for (const o of OUTCOMES) c[o] = rows.filter(r => r.outcome === o).length;
@@ -98,37 +87,23 @@ export function Applications() {
     return [...out].sort(by[sort]);
   }, [rows, outcome, q, sort]);
 
-  /** Optimistic: the row reads back the server's value, and rolls back if the PATCH fails. */
-  async function setRowOutcome(a: ApplicationSummary, next: string) {
-    const prev = a.outcome;
-    setRows(rs => rs.map(r => (r.id === a.id ? { ...r, outcome: next } : r)));
-    setSavingId(a.id);
-    setErr(null);
-    try {
-      const updated = await api.patch<{ outcome: string }>(`/api/applications/${a.id}`, { outcome: next });
-      setRows(rs => rs.map(r => (r.id === a.id ? { ...r, outcome: updated.outcome } : r)));
-    } catch (e) {
-      setRows(rs => rs.map(r => (r.id === a.id ? { ...r, outcome: prev } : r)));
-      setErr(`Could not update ${a.company || 'application'}: ${(e as Error).message}`);
-    } finally { setSavingId(null); }
-  }
-
-  async function deleteApp(a: ApplicationSummary) {
-    const snapshot = rows;
-    setRows(rs => rs.filter(r => r.id !== a.id));
-    setErr(null);
-    try {
-      await api.del(`/api/applications/${a.id}`);
-    } catch (e) {
-      setRows(snapshot);
-      setErr(`Could not delete ${a.company || 'application'}: ${(e as Error).message}`);
-    }
+  function setRowOutcome(id: string, next: string) {
+    setRows(rs => rs.map(r => (r.id === id ? { ...r, outcome: next } : r)));
   }
 
   return (
-    <div className="shell">
-      <Section num="03" title="Applications" count={rows.length} />
-
+    <LabChrome
+      title="Applications — list"
+      note={
+        <>
+          Fixes from the audit: the two 0-100 scores now say what they measure and carry a
+          legend; status is editable in place instead of only inside the detail page; the
+          meaningless positional index is gone; delete moved out of the row link into a menu
+          with an in-place confirm; filter tabs show counts from the whole set; search and
+          sort exist. Every control below is live against placeholder state.
+        </>
+      }
+    >
       <div className="toolbar">
         <input
           className="toolbar__search"
@@ -152,20 +127,26 @@ export function Applications() {
           className="approw__status"
           style={{ width: 'auto' }}
           value={sort}
-          aria-label="Sort applications"
           onChange={e => setSort(e.target.value as Sort)}
         >
           {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
+
+        <button
+          className="minibtn"
+          style={{ marginLeft: 'auto', padding: '8px 10px' }}
+          onClick={() => { setLoading(true); window.setTimeout(() => setLoading(false), 1400); }}
+        >
+          Test loading state
+        </button>
       </div>
 
-      {/* Two 0-100 numbers that measure different things need one sentence each. */}
-      <div className="legend" style={{ marginBottom: 16 }}>
-        <b>FIT</b> = how well you match the job. <b>PAGE</b> = how well the rendered resume
-        sells you. They move independently — a strong candidate can have a weak page.
+      {/* The legend is the cheapest fix on this page: two numbers, one sentence each. */}
+      <div className="lab-note" style={{ marginBottom: 16 }}>
+        <b style={{ color: 'var(--ink)' }}>FIT</b> = how well you match the job.{' '}
+        <b style={{ color: 'var(--ink)' }}>PAGE</b> = how well the rendered resume sells you.
+        They move independently — a strong candidate can have a weak page.
       </div>
-
-      {err && <div className="err" style={{ marginBottom: 12 }}>{err}</div>}
 
       <div className="applist">
         {loading
@@ -183,12 +164,12 @@ export function Applications() {
             ))
           : shown.map(a => (
               <div className="approw" key={a.id}>
-                {/* One stretched link covers the row; real controls sit above it. */}
-                <Link className="approw__link" to={`/applications/${a.id}`}>{a.company || 'Untitled'}</Link>
+                {/* One stretched link covers the row; real buttons sit above it. */}
+                <a className="approw__link" href={`/lab/detail?id=${a.id}`}>{a.company}</a>
 
                 <div>
-                  <h3 className="approw__title">{a.company || 'Untitled'}</h3>
-                  <div className="approw__role">{a.role || 'No role recorded'}</div>
+                  <h3 className="approw__title">{a.company ?? 'Untitled'}</h3>
+                  <div className="approw__role">{a.role ?? 'No role recorded'}</div>
                 </div>
 
                 <div className="scorepair approw__scores">
@@ -201,38 +182,30 @@ export function Applications() {
                 <select
                   className={`approw__status approw__status--${a.outcome}`}
                   value={a.outcome}
-                  disabled={savingId === a.id}
-                  aria-label={`Status for ${a.company || 'application'}`}
-                  onChange={e => setRowOutcome(a, e.target.value)}
+                  aria-label={`Status for ${a.company}`}
+                  onChange={e => setRowOutcome(a.id, e.target.value)}
                 >
-                  {/* An outcome the backend set but this list does not offer still renders. */}
-                  {!OUTCOMES.includes(a.outcome as typeof OUTCOMES[number]) && (
-                    <option value={a.outcome}>{a.outcome}</option>
-                  )}
                   {OUTCOMES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
 
-                <RowMenu onDelete={() => deleteApp(a)} />
+                <RowMenu
+                  onDelete={() => setRows(rs => rs.filter(r => r.id !== a.id))}
+                  onDuplicate={() => setRows(rs => [{ ...a, id: `${a.id}-copy`, createdAt: new Date().toISOString() }, ...rs])}
+                />
               </div>
             ))}
 
         {!loading && shown.length === 0 && (
           <div style={{ padding: '44px 0', textAlign: 'center', borderBottom: 'var(--rule-thin)' }}>
             <div className="editorial" style={{ fontSize: 17, marginBottom: 6 }}>
-              {rows.length === 0
-                ? 'No applications yet. Start with 04 — NEW APPLICATION.'
-                : q
-                  ? `Nothing matches “${q}”.`
-                  : `No applications marked ${outcome}.`}
+              {q ? `Nothing matches “${q}”.` : `No applications marked ${outcome}.`}
             </div>
-            {rows.length > 0 && (
-              <button className="minibtn" onClick={() => { setQ(''); setOutcome(''); }}>
-                Clear filters
-              </button>
-            )}
+            <button className="minibtn" onClick={() => { setQ(''); setOutcome(''); }}>
+              Clear filters
+            </button>
           </div>
         )}
       </div>
-    </div>
+    </LabChrome>
   );
 }

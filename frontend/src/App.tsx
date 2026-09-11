@@ -16,6 +16,10 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 import { DocsPage } from './pages/DocsPage';
 import { UploadPage } from './pages/UploadPage';
+import { LabIndex } from './lab/LabIndex';
+import { LabList } from './lab/LabList';
+import { LabDetail } from './lab/LabDetail';
+import { LabRows } from './lab/LabRows';
 
 function AuthedShell({ children }: { children: React.ReactNode }) {
   return (
@@ -46,6 +50,13 @@ export function App() {
         <Route path="/admin"                element={<AuthedShell><AdminPage /></AuthedShell>} />
         <Route path="/upload"               element={<AuthedShell><UploadPage /></AuthedShell>} />
         <Route path="/docs"                 element={<DocsPage />} />
+
+        {/* UI prototypes on placeholder data. Unauthenticated on purpose: they touch
+            no API and exist to review the Applications redesign without a login. */}
+        <Route path="/lab"                  element={<LabIndex />} />
+        <Route path="/lab/list"             element={<LabList />} />
+        <Route path="/lab/detail"           element={<LabDetail />} />
+        <Route path="/lab/rows"             element={<LabRows />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

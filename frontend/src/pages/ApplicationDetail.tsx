@@ -1,68 +1,139 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../lib/api';
-import { Section } from '../components/Section';
+import { api, type ApplicationResponse, type BulletVerdict } from '../lib/api';
 import { EventStream } from '../components/EventStream';
+import { RichText } from '../components/RichText';
+import { Stat } from '../components/Stat';
 import { setsEqual } from '../lib/ranking';
 import { useApplicationDetail } from '../hooks/useApplicationDetail';
 import { RankedBulletRow } from '../components/ApplicationDetail/RankedBulletRow';
 import { BulletGroupSection } from '../components/ApplicationDetail/BulletGroupSection';
 
+const OUTCOMES = ['applied', 'interview', 'offer', 'rejected'] as const;
+
+type Tab = 'page' | 'cover' | 'review' | 'ats';
+type Detail = ReturnType<typeof useApplicationDetail>;
+
 export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
   const s = useApplicationDetail(id);
+  const [tab, setTab] = useState<Tab>('page');
 
   if (!s.app) return <div className="shell"><span className="spinner">LOADING</span></div>;
 
   const app = s.app;
-  const pdfUrl = api.pdfUrl(`/api/applications/${app.id}/pdf`);
-  const texUrl = api.pdfUrl(`/api/applications/${app.id}/tex`);
   const ogSelection = new Set(app.selectedBulletIds);
   const dirty = !setsEqual(s.selectedIds, ogSelection);
-  const verdicts = Object.fromEntries(app.recruiterBulletVerdicts.map(v => [v.bulletId, v]));
+  const verdicts = Object.fromEntries(
+    app.recruiterBulletVerdicts.map(v => [v.bulletId, v]),
+  ) as Record<string, BulletVerdict>;
+
   // Coverage comes from the deterministic ATS pass, never from the LLM.
   const atsTotal = app.atsMatched.length + app.atsMissing.length;
   const coverage = atsTotal === 0 ? 0 : Math.round((app.atsMatched.length / atsTotal) * 100);
-  // The recruiter names its own weakest bullet; fall back to the verdict list for
-  // applications scored before that field was stored.
-  const weakestId = app.recruiterWeakestBulletId;
-  const weakLinks = [
-    ...app.recruiterBulletVerdicts.filter(v => v.verdict === 'drop'),
-    ...app.recruiterBulletVerdicts.filter(v => v.verdict === 'weak'),
-  ];
+
+  const over = s.selectedLines > s.MAX_TOTAL_LINES;
+  const pct = Math.min(100, Math.round((s.selectedLines / s.MAX_TOTAL_LINES) * 100));
+
+  // Anything the recruiter pass flagged that is still on the page — the actionable count.
+  const flaggedIn = app.recruiterBulletVerdicts.filter(
+    v => v.verdict !== 'keep' && s.selectedIds.has(v.bulletId),
+  );
 
   return (
     <div className="shell">
       <div className="row row--between row--centered" style={{ marginBottom: 8 }}>
-        <Link to="/applications" className="label muted" style={{ textDecoration: 'none' }}>← ALL APPLICATIONS</Link>
-        <span className={`outcome outcome--${app.outcome}`}>{app.outcome}</span>
+        <Link to="/applications" className="eyebrow" style={{ textDecoration: 'none' }}>← All applications</Link>
       </div>
 
-      <h1 className="display" style={{ fontSize: 64, margin: '8px 0 4px', lineHeight: 0.95 }}>
+      <h1 className="display" style={{ fontSize: 56, margin: '4px 0 6px', lineHeight: 0.98 }}>
         {app.company || 'Untitled'}
       </h1>
-      <div className="editorial muted" style={{ fontSize: 20, marginBottom: 24 }}>
-        {app.role || 'role'} · emphasis: <em>{app.roleEmphasis}</em>
+      <div className="editorial" style={{ fontSize: 17, color: 'var(--muted)', marginBottom: 18 }}>
+        {app.role || 'role'} · tuned for <em>{app.roleEmphasis}</em> ·{' '}
+        {new Date(app.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
       </div>
 
-      <div className="row" style={{ gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
-        {['applied', 'interview', 'offer', 'rejected'].map(o => (
-          <button
-            key={o}
-            className={`btn btn--sm ${app.outcome === o ? '' : 'btn--ghost'}`}
-            style={app.outcome === o ? outcomeStyle(o) : { border: '2px solid var(--ink)' }}
-            disabled={s.busy}
-            onClick={() => s.setOutcome(o)}
-          >MARK {o.toUpperCase()}</button>
-        ))}
+      {/* One segmented control instead of four MARK buttons that look like four actions. */}
+      <div style={{ marginBottom: 16 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Status</div>
+        <div className="filterset">
+          {OUTCOMES.map(o => (
+            <button
+              key={o}
+              className={app.outcome === o ? 'is-on' : ''}
+              disabled={s.busy}
+              onClick={() => s.setOutcome(o)}
+            >{o}</button>
+          ))}
+        </div>
       </div>
 
-      <div className="split">
+      {/* ---------- health strip: every number this page knows, once, labelled ---------- */}
+      <div className="statrow">
+        <div className={over ? 'stat stat--alert' : 'stat'}>
+          <div className="stat__label">Page budget</div>
+          <div className="stat__value">{s.selectedLines}<small>/{s.MAX_TOTAL_LINES} lines</small></div>
+          <div className="meter" style={{ marginTop: 8 }}>
+            <div
+              className={`meter__fill ${over ? 'meter__fill--over' : 'meter__fill--ok'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="stat__caption">
+            {over ? `${s.selectedLines - s.MAX_TOTAL_LINES} lines over — cut something.` : 'Fits on one page.'}
+          </div>
+        </div>
 
-        {/* LEFT: ranked bullets */}
+        <Stat
+          label="Compiled length"
+          value={app.pageCount ?? '—'}
+          unit={app.pageCount === 1 ? ' page' : ' pages'}
+          tone={app.pageCount === null ? undefined : app.pageCount === 1 ? 'good' : 'alert'}
+          caption={
+            app.pageCount === null
+              ? 'Not rendered yet.'
+              : app.pageCount === 1 ? 'Last render fit.' : 'Last render spilled over.'
+          }
+        />
+
+        <Stat
+          label="Fit score"
+          value={app.fitScore ?? '—'}
+          unit="/100"
+          caption={`You vs the job. ${app.fitVerdict ?? ''}`}
+        />
+
+        <Stat
+          label="Page score"
+          value={app.recruiterScore ?? '—'}
+          unit="/100"
+          tone={app.recruiterStale ? 'alert' : undefined}
+          caption={
+            app.recruiterStale
+              ? 'Stale — scored before your last edit.'
+              : `How the resume sells you. ${app.recruiterVerdict ?? ''}`
+          }
+        />
+
+        <Stat
+          label="JD coverage"
+          value={coverage}
+          unit="%"
+          caption={`${app.atsMatched.length} of ${atsTotal} keywords present.`}
+        />
+      </div>
+
+      <div className="labsplit" style={{ marginTop: 26 }}>
+
+        {/* ================= LEFT: the editor ================= */}
         <div>
-          <Section num="03.A" title="Ranked Bullets" count={s.ranking.length} />
-          <div className="label muted" style={{ marginBottom: 10 }}>
-            CLICK RANK TO TOGGLE · {s.selectedIds.size} INCLUDED
+          <div className="eyebrow" style={{ marginBottom: 4 }}>Bullets on the page</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 10 }}>
+            {s.selectedIds.size} of {s.ranking.length} included · {s.lockedIds.size} locked ·{' '}
+            {flaggedIn.length > 0
+              ? `${flaggedIn.length} flagged by the recruiter pass`
+              : 'nothing flagged'}
           </div>
 
           {!s.bulletsReady ? (
@@ -93,269 +164,104 @@ export function ApplicationDetail() {
               ))}
             </div>
           ) : (
-            <div>
-              {s.grouped.experience.length > 0 && (
-                <div style={{ marginBottom: 18 }}>
-                  <div className="label muted" style={{ marginBottom: 8, letterSpacing: 1 }}>EXPERIENCE</div>
-                  {s.grouped.experience.map(g => (
-                    <BulletGroupSection
-                      key={g.key}
-                      g={g}
-                      open={s.expandedGroups.has(g.key)}
-                      selectedIds={s.selectedIds}
-                      expandedWhys={s.expandedWhys}
-                      bullets={s.bullets}
-                      verdicts={verdicts}
-                      previewing={s.previewKey === g.key}
-                      previewBusy={s.previewBusy}
-                      editingId={s.editingId}
-                      cfg={s.cfg}
-                      editingProjectId={s.editingProjectId}
-                      lockedIds={s.lockedIds}
-                      newIds={s.justAddedIds}
-                      onToggleOpen={() => s.toggleGroup(g.key)}
-                      onToggleSelect={s.toggleBullet}
-                      onToggleWhy={s.toggleWhy}
-                      onPreview={ids => s.previewGroup(g.key, ids)}
-                      onEdit={bid => s.setEditingId(bid)}
-                      onCancelEdit={() => s.setEditingId(null)}
-                      onSaveBullet={(b, text, tags) => s.saveBullet(b, text, tags)}
-                      onEditProject={pid => s.setEditingProjectId(pid)}
-                      onCancelEditProject={() => s.setEditingProjectId(null)}
-                      onSaveProject={(p, patch) => s.saveProject(p, patch)}
-                      onToggleLock={bid => s.toggleLock(bid)}
-                    />
-                  ))}
-                </div>
-              )}
-              {s.grouped.projects.length > 0 && (
-                <div>
-                  <div className="label muted" style={{ marginBottom: 8, letterSpacing: 1 }}>PROJECTS</div>
-                  {s.grouped.projects.map(g => (
-                    <BulletGroupSection
-                      key={g.key}
-                      g={g}
-                      open={s.expandedGroups.has(g.key)}
-                      selectedIds={s.selectedIds}
-                      expandedWhys={s.expandedWhys}
-                      bullets={s.bullets}
-                      verdicts={verdicts}
-                      previewing={s.previewKey === g.key}
-                      previewBusy={s.previewBusy}
-                      editingId={s.editingId}
-                      cfg={s.cfg}
-                      editingProjectId={s.editingProjectId}
-                      lockedIds={s.lockedIds}
-                      newIds={s.justAddedIds}
-                      onToggleOpen={() => s.toggleGroup(g.key)}
-                      onToggleSelect={s.toggleBullet}
-                      onToggleWhy={s.toggleWhy}
-                      onPreview={ids => s.previewGroup(g.key, ids)}
-                      onEdit={bid => s.setEditingId(bid)}
-                      onCancelEdit={() => s.setEditingId(null)}
-                      onSaveBullet={(b, text, tags) => s.saveBullet(b, text, tags)}
-                      onEditProject={pid => s.setEditingProjectId(pid)}
-                      onCancelEditProject={() => s.setEditingProjectId(null)}
-                      onSaveProject={(p, patch) => s.saveProject(p, patch)}
-                      onToggleLock={bid => s.toggleLock(bid)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            [
+              { heading: 'Experience', groups: s.grouped.experience },
+              { heading: 'Projects', groups: s.grouped.projects },
+            ].map(sec => sec.groups.length === 0 ? null : (
+              <div key={sec.heading}>
+                <div className="eyebrow" style={{ marginTop: 18, marginBottom: 2 }}>{sec.heading}</div>
+                {sec.groups.map(g => (
+                  <BulletGroupSection
+                    key={g.key}
+                    g={g}
+                    open={s.expandedGroups.has(g.key)}
+                    selectedIds={s.selectedIds}
+                    expandedWhys={s.expandedWhys}
+                    bullets={s.bullets}
+                    verdicts={verdicts}
+                    previewing={s.previewKey === g.key}
+                    previewBusy={s.previewBusy}
+                    editingId={s.editingId}
+                    cfg={s.cfg}
+                    editingProjectId={s.editingProjectId}
+                    lockedIds={s.lockedIds}
+                    newIds={s.justAddedIds}
+                    onToggleOpen={() => s.toggleGroup(g.key)}
+                    onToggleSelect={s.toggleBullet}
+                    onToggleWhy={s.toggleWhy}
+                    onPreview={ids => { s.previewGroup(g.key, ids); setTab('page'); }}
+                    onEdit={bid => s.setEditingId(bid)}
+                    onCancelEdit={() => s.setEditingId(null)}
+                    onSaveBullet={(b, text, tags) => s.saveBullet(b, text, tags)}
+                    onEditProject={pid => s.setEditingProjectId(pid)}
+                    onCancelEditProject={() => s.setEditingProjectId(null)}
+                    onSaveProject={(p, patch) => s.saveProject(p, patch)}
+                    onToggleLock={bid => s.toggleLock(bid)}
+                  />
+                ))}
+              </div>
+            ))
           )}
 
-          <div className="row row--between row--centered" style={{ marginTop: 20, position: 'sticky', bottom: 16, background: 'var(--paper)', padding: '12px 0', borderTop: '2px solid var(--ink)' }}>
-            <span className="label muted">
-              <span style={s.selectedLines > s.MAX_TOTAL_LINES ? { color: 'var(--rust)', fontWeight: 700 } : undefined}>
-                ~{s.selectedLines}/{s.MAX_TOTAL_LINES} LINES
-              </span>
-              {' · '}
-              {dirty ? 'SELECTION CHANGED · RE-RENDER PDF' : 'NO CHANGES'}
-              {s.lockedIds.size > 0 && ` · ${s.lockedIds.size} LOCKED`}
-            </span>
-            <button
-              className="btn btn--ghost btn--sm"
-              title="Re-pick bullets from the bank, keeping locked ones pinned"
-              onClick={() => s.startRefit()}
-              style={{ marginRight: 8 }}
-            >
-              REFIT SELECTION
-            </button>
-            <button className="btn btn--acid" onClick={() => s.setRerenderStreaming(true)}>
-              RE-RENDER PDF &nbsp;→
-            </button>
+          {/* One bar: what state you are in, and the one action that resolves it. */}
+          <div className="actionbar">
+            <div className="actionbar__budget">
+              <div className="actionbar__line">
+                <span>{s.selectedLines} of {s.MAX_TOTAL_LINES} lines used</span>
+                <span className={`savestate ${dirty ? 'savestate--dirty' : 'savestate--clean'}`}>
+                  {dirty ? 'Unsaved changes' : 'Saved'}
+                </span>
+              </div>
+              <div className="meter meter--thick">
+                <div
+                  className={`meter__fill ${over ? 'meter__fill--over' : 'meter__fill--ok'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+            <div className="actionbar__acts">
+              <button
+                className="minibtn"
+                style={{ padding: '9px 12px' }}
+                title="Re-pick from your whole bullet bank, keeping locked bullets pinned"
+                onClick={() => s.startRefit()}
+              >
+                Auto-pick again
+              </button>
+              <button
+                className="btn btn--sm"
+                style={{ background: dirty ? 'var(--acid)' : 'var(--paper)', borderWidth: 2 }}
+                onClick={() => s.setRerenderStreaming(true)}
+              >
+                Rebuild PDF →
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT: PDF preview + cover + ATS */}
-        <div className="stack">
-          <Section num="03.B" title="PDF" />
-          {s.previewErr && (
-            <div className="err" style={{ marginBottom: 8 }}>{s.previewErr}</div>
-          )}
-          {s.previewUrl && (
-            <div className="row row--between row--centered" style={{ background: 'var(--acid)', color: 'var(--ink)', padding: '6px 10px', border: '2px solid var(--ink)', borderBottom: 'none' }}>
-              <span className="label" style={{ fontWeight: 700 }}>
-                PREVIEW · {previewName(s)} · NOT SAVED
-              </span>
-              <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={s.closePreview}>✕ BACK TO SAVED</button>
-            </div>
-          )}
-          <div style={{ border: '2px solid var(--ink)', height: 'min(720px, 80vh)', background: '#fff' }}>
-            {s.previewUrl ? (
-              <iframe src={s.previewUrl} title="bullet preview" style={{ width: '100%', height: '100%', border: 'none' }} />
-            ) : app.pdfAvailable ? (
-              <iframe src={s.pdfBlobUrl ?? undefined} title="resume PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
-            ) : (
-              <div className="center-page" style={{ height: '100%' }}>
-                <div>
-                  <div className="err">tectonic failed to produce a PDF.</div>
-                  <pre style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto', marginTop: 12 }}>
-                    {app.tectonicLog?.slice(0, 1500)}
-                  </pre>
-                </div>
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <a href={pdfUrl} className="btn btn--sm" target="_blank" rel="noreferrer">↓ DOWNLOAD PDF</a>
-            <a href={texUrl} className="btn btn--sm">↓ DOWNLOAD .TEX</a>
+        {/* ================= RIGHT: one viewer, four tabs ================= */}
+        <div>
+          <div className="tabs">
+            <button className={tab === 'page' ? 'is-on' : ''} onClick={() => setTab('page')}>Page</button>
+            <button className={tab === 'cover' ? 'is-on' : ''} onClick={() => setTab('cover')}>
+              Cover
+              {app.coverLetterFlags.length > 0 && <span className="tabs__badge">{app.coverLetterFlags.length}</span>}
+            </button>
+            <button className={tab === 'review' ? 'is-on' : ''} onClick={() => setTab('review')}>
+              Review
+              {flaggedIn.length > 0 && <span className="tabs__badge">{flaggedIn.length}</span>}
+            </button>
+            <button className={tab === 'ats' ? 'is-on' : ''} onClick={() => setTab('ats')}>
+              Keywords
+              {app.atsMissing.length > 0 && <span className="tabs__badge">{app.atsMissing.length}</span>}
+            </button>
           </div>
 
-          <Section num="03.C" title="Cover Letter" />
-          {app.coverLetterFlags.length > 0 && (
-            <div className="err" style={{ marginBottom: 8 }}>
-              UNVERIFIED FIGURES: {app.coverLetterFlags.join(', ')} — not in your selected
-              bullets or the job description. Check before sending.
-            </div>
-          )}
-          <div className="panel panel--inset editorial" style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.55 }}>
-            {app.coverLetter || <span className="muted">No cover letter.</span>}
-          </div>
-
-          {app.fitScore !== null && (
-            <>
-              <Section num="03.D" title="Fit" />
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ marginBottom: 8 }}>
-                  <span className="tag tag--acid">{app.fitScore}/100</span>
-                  <span className="tag">{app.fitVerdict}</span>
-                  <span className="muted">
-                    &nbsp;technical {app.fitDimensions.technical ?? '—'} · experience {app.fitDimensions.experience ?? '—'}
-                  </span>
-                </div>
-                {app.fitStrengths.length > 0 && (
-                  <>
-                    <div className="label muted" style={{ marginBottom: 6 }}>STRENGTHS</div>
-                    <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
-                      {app.fitStrengths.map(t => <li key={t}>{t}</li>)}
-                    </ul>
-                  </>
-                )}
-                {app.fitGaps.length > 0 && (
-                  <>
-                    <div className="label muted" style={{ marginBottom: 6 }}>GAPS</div>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {app.fitGaps.map(t => <li key={t}>{t}</li>)}
-                    </ul>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-
-          {app.recruiterScore !== null && (
-            <>
-              <Section num="03.D2" title="Recruiter Pass" />
-              <div style={{ marginBottom: 20 }}>
-                <div className="label muted" style={{ marginBottom: 6 }}>
-                  HOW THIS PAGE SELLS YOU — NOT WHETHER YOU FIT
-                </div>
-                {app.recruiterStale && (
-                  <div className="err" style={{ marginBottom: 8 }}>
-                    SCORED FOR THE PREVIOUS SELECTION — re-generate to re-score.
-                  </div>
-                )}
-
-                {/* The critique leads: it is the actionable output, the score is context. */}
-                {app.recruiterThinnestRequirement && (
-                  <>
-                    <div className="label muted" style={{ marginBottom: 6 }}>THINNEST SUPPORT</div>
-                    <div style={{ marginBottom: 12 }}>{app.recruiterThinnestRequirement}</div>
-                  </>
-                )}
-
-                {weakestId && (
-                  <>
-                    <div className="label muted" style={{ marginBottom: 6 }}>WEAKEST BULLET</div>
-                    <div style={{ marginBottom: 12 }}>
-                      <span className="tag tag--rust">WEAKEST</span>
-                      &nbsp;{s.bullets[weakestId]?.text ?? weakestId}
-                      {verdicts[weakestId] && (
-                        <div className="muted" style={{ fontSize: 12 }}>{verdicts[weakestId].reason}</div>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {app.recruiterWeaknesses.length > 0 && (
-                  <>
-                    <div className="label muted" style={{ marginBottom: 6 }}>OBJECTIONS</div>
-                    <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
-                      {app.recruiterWeaknesses.map((w, i) => <li key={i}>{w}</li>)}
-                    </ul>
-                  </>
-                )}
-
-                <div className="label muted" style={{ marginBottom: 6 }}>WEAK OR DROPPABLE</div>
-                {weakLinks.length > 0 ? (
-                  <ul style={{ margin: '0 0 12px', paddingLeft: 18 }}>
-                    {weakLinks.map(v => (
-                      <li key={v.bulletId}>
-                        <span className={`tag ${v.verdict === 'drop' ? 'tag--rust' : ''}`}>{v.verdict.toUpperCase()}</span>
-                        &nbsp;{s.bullets[v.bulletId]?.text ?? v.bulletId}
-                        <div className="muted" style={{ fontSize: 12 }}>{v.reason}</div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="muted" style={{ marginBottom: 12 }}>
-                    Nothing on the page was marked weak or droppable.
-                  </div>
-                )}
-
-                <div style={{ marginBottom: 8 }}>
-                  <span className="tag tag--acid">PAGE {app.recruiterScore}/100</span>
-                  <span className="tag">{app.recruiterVerdict}</span>
-                </div>
-                <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
-                  evidence {app.recruiterDimensions.evidenceStrength ?? '—'}
-                  {' · '}relevance {app.recruiterDimensions.relevanceDensity ?? '—'}
-                  {' · '}JD coverage {coverage}% ({app.atsMatched.length}/{atsTotal})
-                </div>
-                {app.pageCount !== null && (
-                  <div style={app.pageCount === 1 ? undefined : { color: 'var(--rust)', fontWeight: 700 }}>
-                    {app.pageCount} page{app.pageCount === 1 ? '' : 's'}
-                    {app.pageCount === 1 ? '' : ' — trim the selection'}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <Section num="03.E" title="ATS" />
-          <div>
-            <div className="label muted" style={{ marginBottom: 6 }}>MATCHED</div>
-            <div style={{ marginBottom: 12 }}>
-              {app.atsMatched.map(k => <span key={k} className="tag tag--acid">{k}</span>)}
-              {app.atsMatched.length === 0 && <span className="muted">—</span>}
-            </div>
-            <div className="label muted" style={{ marginBottom: 6 }}>MISSING</div>
-            <div>
-              {app.atsMissing.map(k => <span key={k} className="tag tag--rust">{k}</span>)}
-              {app.atsMissing.length === 0 && <span className="muted">—</span>}
-            </div>
+          <div className="tabpane">
+            {tab === 'page' && <PagePane s={s} app={app} />}
+            {tab === 'cover' && <CoverPane app={app} />}
+            {tab === 'review' && <ReviewPane s={s} app={app} verdicts={verdicts} />}
+            {tab === 'ats' && <AtsPane app={app} coverage={coverage} />}
           </div>
         </div>
       </div>
@@ -387,17 +293,240 @@ export function ApplicationDetail() {
   );
 }
 
-/** Project name behind the open preview, for the banner. */
-function previewName(s: ReturnType<typeof useApplicationDetail>): string {
-  const all = [...s.grouped.experience, ...s.grouped.projects];
-  return all.find(g => g.key === s.previewKey)?.project?.name ?? 'Other';
+// ---------------------------------------------------------------- panes
+
+function PagePane({ s, app }: { s: Detail; app: ApplicationResponse }) {
+  const pdfUrl = api.pdfUrl(`/api/applications/${app.id}/pdf`);
+  const texUrl = api.pdfUrl(`/api/applications/${app.id}/tex`);
+  return (
+    <div>
+      {s.previewErr && <div className="err" style={{ marginBottom: 8 }}>{s.previewErr}</div>}
+
+      {s.previewUrl && (
+        <div
+          className="row row--between row--centered"
+          style={{ background: 'var(--acid)', padding: '6px 10px', border: '2px solid var(--ink)', borderBottom: 'none' }}
+        >
+          <span className="eyebrow" style={{ color: 'var(--ink)' }}>
+            Preview · {previewName(s)} · not saved
+          </span>
+          <button className="minibtn" onClick={s.closePreview}>✕ Back to saved</button>
+        </div>
+      )}
+
+      <div style={{ border: '2px solid var(--ink)', height: 'min(640px, 74vh)', background: '#fff' }}>
+        {s.previewUrl ? (
+          <iframe src={s.previewUrl} title="bullet preview" style={{ width: '100%', height: '100%', border: 'none' }} />
+        ) : app.pdfAvailable ? (
+          <iframe src={s.pdfBlobUrl ?? undefined} title="resume PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
+        ) : (
+          <div className="center-page" style={{ height: '100%', minHeight: 0 }}>
+            <div>
+              <div className="err">tectonic failed to produce a PDF.</div>
+              <pre style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto', marginTop: 12 }}>
+                {app.tectonicLog?.slice(0, 1500)}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <a href={pdfUrl} className="minibtn" style={{ padding: '8px 10px', textDecoration: 'none' }} target="_blank" rel="noreferrer">
+          ↓ Download PDF
+        </a>
+        <a href={texUrl} className="minibtn" style={{ padding: '8px 10px', textDecoration: 'none' }}>
+          ↓ Download .tex
+        </a>
+      </div>
+    </div>
+  );
 }
 
-function outcomeStyle(o: string): React.CSSProperties {
-  switch (o) {
-    case 'interview': return { background: 'var(--acid)', color: 'var(--ink)' };
-    case 'offer':     return { background: 'var(--ink)',  color: 'var(--paper)' };
-    case 'rejected':  return { background: 'var(--rust)', color: 'var(--paper)', borderColor: 'var(--rust)' };
-    default:          return { background: 'var(--ink)',  color: 'var(--paper)' };
+function CoverPane({ app }: { app: ApplicationResponse }) {
+  const letter = app.coverLetter;
+  return (
+    <div>
+      {app.coverLetterFlags.length > 0 && (
+        <div className="callout">
+          <div className="callout__head">Unverified figures</div>
+          <b>{app.coverLetterFlags.join(', ')}</b> — not in your selected bullets nor the job
+          description. Check before sending.
+        </div>
+      )}
+      <div style={{
+        whiteSpace: 'pre-wrap',
+        fontSize: 13.5,
+        lineHeight: 1.6,
+        maxHeight: 520,
+        overflow: 'auto',
+        background: 'var(--paper-2)',
+        padding: 14,
+        border: '1px solid var(--soft)',
+      }}>
+        {letter || <span className="muted">No cover letter.</span>}
+      </div>
+      {letter && (
+        <button
+          className="minibtn"
+          style={{ marginTop: 10, padding: '8px 10px' }}
+          onClick={() => navigator.clipboard?.writeText(letter)}
+        >
+          Copy letter
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Fit and the recruiter pass merged into one tab, ordered by what to do about it. */
+function ReviewPane({ s, app, verdicts }: {
+  s: Detail;
+  app: ApplicationResponse;
+  verdicts: Record<string, BulletVerdict>;
+}) {
+  const flagged = app.recruiterBulletVerdicts.filter(v => v.verdict !== 'keep');
+  const live = flagged.filter(v => s.selectedIds.has(v.bulletId));
+  const resolved = flagged.filter(v => !s.selectedIds.has(v.bulletId));
+  const weakestId = app.recruiterWeakestBulletId;
+
+  if (app.fitScore === null && app.recruiterScore === null) {
+    return <p className="muted" style={{ margin: 0, fontSize: 13 }}>This application has not been scored.</p>;
   }
+
+  return (
+    <div>
+      {app.recruiterStale && (
+        <div className="callout">
+          <div className="callout__head">Out of date</div>
+          This review scored an earlier selection. Rebuild the PDF to re-score.
+        </div>
+      )}
+
+      {app.recruiterThinnestRequirement && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Biggest hole</div>
+          <p style={{ margin: '0 0 16px', fontSize: 13.5, lineHeight: 1.55 }}>
+            {app.recruiterThinnestRequirement}
+          </p>
+        </>
+      )}
+
+      {weakestId && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Weakest bullet on the page</div>
+          <div style={{ marginBottom: 16, paddingLeft: 10, borderLeft: '3px solid var(--rust)' }}>
+            <div style={{ fontSize: 13, lineHeight: 1.45, marginBottom: 3 }}>
+              <RichText text={s.bullets[weakestId]?.text ?? weakestId} />
+            </div>
+            {verdicts[weakestId] && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.45 }}>{verdicts[weakestId].reason}</div>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className="eyebrow" style={{ marginBottom: 6 }}>
+        Still on the page and flagged ({live.length})
+      </div>
+      {live.length === 0 ? (
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--muted)' }}>
+          Nothing flagged is currently included.
+        </p>
+      ) : (
+        <div style={{ marginBottom: 16 }}>
+          {live.map(v => (
+            <div key={v.bulletId} style={{ marginBottom: 10, paddingLeft: 10, borderLeft: '3px solid var(--rust)' }}>
+              <span className={`vchip vchip--${v.verdict}`}>{v.verdict}</span>
+              <div style={{ fontSize: 13, lineHeight: 1.45, margin: '5px 0 3px' }}>
+                <RichText text={s.bullets[v.bulletId]?.text ?? v.bulletId} />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.45 }}>{v.reason}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {resolved.length > 0 && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Flagged and already removed ({resolved.length})</div>
+          <div style={{ marginBottom: 16, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+            {resolved.map(v => (
+              <div key={v.bulletId} style={{ marginBottom: 4 }}>
+                ✓ {(s.bullets[v.bulletId]?.text ?? v.bulletId).slice(0, 70)}…
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {app.recruiterWeaknesses.length > 0 && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Objections a recruiter would raise</div>
+          <ul style={{ margin: '0 0 16px', paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }}>
+            {app.recruiterWeaknesses.map((w, i) => <li key={i} style={{ marginBottom: 4 }}>{w}</li>)}
+          </ul>
+        </>
+      )}
+
+      {app.fitStrengths.length > 0 && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Where you are strong</div>
+          <ul style={{ margin: '0 0 16px', paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }}>
+            {app.fitStrengths.map(t => <li key={t} style={{ marginBottom: 4 }}>{t}</li>)}
+          </ul>
+        </>
+      )}
+
+      {app.fitGaps.length > 0 && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Where you are short</div>
+          <ul style={{ margin: '0 0 16px', paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }}>
+            {app.fitGaps.map(t => <li key={t} style={{ marginBottom: 4 }}>{t}</li>)}
+          </ul>
+        </>
+      )}
+
+      <div className="eyebrow" style={{ marginBottom: 6 }}>Sub-scores</div>
+      <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+        technical {app.fitDimensions.technical ?? '—'} · experience {app.fitDimensions.experience ?? '—'}
+        {' · '}evidence {app.recruiterDimensions.evidenceStrength ?? '—'}
+        {' · '}relevance {app.recruiterDimensions.relevanceDensity ?? '—'}
+      </div>
+    </div>
+  );
+}
+
+function AtsPane({ app, coverage }: { app: ApplicationResponse; coverage: number }) {
+  return (
+    <div>
+      <div className="eyebrow" style={{ marginBottom: 8 }}>
+        Keywords pulled from the job description, checked against your rendered page
+      </div>
+      <div className="meter meter--thick" style={{ marginBottom: 14 }}>
+        <div className="meter__fill meter__fill--ok" style={{ width: `${coverage}%` }} />
+      </div>
+
+      <div className="eyebrow" style={{ marginBottom: 6 }}>On the page ({app.atsMatched.length})</div>
+      <div className="kwgrid" style={{ marginBottom: 16 }}>
+        {app.atsMatched.map(k => <span key={k} className="kw kw--hit">{k}</span>)}
+        {app.atsMatched.length === 0 && <span className="muted">—</span>}
+      </div>
+
+      <div className="eyebrow" style={{ marginBottom: 6 }}>Missing ({app.atsMissing.length})</div>
+      <div className="kwgrid">
+        {app.atsMissing.map(k => <span key={k} className="kw kw--miss">{k}</span>)}
+        {app.atsMissing.length === 0 && <span className="muted">—</span>}
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12, lineHeight: 1.5 }}>
+        Missing is not automatically bad — only add a keyword if you can back it with real work.
+      </p>
+    </div>
+  );
+}
+
+/** Project name behind the open preview, for the banner. */
+function previewName(s: Detail): string {
+  const all = [...s.grouped.experience, ...s.grouped.projects];
+  return all.find(g => g.key === s.previewKey)?.project?.name ?? 'Other';
 }
