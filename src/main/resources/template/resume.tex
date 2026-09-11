@@ -53,7 +53,7 @@
     \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
       \textbf{#1} & #2 \\[-2pt]
       \textit{\small#3} & \textit{\small #4} \\
-    \end{tabular*}\vspace{-6pt}
+    \end{tabular*}\vspace{-2pt}
 }
 
 \newcommand{\resumeSubheadingUni}[5]{
@@ -71,15 +71,15 @@
     \item
     \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
       \small#1 & #2 \\
-    \end{tabular*}\vspace{-6pt}
+    \end{tabular*}\vspace{-4pt}
 }
 
 \renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
 
-\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=0pt]}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=4pt]}
 \newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
-\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, itemsep=0pt, parsep=0pt, topsep=4pt, partopsep=0pt]}
-\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-4pt}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, itemsep=2pt, parsep=0pt, topsep=4pt, partopsep=0pt]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 
 % Self-measuring skills row: guarantees a category line never wraps, instead of trusting a
 % char-count estimate on the Java side. Measures its own rendered width with \sbox and
@@ -135,6 +135,7 @@
 
 %-----------PROJECTS-----------
 %%SECTION:PROJECT_ITEMS%%
+\vspace{-10pt}
 \section{Projects}
     \resumeSubHeadingListStart
 {{PROJECT_ITEMS}}
@@ -143,8 +144,9 @@
 
 %-----------TECHNICAL SKILLS-----------
 %%SECTION:SKILLS_BLOCK%%
+\vspace{-8pt}
 \section{Technical Skills}
- \begin{itemize}[leftmargin=0.15in, label={}]
+ \begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=0pt]
     \item{
      \skillrow{Languages}{{{SKILLS_LANGUAGES}}}
      \skillrow{Frameworks}{{{SKILLS_FRAMEWORKS}}}
