@@ -2,10 +2,18 @@ server:
   port: 8080
   servlet:
     session:
+      # Tomcat's default is 30 minutes of idle, which logged people out whenever they
+      # left a tab alone over lunch. Nothing in the UI polls while idle, so the only
+      # thing keeping a session warm is the user clicking.
+      timeout: ${SESSION_TIMEOUT:7d}
       cookie:
         http-only: true
         same-site: ${COOKIE_SAME_SITE:Lax}
         secure: ${COOKIE_SECURE:false}
+        # Without max-age this is a browser-session cookie: closing the browser threw
+        # the session away even though the server still considered it valid. Kept in
+        # step with timeout above so the cookie and the server agree on the deadline.
+        max-age: ${SESSION_TIMEOUT:7d}
 
 spring:
   datasource:
