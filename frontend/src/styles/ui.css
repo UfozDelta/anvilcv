@@ -126,8 +126,12 @@
 }
 
 /* Children sit above the stretched link; only inert text opts out of hit-testing,
-   so the link still covers the row and the real controls stay clickable. */
-.approw > * { position: relative; z-index: 1; pointer-events: none; }
+   so the link still covers the row and the real controls stay clickable.
+   The :not() is load-bearing — this rule and .approw__link have equal specificity, so a
+   blanket `.approw > *` wins on source order, drops the link back to position:relative and
+   turns it into an in-flow grid item. Every real child then shifts one track right, the
+   status select lands in the 34px menu track, and the menu wraps to a second row. */
+.approw > *:not(.approw__link) { position: relative; z-index: 1; pointer-events: none; }
 .approw__link,
 .approw button,
 .approw select,

@@ -61,3 +61,5 @@ LLM_SETTINGS_PLAN.md
 !docs/**/*.pdf
 claude.md
 context_work/
+
+logging-plan.md

@@ -31,8 +31,9 @@ export const LAB_CFG: GenerationConfig = {
   actionVerbStyle: 'TECHNICAL',
 };
 
-/** The one-page line budget the real detail page enforces. */
-export const LAB_MAX_LINES = 29;
+/** The one-page line budget the real detail page enforces — keep in step with the backend's
+ *  BulletSelector.MAX_TOTAL_LINES, same as useApplicationDetail's copy. */
+export const LAB_MAX_LINES = 31;
 
 // ---------------------------------------------------------------- list page
 

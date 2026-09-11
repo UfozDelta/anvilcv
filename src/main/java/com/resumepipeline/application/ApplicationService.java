@@ -278,11 +278,19 @@ public class ApplicationService {
         // orTimeout: callJsonWithRetry retries over a 120s provider timeout, so an unbounded
         // join can add minutes AFTER the PDF is already compiled — the user would sit on a
         // finished resume waiting for a badge. A timeout is treated as any other failure.
+        //
+        // 90s, not the 15s this shipped with. This is the largest generation in the pipeline —
+        // a verdict plus a written reason for every rendered bullet — and 15s killed it on
+        // every single run: observed 42.6s to a valid 4474-char response, against 48.2s for
+        // rank and 12.2s for fit on the same provider. Every application ever generated had a
+        // null recruiterScore because of it. Note orTimeout abandons the future without
+        // cancelling the HTTP call, so an over-tight bound still pays for the tokens and then
+        // discards the answer — the cap has to clear real p99 latency, not merely exist.
         CompletableFuture<LlmClient.RecruiterResult> recruiterFuture = CompletableFuture.supplyAsync(() ->
                 llm.reviewResume(new LlmClient.RecruiterRequest(clean.cleanJd(), clean.company(), clean.role(),
                         clean.keywords(), roleEmphasis, renderedBullets, filledSkills, selectedCourses),
                         progress, tokens), PARALLEL_EXECUTOR)
-                .orTimeout(15, java.util.concurrent.TimeUnit.SECONDS);
+                .orTimeout(90, java.util.concurrent.TimeUnit.SECONDS);
 
         // ATS report, narrowed to what actually lands on the page.
         //

@@ -7,8 +7,13 @@ import { parseRanking } from '../lib/ranking';
 import { useGenerationConfig } from './useGenerationConfig';
 
 const TOP_N = 15;
-/** Mirrors `BulletSelector.MAX_TOTAL_LINES` — rendered bullet lines that fit one page. */
-const MAX_TOTAL_LINES = 29;
+/**
+ * Rendered bullet lines that fit one page. Must equal `BulletSelector.MAX_TOTAL_LINES` on the
+ * backend — this drifted to 29 against a backend 31, so the detail page's budget meter called
+ * a selection over budget two lines before the selector did. There is no shared source for
+ * this: if you change it there, change it here.
+ */
+const MAX_TOTAL_LINES = 31;
 
 export function useApplicationDetail(id: string | undefined) {
   const [app, setApp] = useState<ApplicationResponse | null>(null);

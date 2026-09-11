@@ -36,6 +36,14 @@ import java.util.stream.Collectors;
  * page budget is dropped <b>whole</b>; it is never rendered as a one-bullet stub, which reads
  * as padding.
  *
+ * <p><b>The per-entry floor outranks the one-page budget.</b> When the kind floors pin the
+ * entry count so no whole entry can be dropped and the page is still over
+ * {@link #MAX_TOTAL_LINES}, the page overruns onto a second sheet rather than thin an entry
+ * below {@link #MAX_PER_PROJECT}. Reachable in practice — {@code MIN_EXPERIENCE_PROJECTS +
+ * MIN_PROJECT_ENTRIES} entries at {@code MAX_PER_PROJECT} bullets of two to three lines each
+ * clears the budget — and accepted deliberately: three bullets per entry is the stronger
+ * guarantee.
+ *
  * <p>Two consequences worth stating plainly, because both have been got wrong here before:
  * <ul>
  *   <li><b>Dedup outranks the floor.</b> A repeated claim is worse on a resume than a short
@@ -377,8 +385,16 @@ public final class BulletSelector {
             }
             // Every remaining entry is holding up a kind floor (or a lock): overrun the page
             // rather than silently abandon the diversity guarantee or drop a pinned bullet.
-            // Unreachable while the floors sum below MAX_ENTRIES, but the loop must not spin
-            // if that ever stops being true.
+            //
+            // This branch IS reachable, contrary to what this comment used to claim ("while the
+            // floors sum below MAX_ENTRIES"). That argument counts entries; the loop also runs
+            // on lines. At exactly MIN_EXPERIENCE_PROJECTS + MIN_PROJECT_ENTRIES entries nothing
+            // is droppable, and 5 entries x MAX_PER_PROJECT bullets of 2-3 lines each clears
+            // MAX_TOTAL_LINES — observed in production at 36 estimated lines against a 31
+            // budget, rendering two pages.
+            //
+            // Overrunning is the deliberate choice here: MAX_PER_PROJECT is a hard floor, so an
+            // entry is never shrunk to fit. A second page is preferred to a thinned entry.
             if (victim == null) break;
             UUID v = victim;
             List<Bullet> doomed = selected.stream().filter(b -> b.getProjectId().equals(v)).toList();
