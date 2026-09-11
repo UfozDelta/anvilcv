@@ -83,13 +83,16 @@ public final class BulletSelector {
      * count — every entry costs ~1 line of heading <i>and</i> demands 3 more bullet lines,
      * and a constant sees neither. Derived from resume.tex's geometry (textheight 10.2in less
      * the header, skills block, section rules and entry headings, over a 12pt bullet
-     * baseline), the projects-only layout that shipped has room for ~29 lines and the
-     * experience-bearing layout for ~23. 29 is the former; it is deliberately optimistic,
-     * because pass 4's trim drops a whole entry when it overruns and that is the outcome we
-     * want anyway. Promote this to the real formula once one compiled PDF has calibrated the
-     * intercept — nothing here has yet been measured against a real render.
+     * baseline). Promote this to the real formula once the per-entry cost is measured
+     * directly rather than folded into one constant.
+     *
+     * <p>Calibrated against a real compile: 2 experience + 4 project entries (18 bullets,
+     * several 2-line) fit on 1 page after resume.tex's list/section spacing was tightened
+     * (zeroed topsep/parsep on the entry lists, pulled-up vspace before the Projects and
+     * Technical Skills section headings). That mixed-kind layout previously assumed only
+     * ~23 usable lines; 31 reflects the room the tightened template actually has.
      */
-    static final int MAX_TOTAL_LINES = 29;
+    static final int MAX_TOTAL_LINES = 31;
 
     private static final int MIN_EXPERIENCE_PROJECTS = 2;
     private static final int MIN_PROJECT_ENTRIES = 3;
