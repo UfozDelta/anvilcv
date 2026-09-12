@@ -1,3 +1,16 @@
+logging:
+  level:
+    root: INFO
+    com.resumepipeline:      ${LOG_LEVEL_APP:INFO}
+    com.resumepipeline.llm:  ${LOG_LEVEL_LLM:INFO}
+    org.springframework.web: WARN
+    org.flywaydb:            ${LOG_LEVEL_FLYWAY:WARN}
+    com.zaxxer.hikari:       WARN
+  pattern:
+    # Boot's own correlation slot, between thread and logger in the default
+    # console pattern. No actuator or micrometer-tracing dependency needed.
+    correlation: "[%X{req:-none}|%X{user:-anon}] "
+
 server:
   port: 8080
   servlet:

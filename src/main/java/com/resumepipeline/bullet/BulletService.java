@@ -9,6 +9,7 @@ import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
+import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectRepository;
@@ -485,9 +486,9 @@ public class BulletService {
 
         List<CompletableFuture<RawGeneration>> futures = categories.stream()
                 .map(c -> CompletableFuture.supplyAsync(
-                        () -> generateBulletsOnly(userId, projectId, c,
+                        Mdc.wrap(() -> generateBulletsOnly(userId, projectId, c,
                                 categories.stream().filter(o -> !o.equals(c)).toList(),
-                                tagged(progress, c)), PARALLEL_EXECUTOR))
+                                tagged(progress, c))), PARALLEL_EXECUTOR))
                 .toList();
 
         List<RawGeneration> results;
