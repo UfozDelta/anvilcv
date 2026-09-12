@@ -93,6 +93,11 @@ export function AdminPage() {
   const [measure, setMeasure] = useState<MeasureDiagnostics | null>(null);
   const [measureErr, setMeasureErr] = useState<string | null>(null);
 
+  const [logs, setLogs] = useState<string[] | null>(null);
+  const [logsErr, setLogsErr] = useState<string | null>(null);
+  const [logsContains, setLogsContains] = useState('');
+  const [logsLevel, setLogsLevel] = useState('');
+
   const load = (v: SettingsView) => {
     setView(v);
     setDraft(toDraft(v));
@@ -113,6 +118,26 @@ export function AdminPage() {
       .then(setMeasure)
       .catch(e => setMeasureErr(e.message));
   }, [isAdmin]);
+
+  const loadLogs = () => {
+    const params = new URLSearchParams();
+    if (logsContains.trim()) params.set('contains', logsContains.trim());
+    if (logsLevel) params.set('level', logsLevel);
+    const qs = params.toString();
+    api.get<string[]>(`/api/admin/logs${qs ? `?${qs}` : ''}`)
+      .then(lines => { setLogs(lines); setLogsErr(null); })
+      .catch(e => setLogsErr(e.message));
+  };
+
+  // 3-5s, not the 1500ms EventStream.tsx polls at for pipeline progress — an admin reading a
+  // log view isn't waiting on a job to finish, so there's no reason to poll that hot.
+  useEffect(() => {
+    if (!isAdmin) return;
+    loadLogs();
+    const id = setInterval(loadLogs, 4000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, logsContains, logsLevel]);
 
   // The nav link is already hidden for non-admins; this covers someone typing the URL.
   // It is a courtesy redirect, not the access control — that lives on the server.
@@ -312,6 +337,42 @@ export function AdminPage() {
             </div>
           </>
         )}
+      </div>
+
+      <Section num="09" title="Live Logs (Admin)" />
+      <div style={styles.section}>
+        <p style={note}>
+          In-process ring buffer, most recent {logs?.length ?? 0} lines shown — memory only,
+          resets on restart. Not retention; see the Docker log rotation instead for that.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={logsContains}
+            onChange={e => setLogsContains(e.target.value)}
+            placeholder="contains… (e.g. job-7b2e91 or req=)"
+            style={{ ...mono, fontSize: '0.78rem', flex: 1, minWidth: 200, padding: '6px 8px' }}
+          />
+          <select
+            value={logsLevel}
+            onChange={e => setLogsLevel(e.target.value)}
+            style={{ ...mono, fontSize: '0.78rem', padding: '6px 8px' }}
+          >
+            <option value="">ALL</option>
+            <option value="DEBUG">DEBUG+</option>
+            <option value="INFO">INFO+</option>
+            <option value="WARN">WARN+</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+          <button className="btn btn--ghost" onClick={loadLogs}>REFRESH</button>
+        </div>
+        {logsErr && <div className="err" style={{ marginTop: 8 }}>{logsErr}</div>}
+        <pre style={{
+          ...mono, fontSize: '0.68rem', lineHeight: 1.5, marginTop: 12, padding: 12,
+          border: '1px solid var(--rule)', maxHeight: 480, overflow: 'auto', whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}>
+          {logs && logs.length > 0 ? logs.join('\n') : (logs ? 'No matching lines.' : 'Loading…')}
+        </pre>
       </div>
     </div>
   );
