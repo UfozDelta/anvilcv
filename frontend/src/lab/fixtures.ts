@@ -106,6 +106,11 @@ export const LAB_PROJECTS: Project[] = [
     company: 'Atlas Freight',
     location: 'Remote',
     dates: 'Jun 2024 — Present',
+    // Deliberately covers some techStack terms with bullets already and leaves others
+    // (redis, kubernetes) untouched, so the coverage-gap prototype has a real gap to show.
+    techStack: 'Postgres, Go, OpenAPI, Redis, Kubernetes',
+    scaleImpact: '12 carrier integrations, 80 endpoints, p99 quote latency 1.8s → 240ms',
+    securityPosture: 'Per-carrier API keys rotated quarterly; no PCI scope on this service.',
     createdAt: '2026-01-04T00:00:00Z',
   },
   {

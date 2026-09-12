@@ -25,6 +25,90 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-09-11',
+    title: 'Projects & Experiences rework',
+    status: 'prototype',
+    summary: (
+      <>
+        Same audit as the Applications pass, pointed at the two oldest screens in the app. Not
+        promoted yet — prototype only, reusing the primitives (<code>statrow</code>,{' '}
+        <code>tabs</code>, the row menu) that already shipped from the Applications rework
+        rather than inventing new ones.
+      </>
+    ),
+    protos: [
+      {
+        to: '/lab/projects',
+        name: 'Projects list v2',
+        line: 'Projects and Experiences share one list — kind switch, search, sort, bullet counts.',
+      },
+      {
+        to: '/lab/project-detail',
+        name: 'Projects bank v2',
+        line: 'The bullet bank editor — one health strip, generate/info moved behind tabs.',
+      },
+    ],
+    fixes: [
+      'Positional index (01, 02…) removed — same issue as the Applications list',
+      'Delete moved off the native window.confirm() dialog into a menu with an in-place confirm',
+      'Each row now shows how many bullets are in its bank — previously invisible until opened',
+      'Search and sort added to a list that had neither',
+      '"⬡ repo cached" faint inline text replaced with a real badge',
+      'Edit Info, Context, the lens picker, filter pills and the bank itself — six panels always '
+        + 'stacked in one column — now three tabs, and only one is a lens picker, revealed on demand',
+      'A single health strip (bank size, categories covered, average line cost, context '
+        + 'completeness) replaces numbers scattered across the page',
+      'Projects and Experiences, previously two near-identical page files, share one list '
+        + 'component with a kind switch',
+      'Generate tab: each lens now badges how many bullets it already has, so picking one is a '
+        + 'choice instead of a guess',
+      'Generate tab: select-empty-lenses and clear shortcuts added next to the one-by-one toggle',
+      'Generate tab: an empty Context nudges you to fill it before generating, with a jump link',
+      'Generate tab: the time estimate now comes with an expected bullet-count range',
+      'Generate tab rebuilt again: the 8-category lens picker is gone entirely. It asked users '
+        + 'to guess a taxonomy the backend barely uses downstream (category is a sort key, not a '
+        + 'matching signal) and the lenses overlap by construction — idempotency shows up in '
+        + 'backend, security, and systems lens prompts at once',
+      'Generate tab tried "no picker" evidence coverage — rejected. It read as an audit '
+        + '(red NO BULLET YET rows) before producing anything, and gated on filling context first',
+      'Generate tab rebuilt a third time: lenses kept, made dynamic per project instead of the '
+        + "fixed 8. One lens per technology the project's own tech stack names, one per "
+        + 'narrative field actually filled in (Scale & impact, Hardest problem…) — a different '
+        + 'project gets a different list, nothing is a guessed taxonomy',
+      'Generate tab: added a free-text "describe one yourself" line — type a moment, get one '
+        + 'bullet for it, no lens required at all',
+      'Secondary categories (tried, then reverted): multi-category tagging solved a label-'
+        + 'accuracy problem for a label almost nothing downstream reads — dropped in favor of '
+        + 'the single primary category exactly as it was',
+      'Custom-bullet line now suggests a target instead of sitting empty: the least-covered '
+        + 'lens for this project surfaces as a dismissible nudge ("Nothing covers Kubernetes '
+        + 'yet") with a one-click starter that pre-fills the box — a recommendation, not '
+        + 'another audit to clear',
+      'Generate tab now leads with the 5 names as an actual checkbox picker (Backend/ML/'
+        + 'DevOps/Infra/Frontend), same interaction as the original fixed picker, generating a '
+        + 'generic bullet per bucket checked — the dynamic per-project lens list moved below it '
+        + 'as a smaller, denser pill row and kept its own default (nothing picked there still '
+        + 'means "generate from all of them"), independent of the buckets above',
+      'Info & Context: the paste-extract sidebar (parse & auto-fill from the Context Extractor '
+        + 'output) is back — dropped in the first prototype pass, now a sticky sidebar instead of '
+        + 'a slide-over drawer',
+      'Info & Context: Experiences and Projects now get separate forms — Projects never had '
+        + 'title/company/location/dates, so those inputs no longer render empty for them',
+      'Bullets tab: the full workflow ported over — approve/reject, add, edit, delete, refit, '
+        + 'sort by category or date, and a page-budget PDF preview',
+      'Approve/reject is a labelled toggle (✓ APPROVED / PENDING), not an underlined word',
+      'Delete moved into a row menu with an in-place confirm, off the bare DELETE button',
+      'Each bullet shows its real length-fit band (ONE_LINE, TOO_LONG, DEAD ZONE…) as a badge, '
+        + 'not just a line count',
+      'REFIT shows how many bullets are off-band before you run it, not just a bare count after',
+      'Generate now runs a visible progress bar and drops new bullets straight into the Bank tab',
+    ],
+    principles: [
+      'Reuse the primitives a prior pass already validated before inventing new ones.',
+      'A count of related items (bullets, applications) belongs on the row that owns them.',
+    ],
+  },
+  {
+    iso: '2026-09-11',
     title: 'Applications rework',
     status: 'shipped',
     summary: (

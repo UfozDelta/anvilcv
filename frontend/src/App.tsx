@@ -20,6 +20,8 @@ import { LabIndex } from './lab/LabIndex';
 import { LabList } from './lab/LabList';
 import { LabDetail } from './lab/LabDetail';
 import { LabRows } from './lab/LabRows';
+import { LabProjectsList } from './lab/LabProjectsList';
+import { LabProjectDetail } from './lab/LabProjectDetail';
 
 function AuthedShell({ children }: { children: React.ReactNode }) {
   return (
@@ -57,6 +59,8 @@ export function App() {
         <Route path="/lab/list"             element={<LabList />} />
         <Route path="/lab/detail"           element={<LabDetail />} />
         <Route path="/lab/rows"             element={<LabRows />} />
+        <Route path="/lab/projects"         element={<LabProjectsList />} />
+        <Route path="/lab/project-detail"   element={<LabProjectDetail />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>
