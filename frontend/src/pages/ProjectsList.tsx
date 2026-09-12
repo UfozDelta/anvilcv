@@ -6,20 +6,14 @@ import { NewEntryForm } from '../components/ProjectsList/NewEntryForm';
 
 type Sort = 'newest' | 'name';
 
-const KINDS: { key: ProjectKind; label: string }[] = [
-  { key: 'EXPERIENCE', label: 'Experiences' },
-  { key: 'PROJECT', label: 'Projects' },
-];
-
 const SORTS: { key: Sort; label: string }[] = [
   { key: 'newest', label: 'Newest first' },
   { key: 'name', label: 'A → Z' },
 ];
 
-export function ProjectsList({ initialKind }: { initialKind: ProjectKind }) {
+export function ProjectsList({ kind }: { kind: ProjectKind }) {
   const [rows, setRows] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [kind, setKind] = useState<ProjectKind>(initialKind);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
   const [showForm, setShowForm] = useState(false);
@@ -27,20 +21,14 @@ export function ProjectsList({ initialKind }: { initialKind: ProjectKind }) {
 
   async function load() {
     setLoading(true);
-    try { setRows(await api.get<Project[]>('/api/projects')); }
+    try { setRows(await api.get<Project[]>(`/api/projects?kind=${kind}`)); }
     finally { setLoading(false); }
   }
-  useEffect(() => { load(); }, []);
-
-  const counts = useMemo(() => {
-    const c: Record<ProjectKind, number> = { PROJECT: 0, EXPERIENCE: 0 };
-    for (const r of rows) c[r.kind]++;
-    return c;
-  }, [rows]);
+  useEffect(() => { load(); }, [kind]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let out = rows.filter(r => r.kind === kind);
+    let out = rows;
     if (needle) {
       out = out.filter(r =>
         (r.name ?? '').toLowerCase().includes(needle) ||
@@ -52,7 +40,7 @@ export function ProjectsList({ initialKind }: { initialKind: ProjectKind }) {
       name: (a, b) => (a.title || a.name).localeCompare(b.title || b.name),
     };
     return [...out].sort(by[sort]);
-  }, [rows, kind, q, sort]);
+  }, [rows, q, sort]);
 
   async function del(id: string, label: string) {
     setErr(null);
@@ -82,14 +70,6 @@ export function ProjectsList({ initialKind }: { initialKind: ProjectKind }) {
   return (
     <div className="shell">
       <div className="toolbar">
-        <div className="filterset">
-          {KINDS.map(k => (
-            <button key={k.key} className={kind === k.key ? 'is-on' : ''} onClick={() => { setKind(k.key); setShowForm(false); }}>
-              {k.label} <span className="filterset__count">{counts[k.key]}</span>
-            </button>
-          ))}
-        </div>
-
         <input
           className="toolbar__search"
           placeholder={kind === 'PROJECT' ? 'Search projects…' : 'Search role or company…'}

@@ -24,6 +24,38 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    iso: '2026-09-12',
+    title: 'Masthead nav rework',
+    status: 'prototype',
+    summary: (
+      <>
+        Prompted by a real bug: merging Projects and Experiences behind one nav item left the
+        page keeping its own in-page kind-switch too — the same choice offered twice. Landed on
+        keeping them as separate nav items and routes; this pass fixes what made the nav itself
+        fragile instead.
+      </>
+    ),
+    protos: [
+      {
+        to: '/lab/masthead',
+        name: 'Masthead nav rework',
+        line: 'Nav numbering derived from array position; settings menu split into Account / Tools.',
+      },
+    ],
+    fixes: [
+      'Nav item numbers (00, 01, 02…) now come from array position, not a typed-in digit — '
+        + 'adding, removing, or reordering an item can no longer leave a gap or a duplicate',
+      'Active-state matching is config-driven, one shared function over the nav array, instead '
+        + 'of a one-off pathname.startsWith() check bolted onto a single link',
+      'Settings dropdown splits Account (log out) from Tools (Upload Resume, Docs) — previously '
+        + 'one flat list mixing both',
+    ],
+    principles: [
+      'Anything that can desync when routes change (numbering, active-state) should be derived, '
+        + 'never hand-typed per link.',
+    ],
+  },
+  {
     iso: '2026-09-11',
     title: 'Projects & Experiences rework',
     status: 'prototype',

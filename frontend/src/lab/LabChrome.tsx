@@ -12,6 +12,7 @@ const ROUTES = [
   { to: '/lab/rows', label: 'Bullet row A/B' },
   { to: '/lab/projects', label: 'Projects list v2' },
   { to: '/lab/project-detail', label: 'Projects bank v2' },
+  { to: '/lab/masthead', label: 'Masthead nav rework' },
 ];
 
 /**

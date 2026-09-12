@@ -21,6 +21,7 @@ import { LabDetail } from './lab/LabDetail';
 import { LabRows } from './lab/LabRows';
 import { LabProjectsList } from './lab/LabProjectsList';
 import { LabProjectDetail } from './lab/LabProjectDetail';
+import { LabMasthead } from './lab/LabMasthead';
 
 function AuthedShell({ children }: { children: React.ReactNode }) {
   return (
@@ -38,8 +39,8 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/projects"             element={<AuthedShell><ProjectsList initialKind="PROJECT" /></AuthedShell>} />
-        <Route path="/experiences"          element={<AuthedShell><ProjectsList initialKind="EXPERIENCE" /></AuthedShell>} />
+        <Route path="/projects"             element={<AuthedShell><ProjectsList kind="PROJECT" /></AuthedShell>} />
+        <Route path="/experiences"          element={<AuthedShell><ProjectsList kind="EXPERIENCE" /></AuthedShell>} />
         <Route path="/projects/:id"         element={<AuthedShell><ProjectDetail /></AuthedShell>} />
         <Route path="/experiences/:id"      element={<AuthedShell><ProjectDetail /></AuthedShell>} />
         <Route path="/new"                  element={<AuthedShell><NewApplication /></AuthedShell>} />
@@ -60,6 +61,7 @@ export function App() {
         <Route path="/lab/rows"             element={<LabRows />} />
         <Route path="/lab/projects"         element={<LabProjectsList />} />
         <Route path="/lab/project-detail"   element={<LabProjectDetail />} />
+        <Route path="/lab/masthead"         element={<LabMasthead />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

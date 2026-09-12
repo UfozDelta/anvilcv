@@ -121,19 +121,19 @@ body::before {
 
 .masthead {
   border-bottom: var(--rule-heavy);
-  padding: 16px 0 12px;
-  margin-bottom: var(--pad-lg);
+  padding: 10px 0 8px;
+  margin-bottom: calc(var(--pad-lg) * 0.6);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: end;
-  gap: 24px;
+  gap: 18px;
 }
 
 .masthead__brand {
   font-family: var(--serif);
   font-weight: 900;
   font-style: italic;
-  font-size: 38px;
+  font-size: 26px;
   letter-spacing: -0.03em;
   line-height: 0.9;
 }
@@ -142,15 +142,16 @@ body::before {
   border-top: var(--rule-thin);
   align-self: end;
   height: 1px;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
 }
 
 .masthead__meta {
   text-align: right;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.13em;
+  line-height: 1.5;
 }
 
 .masthead__meta a {
@@ -170,7 +171,7 @@ body::before {
   border: none;
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ink);
   padding: 0;
   line-height: 1;
@@ -186,15 +187,15 @@ body::before {
   background: var(--paper);
   border: 1px solid var(--rule, #ccc);
   z-index: 100;
-  min-width: 150px;
+  min-width: 140px;
   box-shadow: 2px 2px 0 rgba(0,0,0,0.08);
 }
 
 .masthead__settings-menu a {
   display: block;
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink);
@@ -207,12 +208,12 @@ body::before {
 /* Sub-nav under masthead */
 .nav {
   display: flex;
-  gap: 24px;
-  margin: -28px auto var(--pad-lg);
-  padding-bottom: 10px;
+  gap: 16px;
+  margin: 0 auto calc(var(--pad-lg) * 0.7);
+  padding-bottom: 6px;
   border-bottom: var(--rule-thin);
-  font-size: 12px;
-  letter-spacing: 0.15em;
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   font-weight: 700;
 }
@@ -553,15 +554,14 @@ a:focus-visible, button:focus-visible {
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: 12px;
-    margin-bottom: var(--pad-lg);
+    margin-bottom: calc(var(--pad-lg) * 0.6);
   }
-  .masthead__brand { font-size: 26px; }
+  .masthead__brand { font-size: 22px; }
   .masthead__rule { display: none; }
   .masthead__meta { font-size: 10px; line-height: 1.5; }
 
   /* Nav scrolls horizontally instead of wrapping into a wall of links. */
   .nav {
-    margin-top: -18px;
     gap: 16px;
     overflow-x: auto;
     flex-wrap: nowrap;
