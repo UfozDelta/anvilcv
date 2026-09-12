@@ -25,6 +25,11 @@ public class Project {
     @Column(nullable = false, columnDefinition = "text")
     private String description;
 
+    /** Long-form architecture/role overview used as generation context — distinct from the
+     *  short `description` shown in list rows. Filled in later via Info & Context. */
+    @Column(name = "context_description", columnDefinition = "text")
+    private String contextDescription;
+
     @Column(name = "source_path")
     private String sourcePath;
 
@@ -95,6 +100,8 @@ public class Project {
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    public String getContextDescription() { return contextDescription; }
+    public void setContextDescription(String contextDescription) { this.contextDescription = contextDescription; }
     public String getSourcePath() { return sourcePath; }
     public void setSourcePath(String sourcePath) { this.sourcePath = sourcePath; }
     public String getGithubUrl() { return githubUrl; }

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import type { Project } from '../lib/api';
 import { LAB_BULLETS, LAB_PROJECTS } from './fixtures';
 import { LabChrome } from './LabChrome';
+import { NewEntryForm, type Kind } from './projectsList/NewEntryForm';
+import { RowMenu } from './projectsList/RowMenu';
 
-type Kind = 'PROJECT' | 'EXPERIENCE';
 type Sort = 'newest' | 'most-bullets' | 'name';
 
 const KINDS: { key: Kind; label: string }[] = [
@@ -17,39 +18,13 @@ const SORTS: { key: Sort; label: string }[] = [
   { key: 'name', label: 'A → Z' },
 ];
 
-function RowMenu({ onDelete, onDuplicate }: { onDelete: () => void; onDuplicate: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  return (
-    <div className="rowmenu" onMouseLeave={() => { setOpen(false); setConfirming(false); }}>
-      <button
-        className="rowmenu__btn"
-        aria-label="Row actions"
-        aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
-      >⋯</button>
-      {open && (
-        <div className="rowmenu__pop">
-          <button onClick={() => { onDuplicate(); setOpen(false); }}>Duplicate</button>
-          {confirming ? (
-            <button className="is-danger" onClick={() => { onDelete(); setOpen(false); setConfirming(false); }}>
-              Really delete?
-            </button>
-          ) : (
-            <button className="is-danger" onClick={() => setConfirming(true)}>Delete</button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function LabProjectsList() {
   const [rows, setRows] = useState<Project[]>(LAB_PROJECTS);
   const [kind, setKind] = useState<Kind>('EXPERIENCE');
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
   const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   const bulletCount = useMemo(() => {
     const c: Record<string, number> = {};
@@ -87,6 +62,10 @@ export function LabProjectsList() {
   function dup(p: Project) {
     setRows(rs => [{ ...p, id: `${p.id}-copy`, name: `${p.name} (copy)`, createdAt: new Date().toISOString() }, ...rs]);
   }
+  function create(p: Project) {
+    setRows(rs => [p, ...rs]);
+    setShowForm(false);
+  }
 
   return (
     <LabChrome
@@ -106,7 +85,7 @@ export function LabProjectsList() {
       <div className="toolbar">
         <div className="filterset">
           {KINDS.map(k => (
-            <button key={k.key} className={kind === k.key ? 'is-on' : ''} onClick={() => setKind(k.key)}>
+            <button key={k.key} className={kind === k.key ? 'is-on' : ''} onClick={() => { setKind(k.key); setShowForm(false); }}>
               {k.label} <span className="filterset__count">{counts[k.key]}</span>
             </button>
           ))}
@@ -188,6 +167,16 @@ export function LabProjectsList() {
             </div>
             <button className="minibtn" onClick={() => setQ('')}>Clear search</button>
           </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        {!showForm ? (
+          <button className="btn btn--acid" onClick={() => setShowForm(true)}>
+            {kind === 'PROJECT' ? '+ NEW PROJECT' : '+ NEW EXPERIENCE'}
+          </button>
+        ) : (
+          <NewEntryForm kind={kind} onCreate={create} onCancel={() => setShowForm(false)} />
         )}
       </div>
     </LabChrome>

@@ -21,6 +21,7 @@ export function useProjectDetail(id: string | undefined) {
   const [enrichOpen, setEnrichOpen] = useState(false);
   const [enrichSaving, setEnrichSaving] = useState(false);
   const [enrichErr, setEnrichErr] = useState<string | null>(null);
+  const [contextDescription, setContextDescription] = useState('');
   const [techStack, setTechStack] = useState('');
   const [yourRole, setYourRole] = useState('');
   const [ownership, setOwnership] = useState('');
@@ -54,6 +55,7 @@ export function useProjectDetail(id: string | undefined) {
         api.get<Bullet[]>(`/api/projects/${id}/bullets`),
       ]);
       setProject(p); setBullets(bs);
+      setContextDescription(p.contextDescription || '');
       setTechStack(p.techStack || '');
       setYourRole(p.yourRole || '');
       setOwnership(p.ownership || '');
@@ -89,7 +91,7 @@ export function useProjectDetail(id: string | undefined) {
     if (!id) return;
     setEnrichErr(null); setEnrichSaving(true);
     try {
-      await api.put(`/api/projects/${id}`, { techStack, yourRole, ownership, scaleImpact, hardestProblem, technicalDecisions, userImpact, securityPosture, description: editDescription });
+      await api.put(`/api/projects/${id}`, { techStack, yourRole, ownership, scaleImpact, hardestProblem, technicalDecisions, userImpact, securityPosture, contextDescription });
       await load();
       setEnrichOpen(false);
     } catch (e: any) {
@@ -115,7 +117,7 @@ export function useProjectDetail(id: string | undefined) {
     if (fields.technicalDecisions !== undefined) setTechnicalDecisions(fields.technicalDecisions);
     if (fields.userImpact !== undefined) setUserImpact(fields.userImpact);
     if (fields.securityPosture !== undefined) setSecurityPosture(fields.securityPosture);
-    if (fields.description !== undefined) setEditDescription(fields.description);
+    if (fields.description !== undefined) setContextDescription(fields.description);
     setPasteMsg(`Filled ${keys.length} field${keys.length === 1 ? "" : "s"} — review below, then SAVE CONTEXT.`);
     setPasteOpen(false);
     setPasteText('');
@@ -241,6 +243,7 @@ export function useProjectDetail(id: string | undefined) {
     sortMode, setSortMode, filterCat, setFilterCat,
     statusTab, setStatusTab,
     enrichOpen, setEnrichOpen, enrichSaving, enrichErr, saveEnrich,
+    contextDescription, setContextDescription,
     techStack, setTechStack, yourRole, setYourRole, ownership, setOwnership,
     scaleImpact, setScaleImpact, hardestProblem, setHardestProblem,
     technicalDecisions, setTechnicalDecisions, userImpact, setUserImpact,

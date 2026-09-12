@@ -13,7 +13,7 @@ export function EnrichDrawer(props: {
   technicalDecisions: string; setTechnicalDecisions: (v: string) => void;
   userImpact: string; setUserImpact: (v: string) => void;
   securityPosture: string; setSecurityPosture: (v: string) => void;
-  editDescription: string; setEditDescription: (v: string) => void;
+  contextDescription: string; setContextDescription: (v: string) => void;
   enrichErr: string | null; enrichSaving: boolean; saveEnrich: () => void;
 }) {
   const {
@@ -22,7 +22,7 @@ export function EnrichDrawer(props: {
     scaleImpact, setScaleImpact, hardestProblem, setHardestProblem,
     technicalDecisions, setTechnicalDecisions, userImpact, setUserImpact,
     securityPosture, setSecurityPosture,
-    editDescription, setEditDescription, enrichErr, enrichSaving, saveEnrich,
+    contextDescription, setContextDescription, enrichErr, enrichSaving, saveEnrich,
   } = props;
 
   return (
@@ -130,8 +130,8 @@ export function EnrichDrawer(props: {
             placeholder="AES-256-GCM for tokens at rest; SOC 2 Type II; per-tenant row-level isolation…" />
         </label>
         <label className="field">
-          <div className="field__label">Description / architecture overview</div>
-          <textarea className="field__textarea" value={editDescription} onChange={e => setEditDescription(e.target.value)}
+          <div className="field__label">Architecture overview</div>
+          <textarea className="field__textarea" value={contextDescription} onChange={e => setContextDescription(e.target.value)}
             style={{ minHeight: 80 }}
             placeholder="3–5 sentences: lead each with one subsystem + its technique or number…" />
         </label>

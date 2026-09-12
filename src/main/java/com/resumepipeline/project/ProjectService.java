@@ -52,7 +52,7 @@ public class ProjectService {
         return saved;
     }
 
-    public Project update(UUID userId, UUID id, String name, String description,
+    public Project update(UUID userId, UUID id, String name, String description, String contextDescription,
                           String githubUrl, String techStack, String yourRole,
                           String ownership, String scaleImpact, String hardestProblem,
                           String technicalDecisions, String userImpact, String securityPosture,
@@ -60,6 +60,7 @@ public class ProjectService {
         Project p = get(userId, id);
         if (name != null)        p.setName(name);
         if (description != null) p.setDescription(description);
+        p.setContextDescription(contextDescription);
         String oldUrl = p.getGithubUrl();
         p.setGithubUrl(githubUrl);
         p.setTechStack(techStack);
@@ -100,5 +101,30 @@ public class ProjectService {
         Project p = get(userId, id);
         bulletRepo.deleteByProjectId(p.getId());
         repo.deleteById(p.getId());
+    }
+
+    @Transactional
+    public Project duplicate(UUID userId, UUID id) {
+        Project src = get(userId, id);
+        Project copy = new Project(userId, src.getKind(), src.getName() + " (copy)", src.getDescription(),
+                null, src.getTitle(), src.getCompany(), src.getLocation(), src.getDates());
+        copy.setContextDescription(src.getContextDescription());
+        copy.setGithubUrl(src.getGithubUrl());
+        copy.setTechStack(src.getTechStack());
+        copy.setYourRole(src.getYourRole());
+        copy.setOwnership(src.getOwnership());
+        copy.setScaleImpact(src.getScaleImpact());
+        copy.setHardestProblem(src.getHardestProblem());
+        copy.setTechnicalDecisions(src.getTechnicalDecisions());
+        copy.setUserImpact(src.getUserImpact());
+        copy.setSecurityPosture(src.getSecurityPosture());
+        Project saved = repo.save(copy);
+
+        for (var b : bulletRepo.findByProjectIdOrderByCreatedAtAsc(src.getId())) {
+            var clone = new com.resumepipeline.bullet.Bullet(saved.getId(), b.getText(), b.getTags(), b.getCategory());
+            clone.setStatus(b.getStatus());
+            bulletRepo.save(clone);
+        }
+        return saved;
     }
 }

@@ -102,6 +102,7 @@ export const LAB_PROJECTS: Project[] = [
     kind: 'EXPERIENCE',
     name: 'Atlas Freight',
     description: 'Logistics marketplace, 40-person eng org.',
+    contextDescription: 'Backend team of 6 owning pricing, booking, and carrier integrations. Pricing ran a per-request DB scan that fell over under peak load; rebuilt it around a materialized rate table kept fresh by carrier webhooks.',
     title: 'Backend Engineer',
     company: 'Atlas Freight',
     location: 'Remote',

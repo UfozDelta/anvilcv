@@ -74,6 +74,9 @@ export interface Project {
   kind: ProjectKind;
   name: string;
   description: string;
+  /** Long-form architecture/role overview used as generation context — filled in later via
+   *  Info & Context, separate from the short `description` shown in list rows. Lab-only for now. */
+  contextDescription?: string | null;
   githubUrl?: string | null;
   repoContextReady?: boolean;
   techStack?: string | null;

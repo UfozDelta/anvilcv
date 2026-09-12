@@ -19,6 +19,7 @@ public class ProjectDtos {
     public record UpdateProjectRequest(
             String name,
             String description,
+            String contextDescription,
             String githubUrl,
             String techStack,
             String yourRole,
@@ -36,6 +37,7 @@ public class ProjectDtos {
             Project.Kind kind,
             String name,
             String description,
+            String contextDescription,
             String githubUrl,
             boolean repoContextReady,
             String techStack,
@@ -51,7 +53,7 @@ public class ProjectDtos {
     ) {
         public static ProjectResponse from(Project p) {
             return new ProjectResponse(
-                    p.getId(), p.getKind(), p.getName(), p.getDescription(),
+                    p.getId(), p.getKind(), p.getName(), p.getDescription(), p.getContextDescription(),
                     p.getGithubUrl(), p.getRepoContext() != null,
                     p.getTechStack(), p.getYourRole(), p.getOwnership(),
                     p.getScaleImpact(), p.getHardestProblem(),
