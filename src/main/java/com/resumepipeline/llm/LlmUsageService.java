@@ -26,7 +26,7 @@ public class LlmUsageService {
                     tokens.getPromptTokens(), tokens.getCandidatesTokens(), tokens.getCostUsd(),
                     applicationId, projectId));
         } catch (Exception e) {
-            log.error("Failed to persist LLM usage log [source={} user={}]: {}", source, userId, e.getMessage());
+            log.error("Failed to persist LLM usage log [source={} user={}]", source, userId, e);
         }
     }
 }

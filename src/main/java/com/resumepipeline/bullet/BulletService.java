@@ -9,6 +9,7 @@ import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
+import com.resumepipeline.obs.LogText;
 import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
@@ -268,7 +269,7 @@ public class BulletService {
             String text = rewriteTexts.get(r.id());
             String reject = rejectRefit(text, b.getText(), cfg, otherTexts, rewriteMeasured.get(r.id()));
             if (reject != null) {
-                progress.emit("Kept original (" + reject + "): " + abbreviate(b.getText()));
+                progress.emit("Kept original (" + reject + "): " + LogText.abbreviate(b.getText(), 60));
                 continue;
             }
             int before = BulletTextRules.charCount(b.getText());
@@ -340,10 +341,6 @@ public class BulletService {
         return BulletTextRules.decide(BulletTextRules.charCount(text), cfg) == BulletTextRules.Decision.KEPT;
     }
 
-    private static String abbreviate(String s) {
-        if (s == null) return "";
-        return s.length() <= 60 ? s : s.substring(0, 57) + "...";
-    }
 
     /** Single un-categorized generation. Persists bullets with category="general". */
     public List<Bullet> generateForProject(UUID userId, UUID projectId) {

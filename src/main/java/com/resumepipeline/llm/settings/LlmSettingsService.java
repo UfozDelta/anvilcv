@@ -218,7 +218,7 @@ public class LlmSettingsService {
         try {
             return cipher.decrypt(storedEnc);
         } catch (RuntimeException e) {
-            log.error("Failed to decrypt stored LLM API key - falling back to env. {}", e.getMessage());
+            log.error("Failed to decrypt stored LLM API key - falling back to env.", e);
             return ymlValue;
         }
     }

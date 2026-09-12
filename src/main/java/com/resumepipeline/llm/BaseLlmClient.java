@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
+import com.resumepipeline.obs.LogText;
 import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -552,7 +553,7 @@ public abstract class BaseLlmClient implements LlmClient {
             throw new RuntimeException("Failed to parse LLM refit response: " + json, e);
         }
         if (env.bullets == null) {
-            log.warn("LLM refit response had no 'bullets' array: {}", abbreviate(json));
+            log.warn("LLM refit response had no 'bullets' array: {}", LogText.abbreviate(json, 80));
             progress.emit("LLM returned no bullets array.");
             return new RefitResult(List.of());
         }
@@ -608,7 +609,7 @@ public abstract class BaseLlmClient implements LlmClient {
             throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
         }
         if (env.bullets == null) {
-            log.warn("LLM bullet response had no 'bullets' array: {}", abbreviate(json));
+            log.warn("LLM bullet response had no 'bullets' array: {}", LogText.abbreviate(json, 80));
             progress.emit("LLM returned no bullets array.");
             return new FilterResult(List.of(), List.of(), Cuts.ZERO, 0);
         }
@@ -627,7 +628,7 @@ public abstract class BaseLlmClient implements LlmClient {
             String text = BulletTextRules.ensureTerminalPeriod(b.text);
 
             if (BulletTextRules.hasForbiddenOpener(text)) {
-                log.info("Dropped bullet (forbidden opener): {}", abbreviate(text));
+                log.info("Dropped bullet (forbidden opener): {}", LogText.abbreviate(text, 80));
                 progress.emit("Cut: weak/passive opener - queued for rewrite");
                 // The content is fine; only the first two words are wrong. Repairing that is a
                 // verb swap, so this goes to the recovery pass rather than being thrown away.
@@ -638,7 +639,7 @@ public abstract class BaseLlmClient implements LlmClient {
             }
             List<String> fabricated = BulletTextRules.fabricatedNumbers(text, sourceContext);
             if (!fabricated.isEmpty()) {
-                log.info("Dropped bullet (fabricated metric {}): {}", fabricated, abbreviate(text));
+                log.info("Dropped bullet (fabricated metric {}): {}", fabricated, LogText.abbreviate(text, 80));
                 progress.emit("Cut: fabricated metric not in source (" + String.join(", ", fabricated) + ")");
                 cutFabricated++;
                 dropped++;
@@ -650,7 +651,8 @@ public abstract class BaseLlmClient implements LlmClient {
             switch (decision) {
                 case DEAD_ZONE -> {
                     log.info("Dropped bullet (char count {} in dead zone {}-{}): {}", cc,
-                            BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg), abbreviate(text));
+                            BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
+                            LogText.abbreviate(text, 80));
                     progress.emit("Cut: " + cc + "c - dead zone ("
                             + BulletTextRules.deadZoneLowChars(cfg) + "-" + BulletTextRules.deadZoneHighChars(cfg)
                             + "), needs " + BulletTextRules.singleLowChars(cfg) + "-" + BulletTextRules.singleHighChars(cfg)
@@ -661,7 +663,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 }
                 case TOO_LONG -> {
                     log.info("Dropped bullet (char count {} over two-line ceiling {}): {}", cc,
-                            BulletTextRules.doubleHighChars(cfg), abbreviate(text));
+                            BulletTextRules.doubleHighChars(cfg), LogText.abbreviate(text, 80));
                     progress.emit("Cut: " + cc + "c - over two-line ceiling (max "
                             + BulletTextRules.doubleHighChars(cfg) + ")");
                     // Same shape as a dead-zone reject — right content, wrong length — so it goes
@@ -672,7 +674,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 }
                 case TOO_SHORT -> {
                     log.info("Dropped bullet (char count {} too short, floor {}): {}", cc,
-                            BulletTextRules.minFloorChars(cfg), abbreviate(text));
+                            BulletTextRules.minFloorChars(cfg), LogText.abbreviate(text, 80));
                     progress.emit("Cut: " + cc + "c - too short (min " + BulletTextRules.minFloorChars(cfg) + ")");
                     cutTooShort++;
                     dropped++;
@@ -697,10 +699,6 @@ public abstract class BaseLlmClient implements LlmClient {
                 new Cuts(cutOpener, cutFabricated, cutDeadZone, cutTooLong, cutTooShort), total);
     }
 
-    private static String abbreviate(String s) {
-        if (s == null) return "";
-        return s.length() <= 80 ? s : s.substring(0, 77) + "...";
-    }
 
     // -------- cleanJd --------
 
