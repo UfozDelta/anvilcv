@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -23,6 +25,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final AuthenticationManager authManager;
     private final AppUserRepository userRepository;
@@ -61,10 +65,13 @@ public class AuthController {
             ctx.setAuthentication(auth);
             SecurityContextHolder.setContext(ctx);
             contextRepo.saveContext(ctx, httpReq, httpResp);
+            log.info("AUTH_LOGIN user={} ok=true", req.username());
             return identity(auth);
         } catch (BadCredentialsException e) {
+            log.warn("AUTH_LOGIN user={} ok=false", req.username());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         } catch (Exception e) {
+            log.warn("AUTH_LOGIN user={} ok=false", req.username());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
     }
@@ -97,6 +104,7 @@ public class AuthController {
         SecurityContextHolder.setContext(ctx);
         contextRepo.saveContext(ctx, httpReq, httpResp);
 
+        log.info("AUTH_REGISTER user={}", req.username());
         return identity(auth);
     }
 

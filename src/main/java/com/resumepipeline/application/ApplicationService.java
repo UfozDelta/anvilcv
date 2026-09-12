@@ -10,6 +10,7 @@ import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
+import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.progress.PipelineTimer;
 import com.resumepipeline.progress.ProgressLog;
@@ -188,9 +189,9 @@ public class ApplicationService {
                 .map(p -> new LlmClient.ProjectSummary(
                         nz(p.getName()), p.getKind().name(), nz(p.getTitle()), nz(p.getDates()), nz(p.getDescription())))
                 .toList();
-        CompletableFuture<LlmClient.FitResult> fitFuture = CompletableFuture.supplyAsync(() ->
+        CompletableFuture<LlmClient.FitResult> fitFuture = CompletableFuture.supplyAsync(Mdc.wrap(() ->
                 llm.scoreFit(new LlmClient.FitRequest(clean.cleanJd(), clean.company(), clean.role(),
-                        clean.keywords(), roleEmphasis, skillCategories, projectSummaries), progress, tokens),
+                        clean.keywords(), roleEmphasis, skillCategories, projectSummaries), progress, tokens)),
                 PARALLEL_EXECUTOR);
 
         LlmClient.RankRequest rankReq = new LlmClient.RankRequest(
@@ -286,10 +287,10 @@ public class ApplicationService {
         // null recruiterScore because of it. Note orTimeout abandons the future without
         // cancelling the HTTP call, so an over-tight bound still pays for the tokens and then
         // discards the answer — the cap has to clear real p99 latency, not merely exist.
-        CompletableFuture<LlmClient.RecruiterResult> recruiterFuture = CompletableFuture.supplyAsync(() ->
+        CompletableFuture<LlmClient.RecruiterResult> recruiterFuture = CompletableFuture.supplyAsync(Mdc.wrap(() ->
                 llm.reviewResume(new LlmClient.RecruiterRequest(clean.cleanJd(), clean.company(), clean.role(),
                         clean.keywords(), roleEmphasis, renderedBullets, filledSkills, selectedCourses),
-                        progress, tokens), PARALLEL_EXECUTOR)
+                        progress, tokens)), PARALLEL_EXECUTOR)
                 .orTimeout(90, java.util.concurrent.TimeUnit.SECONDS);
 
         // ATS report, narrowed to what actually lands on the page.
@@ -327,11 +328,11 @@ public class ApplicationService {
 
         List<String> selectedTexts = selected.stream().map(Bullet::getText).toList();
         CompletableFuture<PdfCompiler.Result> pdfFuture = CompletableFuture
-                .supplyAsync(() -> compiler.compile(tex), PARALLEL_EXECUTOR);
+                .supplyAsync(Mdc.wrap(() -> compiler.compile(tex)), PARALLEL_EXECUTOR);
         CompletableFuture<String> coverLetterFuture = includeCoverLetter
-                ? CompletableFuture.supplyAsync(() -> llm.coverLetter(
+                ? CompletableFuture.supplyAsync(Mdc.wrap(() -> llm.coverLetter(
                         new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), roleEmphasis, selectedTexts),
-                        progress, tokens), PARALLEL_EXECUTOR)
+                        progress, tokens)), PARALLEL_EXECUTOR)
                 : CompletableFuture.completedFuture(null);
 
         PipelineTimer tPdf = PipelineTimer.start("tectonic + cover letter");
@@ -450,6 +451,9 @@ public class ApplicationService {
         Application saved = repo.save(a);
         outcomeHistoryRepo.save(new OutcomeHistory(saved.getId(), saved.getOutcome()));
         llmUsageService.record(userId, "application_pipeline", tokens, saved.getId(), null);
+        log.info("APP_CREATE app={} jd_chars={} bullets={} cover={} ms={}",
+                shortId(saved.getId()), jdText.length(), selected.size(),
+                includeCoverLetter, a.getPipelineDurationMs());
         return saved;
 
         } catch (RuntimeException e) {
@@ -632,7 +636,9 @@ public class ApplicationService {
             }
         }
         a.setPipelineDurationMs(tRerender.stop());
-        return repo.save(a);
+        Application saved = repo.save(a);
+        log.info("APP_RERENDER app={} ms={}", shortId(saved.getId()), a.getPipelineDurationMs());
+        return saved;
     }
 
     /**
@@ -917,6 +923,9 @@ public class ApplicationService {
     }
 
     private static String nz(String s) { return s == null ? "" : s; }
+
+    /** First 8 chars of the id for log events — short enough to grep, long enough not to collide. */
+    private static String shortId(UUID id) { return id == null ? "?" : id.toString().substring(0, 8); }
 
     /** The id is validated against the rendered set before it gets here; parse defensively anyway. */
     private static UUID parseUuid(String s) {

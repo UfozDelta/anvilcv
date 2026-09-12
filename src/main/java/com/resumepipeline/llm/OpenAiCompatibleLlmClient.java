@@ -94,11 +94,13 @@ public abstract class OpenAiCompatibleLlmClient extends BaseLlmClient {
             if (content.isMissingNode() || content.isNull()) {
                 throw new RuntimeException("LLM response missing content: " + resp);
             }
+            // -1, not 0: a provider that omits usage entirely should log as "unknown", not as a
+            // plausible zero-token call.
             JsonNode usage = root.path("usage");
             if (tokens != null) {
                 tokens.add(model,
-                        usage.path("prompt_tokens").asInt(0),
-                        usage.path("completion_tokens").asInt(0));
+                        usage.path("prompt_tokens").asInt(-1),
+                        usage.path("completion_tokens").asInt(-1));
             }
             String json = extractJson(content.asText());
             log.debug("LLM {} raw: {}", model, resp);

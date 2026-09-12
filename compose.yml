@@ -6,6 +6,11 @@ services:
     # No ports: — nothing is published to the host. cloudflared reaches the JVM
     # over the compose network, so the machine has no open inbound port at all.
     mem_limit: 3g   # JVM 21 is container-aware; heap caps at ~25% of this
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   cloudflared:
     image: cloudflare/cloudflared:latest

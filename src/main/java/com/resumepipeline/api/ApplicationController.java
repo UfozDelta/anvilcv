@@ -4,8 +4,11 @@ import com.resumepipeline.api.dto.ApplicationDtos.*;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationService;
 import com.resumepipeline.auth.AuthUtils;
+import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -23,6 +26,8 @@ import java.util.concurrent.Executors;
 @RestController
 @RequestMapping("/api/applications")
 public class ApplicationController {
+
+    private static final Logger log = LoggerFactory.getLogger(ApplicationController.class);
 
     private final ApplicationService service;
     private final JobProgressStore jobStore;
@@ -51,16 +56,17 @@ public class ApplicationController {
         UUID userId = AuthUtils.userId(auth);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
-        ASYNC_EXECUTOR.submit(() -> {
+        ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
                 Application a = service.create(userId, req.jdText(), req.jdUrl(), req.roleEmphasis(),
                         req.includeCoverLetter(), progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
+                log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
-        });
+        }));
         return new SubmitResponse(jobId);
     }
 
@@ -113,15 +119,16 @@ public class ApplicationController {
         UUID userId = AuthUtils.userId(auth);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
-        ASYNC_EXECUTOR.submit(() -> {
+        ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
                 Application a = service.rerender(userId, id, req.selectedBulletIds(), progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
+                log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
-        });
+        }));
         return new SubmitResponse(jobId);
     }
 
@@ -136,15 +143,16 @@ public class ApplicationController {
         UUID userId = AuthUtils.userId(auth);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
-        ASYNC_EXECUTOR.submit(() -> {
+        ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
                 Application a = service.rescore(userId, id, progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
+                log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
-        });
+        }));
         return new SubmitResponse(jobId);
     }
 
@@ -169,15 +177,16 @@ public class ApplicationController {
         UUID scope = projectScope(req);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
-        ASYNC_EXECUTOR.submit(() -> {
+        ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
                 Application a = service.refitSelection(userId, id, scope, progress);
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
+                log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
-        });
+        }));
         return new SubmitResponse(jobId);
     }
 

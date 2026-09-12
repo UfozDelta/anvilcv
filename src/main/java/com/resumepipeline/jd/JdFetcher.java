@@ -6,12 +6,17 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URI;
 
 @Component
 public class JdFetcher {
+
+    private static final Logger log = LoggerFactory.getLogger(JdFetcher.class);
 
     private static final int TIMEOUT_MS = 15_000;
     private static final String UA =
@@ -19,6 +24,7 @@ public class JdFetcher {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public String fetch(String url) {
+        long start = System.currentTimeMillis();
         try {
             Document doc = Jsoup.connect(url)
                     .userAgent(UA)
@@ -30,15 +36,31 @@ public class JdFetcher {
             // schema.org JobPosting JSON-LD even when the visible DOM is JS-rendered/empty.
             // That structured description is cleaner and more reliable than scraping body text.
             String jsonLd = extractJobPostingDescription(doc);
+            String result;
             if (jsonLd != null && !jsonLd.isBlank()) {
-                return jsonLd;
+                result = jsonLd;
+            } else {
+                doc.select("script, style, nav, footer, header, noscript").remove();
+                String text = doc.body() == null ? doc.text() : doc.body().text();
+                result = text == null ? "" : text;
             }
-
-            doc.select("script, style, nav, footer, header, noscript").remove();
-            String text = doc.body() == null ? doc.text() : doc.body().text();
-            return text == null ? "" : text;
+            log.info("JD_FETCH host={} chars={} ms={}", safeHost(url), result.length(),
+                    System.currentTimeMillis() - start);
+            return result;
         } catch (IOException e) {
             throw new RuntimeException("Failed to fetch JD from " + url + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** url is caller-supplied; a raw log of it would be the same injection vector X-Request-Id
+     * is. URI parsing rejects the characters that matter (\n, control chars), so the host it
+     * extracts is safe to log even when the rest of the URL isn't. */
+    private static String safeHost(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            return host == null ? "unknown" : host;
+        } catch (Exception e) {
+            return "unknown";
         }
     }
 

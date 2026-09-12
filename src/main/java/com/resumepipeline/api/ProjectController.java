@@ -8,10 +8,13 @@ import com.resumepipeline.api.dto.ProjectDtos.ProjectResponse;
 import com.resumepipeline.api.dto.ProjectDtos.UpdateProjectRequest;
 import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.bullet.BulletService;
+import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +28,8 @@ import java.util.concurrent.Executors;
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectController {
+
+    private static final Logger log = LoggerFactory.getLogger(ProjectController.class);
 
     private final ProjectService projects;
     private final BulletService bullets;
@@ -115,15 +120,16 @@ public class ProjectController {
         UUID userId = AuthUtils.userId(auth);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
-        ASYNC_EXECUTOR.submit(() -> {
+        ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
                 bullets.generateBank(userId, id, req.categories(), progress);
                 jobStore.complete(jobId, id);
             } catch (Exception e) {
+                log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
-        });
+        }));
         return new SubmitResponse(jobId);
     }
 

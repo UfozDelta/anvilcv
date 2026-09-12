@@ -7,6 +7,7 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Schema;
 import com.google.genai.types.Type;
 import com.resumepipeline.config.GenerationConfigService;
+import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.PipelineTimer;
 import com.resumepipeline.progress.ProgressLog;
 import org.slf4j.Logger;
@@ -62,6 +63,8 @@ public class GoogleLlmClient extends BaseLlmClient {
     protected String matchModel()    { return matchModel; }
     @Override
     protected String cleanJdModel()  { return cleanJdModel; }
+    @Override
+    protected String providerName()  { return "gemini"; }
 
     @Override
     protected String callJson(String model, String prompt, SchemaSpec spec, double temperature,
@@ -98,11 +101,11 @@ public class GoogleLlmClient extends BaseLlmClient {
             PipelineTimer tLlm = PipelineTimer.start("LLM " + model + " (promptLen=" + prompt.length() + ")");
             GenerateContentResponse[] respHolder = new GenerateContentResponse[1];
             String json = CompletableFuture
-                    .supplyAsync(() -> {
+                    .supplyAsync(Mdc.wrap(() -> {
                         GenerateContentResponse resp = client.models.generateContent(model, prompt, config);
                         respHolder[0] = resp;
                         return resp.text();
-                    }, LLM_EXECUTOR)
+                    }), LLM_EXECUTOR)
                     .get(120, TimeUnit.SECONDS);
             tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
             if (tokens != null && respHolder[0] != null) {
@@ -133,7 +136,7 @@ public class GoogleLlmClient extends BaseLlmClient {
             PipelineTimer tLlm = PipelineTimer.start("LLM stream " + model + " (promptLen=" + prompt.length() + ")");
             int[] promptOut = {0, 0};
             String json = CompletableFuture
-                    .supplyAsync(() -> {
+                    .supplyAsync(Mdc.wrap(() -> {
                         ResponseStream<GenerateContentResponse> stream =
                                 client.models.generateContentStream(model, prompt, config);
                         StringBuilder sb = new StringBuilder();
@@ -157,7 +160,7 @@ public class GoogleLlmClient extends BaseLlmClient {
                             });
                         }
                         return sb.toString();
-                    }, LLM_EXECUTOR)
+                    }), LLM_EXECUTOR)
                     .get(120, TimeUnit.SECONDS);
             tLlm.stop("responseLen=" + (json == null ? 0 : json.length()));
             if (tokens != null && (promptOut[0] > 0 || promptOut[1] > 0)) {
