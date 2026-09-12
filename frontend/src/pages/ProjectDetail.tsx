@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { CATEGORIES } from '../lib/api';
+import { buildCopyForLlmText } from '../lib/copyForLlm';
 import { deriveLenses, NARRATIVE_CATEGORY, matchTechCategory } from '../lib/lensDerivation';
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
@@ -254,7 +255,7 @@ export function ProjectDetail() {
         )}
 
         {tab === 'info' && (
-          <InfoTab s={s} project={project} isExperience={isExperience} />
+          <InfoTab s={s} project={project} isExperience={isExperience} filledCount={filledCount} />
         )}
       </div>
     </div>
@@ -406,13 +407,44 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
 
 // ---------------------------------------------------------------- info tab
 
-function InfoTab({ s, project, isExperience }: {
+function InfoTab({ s, project, isExperience, filledCount }: {
   s: ReturnType<typeof useProjectDetail>;
   project: NonNullable<ReturnType<typeof useProjectDetail>['project']>;
   isExperience: boolean;
+  filledCount: number;
 }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
+
+  async function copyForLlm() {
+    setCopyState('copying');
+    try {
+      const text = await buildCopyForLlmText(project);
+      await navigator.clipboard.writeText(text);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 2500);
+    } catch {
+      setCopyState('error');
+    }
+  }
+
   return (
     <div>
+      {!isExperience && filledCount === 0 && (
+        <div className="panel panel--inset stack-sm" style={{ marginBottom: 16 }}>
+          <div className="label">FILL THIS WITH AN LLM</div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', letterSpacing: '0.05em' }}>
+            Copies instructions for a coding agent with file access — Claude Code, Cursor, or
+            similar. It explores this repo, verifies its own citations, and prints JSON you paste
+            below. Won't work pasted into a plain chatbot with no files open.
+          </div>
+          <div className="row">
+            <button type="button" className="btn btn--acid btn--sm" onClick={copyForLlm} disabled={copyState === 'copying'}>
+              {copyState === 'copying' ? 'COPYING…' : copyState === 'copied' ? '✓ COPIED' : '⧉ COPY FOR LLM'}
+            </button>
+            {copyState === 'error' && <span className="err" style={{ marginLeft: 8 }}>Couldn't copy — try again.</span>}
+          </div>
+        </div>
+      )}
       {/* Edit Info panel — experiences only */}
       {isExperience && (
         <div className="panel panel--inset stack-sm" style={{ marginBottom: 24 }}>
