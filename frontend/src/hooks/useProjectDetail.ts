@@ -123,8 +123,8 @@ export function useProjectDetail(id: string | undefined) {
     setPasteText('');
   }
 
-  function generateBank() {
-    if (!id || picked.size === 0) return;
+  function generateBank(categories: Set<string>) {
+    if (!id || categories.size === 0) return;
     setErr(null);
     setGenerating(true);
   }

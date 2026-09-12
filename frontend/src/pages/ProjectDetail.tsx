@@ -272,14 +272,30 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
   // clicking a lens toggles the categories it maps to, so generation still runs through the
   // existing generate-bank endpoint unchanged.
   const lenses = useMemo(() => deriveLenses(project), [project]);
+  const [selectedLenses, setSelectedLenses] = useState<Set<string>>(new Set());
 
-  function lensCategories(slug: string, kind: 'tech' | 'narrative'): string[] {
-    return kind === 'tech' ? [TECH_CATEGORY[slug] ?? 'backend'] : [NARRATIVE_CATEGORY[slug] ?? 'backend'];
+  function lensCategory(slug: string, kind: 'tech' | 'narrative'): string {
+    return kind === 'tech' ? (TECH_CATEGORY[slug] ?? 'backend') : (NARRATIVE_CATEGORY[slug] ?? 'backend');
   }
 
-  function toggleLens(slug: string, kind: 'tech' | 'narrative') {
-    for (const cat of lensCategories(slug, kind)) s.togglePick(cat);
+  function toggleLens(slug: string) {
+    setSelectedLenses(prev => {
+      const next = new Set(prev);
+      next.has(slug) ? next.delete(slug) : next.add(slug);
+      return next;
+    });
   }
+
+  // The set actually submitted for generation: whatever's picked directly on the category
+  // grid, unioned with whatever categories the selected lenses map to. Computed fresh each
+  // render so two lenses sharing a category never cancel each other out.
+  const effectiveCategories = useMemo(() => {
+    const next = new Set(s.picked);
+    for (const lens of lenses) {
+      if (selectedLenses.has(lens.slug)) next.add(lensCategory(lens.slug, lens.kind));
+    }
+    return next;
+  }, [s.picked, lenses, selectedLenses]);
 
   return (
     <div>
@@ -292,44 +308,12 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
         </div>
       )}
 
-      {lenses.length > 0 && (
-        <div className="panel panel--inset stack-sm" style={{ marginBottom: 16 }}>
-          <div className="label">LENSES FOR {(project.title || project.name).toUpperCase()}</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-            Derived from this project's own tech stack and context. Clicking one toggles the
-            matching category below.
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {lenses.map(lens => {
-              const on = s.picked.has(TECH_CATEGORY[lens.slug] ?? NARRATIVE_CATEGORY[lens.slug] ?? 'backend');
-              return (
-                <button
-                  type="button"
-                  key={lens.slug}
-                  onClick={() => toggleLens(lens.slug, lens.kind)}
-                  className="btn btn--sm"
-                  style={{
-                    padding: '5px 10px',
-                    background: on ? 'var(--ink)' : 'var(--paper)',
-                    color: on ? 'var(--paper)' : 'var(--ink)',
-                    borderColor: 'var(--ink)',
-                  }}
-                  title={lens.blurb}
-                >
-                  <span style={{ fontSize: 10.5, letterSpacing: '0.08em' }}>{on ? '✓' : '○'} {lens.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Category picker */}
       <div className="panel panel--inset stack-sm" style={{ marginBottom: 20 }}>
         <div className="label">GENERATE BULLETS — PICK LENSES</div>
         <div className="grid-4">
           {CATEGORIES.map(c => {
-            const on = s.picked.has(c.slug);
+            const on = effectiveCategories.has(c.slug);
             return (
               <button
                 type="button"
@@ -356,11 +340,44 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
             );
           })}
         </div>
+
+        {lenses.length > 0 && (
+          <div className="stack-sm" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--rule)' }}>
+            <div className="label">LENSES FOR {(project.title || project.name).toUpperCase()}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Derived from this project's own tech stack and context. Clicking one toggles the
+              matching category above.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {lenses.map(lens => {
+                const on = selectedLenses.has(lens.slug);
+                return (
+                  <button
+                    type="button"
+                    key={lens.slug}
+                    onClick={() => toggleLens(lens.slug)}
+                    className="btn btn--sm"
+                    style={{
+                      padding: '5px 10px',
+                      background: on ? 'var(--ink)' : 'var(--paper)',
+                      color: on ? 'var(--paper)' : 'var(--ink)',
+                      borderColor: 'var(--ink)',
+                    }}
+                    title={lens.blurb}
+                  >
+                    <span style={{ fontSize: 10.5, letterSpacing: '0.08em' }}>{on ? '✓' : '○'} {lens.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="row row--between row--centered" style={{ marginTop: 4 }}>
           <span className="label muted">
-            {s.picked.size === 0 ? 'PICK AT LEAST ONE LENS' : `${s.picked.size} LENSES · ~${s.picked.size * 12}s`}
+            {effectiveCategories.size === 0 ? 'PICK AT LEAST ONE LENS' : `${effectiveCategories.size} LENSES · ~${effectiveCategories.size * 12}s`}
           </span>
-          <button className="btn btn--acid" onClick={s.generateBank} disabled={s.generating || s.picked.size === 0}>
+          <button className="btn btn--acid" onClick={() => s.generateBank(effectiveCategories)} disabled={s.generating || effectiveCategories.size === 0}>
             {s.generating
               ? <span className="spinner">GENERATING</span>
               : <>↻ GENERATE BANK</>}
@@ -371,7 +388,7 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
       {s.generating && (
         <EventStream
           submitUrl={`/api/projects/${id}/bullets/generate-bank/submit`}
-          submitBody={{ categories: Array.from(s.picked) }}
+          submitBody={{ categories: Array.from(effectiveCategories) }}
           pollUrl={jobId => `/api/projects/jobs/${jobId}/progress`}
           onDone={_id => { s.setGenerating(false); s.load(); }}
           onClose={() => s.setGenerating(false)}

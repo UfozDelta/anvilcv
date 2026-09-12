@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type Project, type ProjectKind } from '../lib/api';
+import { api, type Project } from '../lib/api';
 import { RowMenu } from '../components/ProjectsList/RowMenu';
 import { NewEntryForm } from '../components/ProjectsList/NewEntryForm';
 
@@ -11,7 +11,7 @@ const SORTS: { key: Sort; label: string }[] = [
   { key: 'name', label: 'A → Z' },
 ];
 
-export function ProjectsList({ kind }: { kind: ProjectKind }) {
+export function Projects() {
   const [rows, setRows] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -21,23 +21,20 @@ export function ProjectsList({ kind }: { kind: ProjectKind }) {
 
   async function load() {
     setLoading(true);
-    try { setRows(await api.get<Project[]>(`/api/projects?kind=${kind}`)); }
+    try { setRows(await api.get<Project[]>('/api/projects?kind=PROJECT')); }
     finally { setLoading(false); }
   }
-  useEffect(() => { load(); }, [kind]);
+  useEffect(() => { load(); }, []);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     let out = rows;
     if (needle) {
-      out = out.filter(r =>
-        (r.name ?? '').toLowerCase().includes(needle) ||
-        (r.title ?? '').toLowerCase().includes(needle) ||
-        (r.company ?? '').toLowerCase().includes(needle));
+      out = out.filter(r => (r.name ?? '').toLowerCase().includes(needle));
     }
     const by: Record<Sort, (a: Project, b: Project) => number> = {
       newest: (a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
-      name: (a, b) => (a.title || a.name).localeCompare(b.title || b.name),
+      name: (a, b) => a.name.localeCompare(b.name),
     };
     return [...out].sort(by[sort]);
   }, [rows, q, sort]);
@@ -72,7 +69,7 @@ export function ProjectsList({ kind }: { kind: ProjectKind }) {
       <div className="toolbar">
         <input
           className="toolbar__search"
-          placeholder={kind === 'PROJECT' ? 'Search projects…' : 'Search role or company…'}
+          placeholder="Search projects…"
           value={q}
           onChange={e => setQ(e.target.value)}
         />
@@ -93,29 +90,25 @@ export function ProjectsList({ kind }: { kind: ProjectKind }) {
         <>
           <div className="applist">
             {shown.map(p => {
-              const title = kind === 'EXPERIENCE' ? (p.title || p.name) : p.name;
-              const meta = kind === 'EXPERIENCE'
-                ? [p.company, p.location, p.dates].filter(Boolean).join(' · ') || '—'
-                : (p.description?.slice(0, 72) ?? '') + ((p.description?.length ?? 0) > 72 ? '…' : '');
-              const href = kind === 'EXPERIENCE' ? `/experiences/${p.id}` : `/projects/${p.id}`;
+              const meta = (p.description?.slice(0, 72) ?? '') + ((p.description?.length ?? 0) > 72 ? '…' : '');
               return (
                 <div className="approw" key={p.id} style={{ gridTemplateColumns: 'minmax(0,1fr) 150px 34px' }}>
-                  <Link className="approw__link" to={href}>{title}</Link>
+                  <Link className="approw__link" to={`/projects/${p.id}`}>{p.name}</Link>
 
                   <div>
-                    <h3 className="approw__title">{title}</h3>
+                    <h3 className="approw__title">{p.name}</h3>
                     <div className="approw__role">{meta}</div>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    {kind === 'PROJECT' && p.githubUrl && (
+                    {p.githubUrl && (
                       <span className="kw" title={p.githubUrl}>
                         {p.repoContextReady ? 'repo cached' : 'repo fetching…'}
                       </span>
                     )}
                   </div>
 
-                  <RowMenu onDelete={() => del(p.id, title)} onDuplicate={() => dup(p.id)} />
+                  <RowMenu onDelete={() => del(p.id, p.name)} onDuplicate={() => dup(p.id)} />
                 </div>
               );
             })}
@@ -123,7 +116,7 @@ export function ProjectsList({ kind }: { kind: ProjectKind }) {
             {shown.length === 0 && (
               <div style={{ padding: '44px 0', textAlign: 'center', borderBottom: 'var(--rule-thin)' }}>
                 <div className="editorial" style={{ fontSize: 17, marginBottom: 6 }}>
-                  {q ? `Nothing matches "${q}".` : `No ${kind === 'PROJECT' ? 'projects' : 'experiences'} yet.`}
+                  {q ? `Nothing matches "${q}".` : 'No projects yet.'}
                 </div>
                 {q && <button className="minibtn" onClick={() => setQ('')}>Clear search</button>}
               </div>
@@ -132,11 +125,9 @@ export function ProjectsList({ kind }: { kind: ProjectKind }) {
 
           <div style={{ marginTop: 28 }}>
             {!showForm ? (
-              <button className="btn btn--acid" onClick={() => setShowForm(true)}>
-                {kind === 'PROJECT' ? '+ NEW PROJECT' : '+ NEW EXPERIENCE'}
-              </button>
+              <button className="btn btn--acid" onClick={() => setShowForm(true)}>+ NEW PROJECT</button>
             ) : (
-              <NewEntryForm kind={kind} onCreate={create} onCancel={() => setShowForm(false)} />
+              <NewEntryForm kind="PROJECT" onCreate={create} onCancel={() => setShowForm(false)} />
             )}
           </div>
         </>

@@ -4,7 +4,8 @@ import { Masthead } from './components/Masthead';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
-import { ProjectsList } from './pages/ProjectsList';
+import { Projects } from './pages/Projects';
+import { Experiences } from './pages/Experiences';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { NewApplication } from './pages/NewApplication';
 import { Applications } from './pages/Applications';
@@ -39,8 +40,8 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/projects"             element={<AuthedShell><ProjectsList kind="PROJECT" /></AuthedShell>} />
-        <Route path="/experiences"          element={<AuthedShell><ProjectsList kind="EXPERIENCE" /></AuthedShell>} />
+        <Route path="/projects"             element={<AuthedShell><Projects /></AuthedShell>} />
+        <Route path="/experiences"          element={<AuthedShell><Experiences /></AuthedShell>} />
         <Route path="/projects/:id"         element={<AuthedShell><ProjectDetail /></AuthedShell>} />
         <Route path="/experiences/:id"      element={<AuthedShell><ProjectDetail /></AuthedShell>} />
         <Route path="/new"                  element={<AuthedShell><NewApplication /></AuthedShell>} />
