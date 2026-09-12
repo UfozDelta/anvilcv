@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * Shortens a project's free-text {@code techStack} into the few technology names that
  * belong in a resume heading.
  *
- * <p>The field is deliberately verbose — content_extract.md asks the user for pinned
+ * <p>The field is deliberately verbose — the context-extraction agent asks the user for pinned
  * versions and named algorithms because that detail feeds bullet generation. The heading
  * is the other consumer and needs the opposite: four names, no versions, no prose. So a
  * stack like

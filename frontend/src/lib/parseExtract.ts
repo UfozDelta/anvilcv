@@ -1,4 +1,4 @@
-// Parser for the "Project Context Extractor" (content_extract.md) output.
+// Parser for the "Project Context Extractor" (anvilcv-context-agent.md) output.
 //
 // That prompt emits plain headed markdown sections, each tagged with the
 // AnvilCV field it feeds (e.g. "→ AnvilCV field: **techStack**"). We map the
@@ -16,7 +16,7 @@ export type ExtractField =
   | 'securityPosture'
   | 'description';
 
-// Known slugs from the Category lens list in content_extract.md — kept in sync
+// Known slugs from the Category lens list in anvilcv-context-agent.md — kept in sync
 // by hand, same list CATEGORIES in lib/api.ts is built from.
 const KNOWN_CATEGORY_SLUGS = new Set([
   'ai-ml', 'backend', 'frontend', 'data', 'security', 'devops', 'systems', 'comms',
@@ -43,7 +43,7 @@ export interface ExtractJsonResult {
 }
 
 /**
- * Parses the newer JSON handoff format from content_extract.md (a single
+ * Parses the newer JSON handoff format from anvilcv-context-agent.md (a single
  * ```json fenced object with 11 keys, printed to chat instead of written to
  * disk). Returns a specific error string on malformed or partial input rather
  * than silently returning an empty result.
@@ -93,8 +93,9 @@ export function parseExtractJson(raw: string): ExtractJsonResult | { error: stri
   return { fields, name, category };
 }
 
-// Heading text (lower-cased, trimmed) → field. These mirror the "##" headings
-// in content_extract.md verbatim.
+// Heading text (lower-cased, trimmed) → field. These mirror the legacy "##"
+// headings the old content_extract.md prompt used to write to a file — kept
+// for backward compat with anyone holding an old-format export.
 const HEADING_TO_FIELD: Record<string, ExtractField> = {
   'tech stack': 'techStack',
   'your role': 'yourRole',

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseExtract, parseExtractJson } from './parseExtract';
 
-// A trimmed stand-in for content_extract.md output: two sections that own a
+// A trimmed stand-in for the legacy old-format content_extract.md output: two sections that own a
 // field outright, one that folds into an owned field, one that folds into a
 // field with no owning section, and one unrecognized section that folds nowhere.
 const DOC = `# Project Context Extractor

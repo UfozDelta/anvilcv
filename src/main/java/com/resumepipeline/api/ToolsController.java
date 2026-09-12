@@ -13,12 +13,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tools")
 public class ToolsController {
 
-    @GetMapping("/content-extract")
-    public ResponseEntity<Resource> contentExtract() {
-        Resource resource = new ClassPathResource("content_extract.md");
+    @GetMapping("/context-agent")
+    public ResponseEntity<Resource> contextAgent() {
+        Resource resource = new ClassPathResource("anvilcv-context-agent.md");
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("text/markdown"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"content_extract.md\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"anvilcv-context-agent.md\"")
                 .body(resource);
     }
 }

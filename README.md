@@ -211,7 +211,7 @@ stored key undecryptable — they have to be re-entered.
 | `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V20` |
 | `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
-| `src/main/resources/content_extract.md` | Prompt doc served by `GET /api/tools/content-extract` |
+| `src/main/resources/anvilcv-context-agent.md` | Claude Code agent definition served by `GET /api/tools/context-agent` |
 | `src/test/java/` | ~192 backend tests |
 | `frontend/` | React + Vite SPA |
 | `.github/workflows/ci.yml` | Maven job + Vite job |
@@ -242,7 +242,7 @@ stored key undecryptable — they have to be re-entered.
 
 ```
 public   POST /api/login  /api/register  /api/logout   GET /api/me  /api/ping
-         GET  /api/public/stats          GET /api/tools/content-extract
+         GET  /api/public/stats          GET /api/tools/context-agent
 
 profile  GET|PUT /api/profile
 config   GET|PUT /api/config/generation
