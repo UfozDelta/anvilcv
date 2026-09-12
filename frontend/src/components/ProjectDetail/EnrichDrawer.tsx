@@ -63,7 +63,7 @@ export function EnrichDrawer(props: {
           </button>
           {!pasteOpen && (
             <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', letterSpacing: '0.05em' }}>
-              Paste the Project Context Extractor output to auto-fill all fields below.
+              Paste the Project Context Extractor output (JSON block, or older markdown) to auto-fill all fields below.
             </div>
           )}
           {pasteOpen && (
@@ -74,7 +74,7 @@ export function EnrichDrawer(props: {
                 onChange={e => setPasteText(e.target.value)}
                 style={{ minHeight: 160 }}
                 autoFocus
-                placeholder={"Paste the full extractor output here, e.g.\n\n## Tech Stack\nReact, PostgreSQL, AES-256-GCM…\n\n## Your Role\n…"}
+                placeholder={'Paste the extractor output here — the ```json block it prints (auto-fills category too), or the older markdown format.'}
               />
               <div className="row">
                 <button type="button" className="btn btn--acid btn--sm" onClick={parseAndFill} disabled={!pasteText.trim()}>PARSE &amp; FILL</button>

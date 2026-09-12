@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseExtract } from './parseExtract';
+import { parseExtract, parseExtractJson } from './parseExtract';
 
 // A trimmed stand-in for content_extract.md output: two sections that own a
 // field outright, one that folds into an owned field, one that folds into a
@@ -95,5 +95,72 @@ describe('parseExtract', () => {
 
   it('returns nothing for empty input', () => {
     expect(parseExtract('')).toEqual({});
+  });
+});
+
+const JSON_DOC = {
+  name: 'AnvilCV',
+  techStack: 'React, PostgreSQL',
+  description: 'Two Next.js apps sharing one Postgres layer.',
+  yourRole: 'Built greenfield.',
+  ownership: 'Auth, DB schema.',
+  scaleImpact: '3 dimensions [repo]',
+  hardestProblem: 'CONSTRAINT: five telephony backends.',
+  technicalDecisions: 'Chose Redis over Postgres pub/sub.',
+  userImpact: '40 tenants.',
+  securityPosture: 'AES-256-GCM at rest.',
+  category: ['backend', 'systems'],
+};
+
+describe('parseExtractJson', () => {
+  it('parses a bare JSON object into fields + category', () => {
+    const result = parseExtractJson(JSON.stringify(JSON_DOC));
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.fields.techStack).toBe('React, PostgreSQL');
+    expect(result.fields.description).toContain('Two Next.js apps');
+    expect(result.name).toBe('AnvilCV');
+    expect(result.category).toEqual(['backend', 'systems']);
+  });
+
+  it('strips an outer ```json fence', () => {
+    const fenced = '```json\n' + JSON.stringify(JSON_DOC) + '\n```';
+    const result = parseExtractJson(fenced);
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.fields.hardestProblem).toContain('five telephony backends');
+  });
+
+  it('errors on invalid JSON', () => {
+    const result = parseExtractJson('{ not valid json');
+    expect('error' in result).toBe(true);
+  });
+
+  it('errors when a required key is missing', () => {
+    const { userImpact: _drop, ...partial } = JSON_DOC;
+    const result = parseExtractJson(JSON.stringify(partial));
+    expect('error' in result).toBe(true);
+    if ('error' in result) expect(result.error).toContain('userImpact');
+  });
+
+  it('errors on an unknown category slug', () => {
+    const result = parseExtractJson(JSON.stringify({ ...JSON_DOC, category: ['not-a-real-slug'] }));
+    expect('error' in result).toBe(true);
+    if ('error' in result) expect(result.error).toContain('not-a-real-slug');
+  });
+
+  it('errors on an empty category array', () => {
+    const result = parseExtractJson(JSON.stringify({ ...JSON_DOC, category: [] }));
+    expect('error' in result).toBe(true);
+  });
+
+  it('errors for empty input', () => {
+    const result = parseExtractJson('');
+    expect('error' in result).toBe(true);
+  });
+
+  it('errors for a JSON array instead of an object', () => {
+    const result = parseExtractJson('[1, 2, 3]');
+    expect('error' in result).toBe(true);
   });
 });

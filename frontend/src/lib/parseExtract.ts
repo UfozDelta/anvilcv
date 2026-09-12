@@ -16,6 +16,83 @@ export type ExtractField =
   | 'securityPosture'
   | 'description';
 
+// Known slugs from the Category lens list in content_extract.md — kept in sync
+// by hand, same list CATEGORIES in lib/api.ts is built from.
+const KNOWN_CATEGORY_SLUGS = new Set([
+  'ai-ml', 'backend', 'frontend', 'data', 'security', 'devops', 'systems', 'comms',
+]);
+
+// "name" and "category" are handled separately below — they don't map to an
+// ExtractField (name has no drawer field; category drives lens selection).
+const JSON_KEY_TO_FIELD: Record<string, ExtractField> = {
+  techStack: 'techStack',
+  description: 'description',
+  yourRole: 'yourRole',
+  ownership: 'ownership',
+  scaleImpact: 'scaleImpact',
+  hardestProblem: 'hardestProblem',
+  technicalDecisions: 'technicalDecisions',
+  userImpact: 'userImpact',
+  securityPosture: 'securityPosture',
+};
+
+export interface ExtractJsonResult {
+  fields: Partial<Record<ExtractField, string>>;
+  name?: string;
+  category: string[];
+}
+
+/**
+ * Parses the newer JSON handoff format from content_extract.md (a single
+ * ```json fenced object with 11 keys, printed to chat instead of written to
+ * disk). Returns a specific error string on malformed or partial input rather
+ * than silently returning an empty result.
+ */
+export function parseExtractJson(raw: string): ExtractJsonResult | { error: string } {
+  if (!raw?.trim()) return { error: 'Nothing pasted.' };
+
+  const stripped = stripOuterFence(raw).trim();
+  let obj: unknown;
+  try {
+    obj = JSON.parse(stripped);
+  } catch {
+    return { error: 'Could not parse as JSON. Paste the fenced ```json block from the extractor output.' };
+  }
+
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'Expected a JSON object with the extractor fields.' };
+  }
+  const rec = obj as Record<string, unknown>;
+
+  const requiredKeys = ['name', 'techStack', 'description', 'yourRole', 'ownership',
+    'scaleImpact', 'hardestProblem', 'technicalDecisions', 'userImpact', 'securityPosture', 'category'];
+  const missing = requiredKeys.filter(k => !(k in rec));
+  if (missing.length > 0) {
+    return { error: `Missing key(s): ${missing.join(', ')}.` };
+  }
+
+  const fields: Partial<Record<ExtractField, string>> = {};
+  for (const key of Object.keys(JSON_KEY_TO_FIELD)) {
+    const v = rec[key];
+    if (typeof v !== 'string') return { error: `Field "${key}" must be a string.` };
+    fields[JSON_KEY_TO_FIELD[key]] = v;
+  }
+
+  const name = typeof rec.name === 'string' ? rec.name : undefined;
+
+  const categoryRaw = rec.category;
+  if (!Array.isArray(categoryRaw) || categoryRaw.length === 0) {
+    return { error: '"category" must be a non-empty array of lens slugs.' };
+  }
+  const category = categoryRaw.filter((c): c is string => typeof c === 'string');
+  const unknown = category.filter(c => !KNOWN_CATEGORY_SLUGS.has(c));
+  if (unknown.length > 0) {
+    return { error: `Unknown category slug(s): ${unknown.join(', ')}.` };
+  }
+
+  return { fields, name, category };
+}
+
 // Heading text (lower-cased, trimmed) → field. These mirror the "##" headings
 // in content_extract.md verbatim.
 const HEADING_TO_FIELD: Record<string, ExtractField> = {

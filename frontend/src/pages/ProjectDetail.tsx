@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { CATEGORIES } from '../lib/api';
-import { deriveLenses, NARRATIVE_CATEGORY, TECH_CATEGORY } from '../lib/lensDerivation';
+import { deriveLenses, NARRATIVE_CATEGORY, matchTechCategory } from '../lib/lensDerivation';
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
 import { useProjectDetail } from '../hooks/useProjectDetail';
@@ -274,8 +274,10 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
   const lenses = useMemo(() => deriveLenses(project), [project]);
   const [selectedLenses, setSelectedLenses] = useState<Set<string>>(new Set());
 
-  function lensCategory(slug: string, kind: 'tech' | 'narrative'): string {
-    return kind === 'tech' ? (TECH_CATEGORY[slug] ?? 'backend') : (NARRATIVE_CATEGORY[slug] ?? 'backend');
+  // Tech lenses with no confident match light up no category rather than
+  // defaulting to 'backend' — an unmapped tech shouldn't silently misfile.
+  function lensCategory(slug: string, kind: 'tech' | 'narrative'): string | undefined {
+    return kind === 'tech' ? matchTechCategory(slug) : (NARRATIVE_CATEGORY[slug] ?? 'backend');
   }
 
   function toggleLens(slug: string) {
@@ -292,7 +294,9 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
   const effectiveCategories = useMemo(() => {
     const next = new Set(s.picked);
     for (const lens of lenses) {
-      if (selectedLenses.has(lens.slug)) next.add(lensCategory(lens.slug, lens.kind));
+      if (!selectedLenses.has(lens.slug)) continue;
+      const cat = lensCategory(lens.slug, lens.kind);
+      if (cat) next.add(cat);
     }
     return next;
   }, [s.picked, lenses, selectedLenses]);

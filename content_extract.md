@@ -1,6 +1,6 @@
 # Project Context Extractor
 
-You are Claude. A developer has pointed you at a codebase. Explore it autonomously and produce a filled project context document. The developer will paste each section into the matching AnvilCV field to generate resume bullets.
+You are Claude. A developer has pointed you at a codebase. Explore it autonomously and produce a filled project context document. The developer will paste the printed JSON into AnvilCV's import box to auto-fill fields and generate resume bullets.
 
 **Your job is context capture, not bullet writing.** AnvilCV generates the resume bullets itself, from these fields, under formatting rules it owns — do not write bullets, do not count words, do not shape sentences to a length. Write the richest accurate context you can and let the generator cut it down.
 
@@ -390,100 +390,61 @@ If the developer replies that they don't have a number, write the section withou
 
 ---
 
-## Output — Write to File (do NOT paste the sections into chat)
+## Output — Print JSON in Chat (do NOT write a file)
 
-When all sections are ready, **write the full document to a file** using your
-file-write tool:
+When all sections are ready, **print one fenced ```json block in chat.** Do not
+write `anvilcv-context.md` or any other file to disk.
 
-    anvilcv-context.md      (in the repo root — the current working directory)
+**The `→ AnvilCV field:` and `→ fold into:` lines under each section below are
+your own routing notes — they tell you which JSON key a section's content
+belongs to, or which other key's content it folds into. They are never
+themselves written anywhere: not as literal text, not as a comment, not inside
+a field's string value.**
 
-Overwrite the file if it already exists.
+Before emitting the object, do the folding yourself:
+- **Work Character** → append into `yourRole`
+- **Standout Signal** → prepend as the lead sentence of `description`
+- **Failure Modes Avoided** → append into `technicalDecisions`
 
-File content = all the headed sections below, plain text, no outer code fence.
-Use backticks only for inline technique names. If the repo contains multiple
-independently-deployable services, emit one full block per service in the same
-file.
+Same rules as always for what belongs in each field — only who does the
+concatenation changed (you, not a parser). Provenance tags (`[repo]`,
+`[commit]`, `[diff]`, `[dev]`) stay inline inside the field string values they
+belong to.
 
-### The exact skeleton to write
+### The exact object to print
 
-**The `→` pointer line is the first line of each section body in the file you
-write — not an instruction to you, but literal output text you copy.** Copy this
-skeleton verbatim and fill under each pointer. Fourteen headings, thirteen pointer lines (Category takes none), in this
-order:
-
-```
-# Project Name
-→ AnvilCV field: **name**
-
-# Tech Stack
-→ AnvilCV field: **techStack**
-
-# Architecture Overview
-→ AnvilCV field: **description**
-
-# Your Role
-→ AnvilCV field: **yourRole**
-
-# What You Owned End-to-End
-→ AnvilCV field: **ownership**
-
-# Scale & Impact
-→ AnvilCV field: **scaleImpact**
-
-# Hardest Problem Solved
-→ AnvilCV field: **hardestProblem**
-
-# Notable Technical Decisions
-→ AnvilCV field: **technicalDecisions**
-
-# Users & Business Context
-→ AnvilCV field: **userImpact**
-
-# Security & Compliance Posture
-→ AnvilCV field: **securityPosture**
-
-# Work Character
-→ fold into: **yourRole**
-
-# Standout Signal
-→ fold into: **description**
-
-# Failure Modes Avoided
-→ fold into: **technicalDecisions**
-
-# Category
+```json
+{
+  "name": "...",
+  "techStack": "...",
+  "description": "...",
+  "yourRole": "...",
+  "ownership": "...",
+  "scaleImpact": "...",
+  "hardestProblem": "...",
+  "technicalDecisions": "...",
+  "userImpact": "...",
+  "securityPosture": "...",
+  "category": ["backend"]
+}
 ```
 
-The importer matches sections by heading text and routes each `→ fold into:`
-section into the field it names, appending its body to whatever the owning
-section wrote. **So write a folded section's content under its own heading —
-never duplicate it into the target section, and never leave a cross-reference
-stub like "recorded above."** A stub is appended verbatim and reaches the
-generator as those literal words, contributing nothing but noise. **A section written without its pointer line is
-silently discarded on import** — no error, no warning, the material is simply
-gone. The `fold into:` sections carry material as strong as any owned field, so
-dropping their pointers is the single most expensive mistake you can make here.
+`category` is an array of 1-2 slugs from the exact 8-list in the **Category**
+section below. All 11 keys are required (leave `securityPosture` as an empty
+string, not absent, if it doesn't apply). If the repo contains multiple
+independently-deployable services, print one full JSON block per service, each
+in its own fence.
 
-Before you finish, grep the file you wrote and confirm both counts:
-**`→ AnvilCV field:` exactly 10 hits**, **`→ fold into:` exactly 3 hits**.
-Fewer of either means you dropped a pointer — go add it back.
+### Write nothing that isn't a listed key
 
-### Write nothing that isn't in the skeleton
+Do not invent extra keys, lens markers, or decoration the sections below don't
+ask for. Field values are consumed verbatim by a downstream generator; anything
+extra is noise it has to read past. The only inline tags permitted anywhere in
+a value are the four provenance tags: `[repo]`, `[commit]`, `[diff]`, `[dev]`.
 
-Do not invent tags, lens markers, category annotations, or any other decoration
-the sections below don't ask for. Field bodies are consumed verbatim by a
-downstream generator; anything extra is noise it has to read past.
-
-The only inline tags permitted anywhere in the file are the four provenance
-tags: `[repo]`, `[commit]`, `[diff]`, `[dev]`. The lens goes in the **Category**
-section, once, and nowhere else — never appended per line.
-
-After writing the file, reply in chat with **only**:
-- the path written: `anvilcv-context.md`
-- a 2–3 line summary: project name, category lens(es) picked, how many sections filled
-- one line: "Paste each section into its matching AnvilCV field."
-
-Do **not** print the section contents in chat — they live in the file.
+After printing the JSON, add nothing else except:
+- a 2–3 line summary: project name, category lens(es) picked, how many fields filled
+- one line: "Paste this JSON into AnvilCV's import box."
 
 ---
 
@@ -735,10 +696,11 @@ Before outputting, verify:
 - [ ] PR/CI claims verified against `gh pr list` and workflow-file blame, not inferred from commit messages
 - [ ] Phase 3 delta pass run — every countable before→after found in the diffs is captured
 - [ ] Phase 4 gap interview asked and answered; developer-reported numbers marked as such
-- [ ] Grepped the written file for `→ fold into:` — exactly 3 hits. Fewer means a section will be discarded on import; go add the pointer back
-- [ ] Grepped the written file for `→ AnvilCV field:` — exactly 10 hits
-- [ ] No invented tags or annotations in the file; the only inline tags are `[repo]`, `[commit]`, `[diff]`, `[dev]`, and the lens appears only under Category
+- [ ] Printed JSON is valid (parses cleanly) and has all 11 keys: `name`, `techStack`, `description`, `yourRole`, `ownership`, `scaleImpact`, `hardestProblem`, `technicalDecisions`, `userImpact`, `securityPosture`, `category`
+- [ ] `category` is an array of 1-2 slugs from the exact 8-list, nothing else
+- [ ] No placeholder text (`<...>`) left in any field, and no `→` pointer lines leaked into any field value
+- [ ] No invented keys or annotations in the JSON; the only inline tags are `[repo]`, `[commit]`, `[diff]`, `[dev]`
 - [ ] Phase 2a tool check run; if git history or `gh` was unavailable, the limitation is stated in Your Role and verbs are capped accordingly
 - [ ] Phase 2b identity roster shown to the developer; all their identities summed, bots excluded, unresolved identities named as unresolved rather than assumed
 - [ ] Phase 2d negative-space pass run — every top-level dir enumerated and blamed, not just the ones expected to be theirs
-- [ ] Output written to `anvilcv-context.md` in the repo root — NOT pasted into chat; chat shows only path + 2–3 line summary
+- [ ] Output printed as one fenced JSON block in chat — NOT written to a file; chat shows only the JSON block + 2–3 line summary

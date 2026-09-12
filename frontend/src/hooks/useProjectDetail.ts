@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { api, type Project, type Bullet, type RefitResponse, CATEGORIES } from '../lib/api';
-import { parseExtract } from '../lib/parseExtract';
+import { parseExtract, parseExtractJson } from '../lib/parseExtract';
 import { estimatedLines } from '../lib/bulletLength';
 import { useBulletPreview } from './useBulletPreview';
 import { fitOf, needsRefit } from '../lib/bulletLength';
@@ -101,14 +101,7 @@ export function useProjectDetail(id: string | undefined) {
     }
   }
 
-  function parseAndFill() {
-    setPasteMsg(null);
-    const fields = parseExtract(pasteText);
-    const keys = Object.keys(fields) as (keyof typeof fields)[];
-    if (keys.length === 0) {
-      setPasteMsg('No recognized sections found. Paste the full extractor output.');
-      return;
-    }
+  function fillFields(fields: Partial<Record<keyof ReturnType<typeof parseExtract>, string>>) {
     if (fields.techStack !== undefined) setTechStack(fields.techStack);
     if (fields.yourRole !== undefined) setYourRole(fields.yourRole);
     if (fields.ownership !== undefined) setOwnership(fields.ownership);
@@ -118,6 +111,34 @@ export function useProjectDetail(id: string | undefined) {
     if (fields.userImpact !== undefined) setUserImpact(fields.userImpact);
     if (fields.securityPosture !== undefined) setSecurityPosture(fields.securityPosture);
     if (fields.description !== undefined) setContextDescription(fields.description);
+  }
+
+  function parseAndFill() {
+    setPasteMsg(null);
+    const looksLikeJson = /^\s*```json|^\s*\{/.test(pasteText);
+
+    if (looksLikeJson) {
+      const result = parseExtractJson(pasteText);
+      if ('error' in result) {
+        setPasteMsg(result.error);
+        return;
+      }
+      fillFields(result.fields);
+      setPicked(new Set(result.category));
+      const keyCount = Object.keys(result.fields).length;
+      setPasteMsg(`Filled ${keyCount} field${keyCount === 1 ? "" : "s"} · category set to ${result.category.join(', ')} — review below, then SAVE CONTEXT.`);
+      setPasteOpen(false);
+      setPasteText('');
+      return;
+    }
+
+    const fields = parseExtract(pasteText);
+    const keys = Object.keys(fields) as (keyof typeof fields)[];
+    if (keys.length === 0) {
+      setPasteMsg('No recognized sections found. Paste the full extractor output.');
+      return;
+    }
+    fillFields(fields);
     setPasteMsg(`Filled ${keys.length} field${keys.length === 1 ? "" : "s"} — review below, then SAVE CONTEXT.`);
     setPasteOpen(false);
     setPasteText('');

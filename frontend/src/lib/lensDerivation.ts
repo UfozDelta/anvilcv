@@ -29,12 +29,34 @@ export const BUCKET_TEMPLATES: Record<typeof DISPLAY_GROUPS[number], { text: str
 
 export const TECH_CATEGORY: Record<string, string> = {
   postgres: 'backend', mysql: 'backend', openapi: 'backend', go: 'backend', http: 'backend',
-  redis: 'systems', kafka: 'systems', grpc: 'systems', rust: 'systems',
-  kubernetes: 'devops', docker: 'devops', terraform: 'devops',
+  node: 'backend', express: 'backend', fastapi: 'backend', django: 'backend', flask: 'backend',
+  mongodb: 'backend', mongo: 'backend', sqlite: 'backend', prisma: 'backend', sqlalchemy: 'backend',
+  redis: 'systems', kafka: 'systems', grpc: 'systems', rust: 'systems', rabbitmq: 'systems', celery: 'systems',
+  kubernetes: 'devops', docker: 'devops', terraform: 'devops', aws: 'devops', gcp: 'devops',
+  azure: 'devops', nginx: 'devops',
   oauth: 'security', jwt: 'security', hipaa: 'security', encryption: 'security',
-  websocket: 'comms', react: 'frontend', typescript: 'frontend', graphql: 'frontend',
+  websocket: 'comms', twilio: 'comms',
+  react: 'frontend', typescript: 'frontend', graphql: 'frontend', vue: 'frontend',
+  angular: 'frontend', next: 'frontend', tailwind: 'frontend', vite: 'frontend', webpack: 'frontend',
   pgvector: 'ai-ml', python: 'ai-ml',
+  elasticsearch: 'data', stripe: 'backend',
 };
+
+/**
+ * Substring-tolerant lookup for a tech-stack token. The extractor names
+ * specific, often versioned tech ("PostgreSQL 16", "Redis Streams"), so an
+ * exact match on TECH_CATEGORY misses almost everything — a plain substring
+ * check would too, since short keys like "go" or "next" sit inside unrelated
+ * words ("mongodb", "django", "algorithm"). Word-boundary match avoids that.
+ * Returns undefined (no wrong default) when nothing in the map appears in the token.
+ */
+export function matchTechCategory(token: string): string | undefined {
+  const t = token.toLowerCase();
+  for (const [key, category] of Object.entries(TECH_CATEGORY)) {
+    if (new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(t)) return category;
+  }
+  return undefined;
+}
 
 export const TECH_TEMPLATES: Record<string, string> = {
   postgres: 'Optimized a hot Postgres query path, cutting p95 read latency **140ms**.',
