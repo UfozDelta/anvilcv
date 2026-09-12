@@ -12,6 +12,8 @@ import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +27,8 @@ import java.util.concurrent.Executors;
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectController {
+
+    private static final Logger log = LoggerFactory.getLogger(ProjectController.class);
 
     private final ProjectService projects;
     private final BulletService bullets;
@@ -116,6 +120,7 @@ public class ProjectController {
                 bullets.generateBank(userId, id, req.categories(), progress);
                 jobStore.complete(jobId, id);
             } catch (Exception e) {
+                log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
         });
