@@ -1,5 +1,7 @@
 package com.resumepipeline.render;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +16,8 @@ import java.util.stream.Stream;
 
 @Component
 public class PdfCompiler {
+
+    private static final Logger log = LoggerFactory.getLogger(PdfCompiler.class);
 
     private final String binary;
     private final int timeoutSeconds;
@@ -34,14 +38,20 @@ public class PdfCompiler {
     private static final Semaphore SLOTS = new Semaphore(2);
 
     public Result compile(String latexSource) {
+        long waitStart = System.currentTimeMillis();
         try {
             SLOTS.acquire();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Result.failure("Interrupted waiting for a compile slot", "");
         }
+        long waitMs = System.currentTimeMillis() - waitStart;
         try {
-            return compileNow(latexSource);
+            long start = System.currentTimeMillis();
+            Result r = compileNow(latexSource);
+            log.info("PDF_COMPILE pages={} ok={} wait_ms={} ms={}",
+                    r.pageCount(), r.success(), waitMs, System.currentTimeMillis() - start);
+            return r;
         } finally {
             SLOTS.release();
         }

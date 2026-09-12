@@ -2,6 +2,8 @@ package com.resumepipeline.auth;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -14,10 +16,19 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RegisterRateLimiter {
 
+    private static final Logger log = LoggerFactory.getLogger(RegisterRateLimiter.class);
+
     private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
 
     public boolean tryConsume(String ip) {
-        return buckets.computeIfAbsent(ip, k -> newBucket()).tryConsume(1);
+        boolean allowed = buckets.computeIfAbsent(ip, k -> newBucket()).tryConsume(1);
+        // ip is httpReq.getRemoteAddr() (AuthController) — behind a reverse proxy or the Docker
+        // bridge that's the proxy's address, identical for every caller, until
+        // server.forward-headers-strategy is set. Same caveat applies to what this limiter keys on.
+        if (!allowed) {
+            log.warn("AUTH_RATELIMIT ip={}", ip);
+        }
+        return allowed;
     }
 
     private Bucket newBucket() {
