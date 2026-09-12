@@ -451,6 +451,9 @@ public class ApplicationService {
         Application saved = repo.save(a);
         outcomeHistoryRepo.save(new OutcomeHistory(saved.getId(), saved.getOutcome()));
         llmUsageService.record(userId, "application_pipeline", tokens, saved.getId(), null);
+        log.info("APP_CREATE app={} jd_chars={} bullets={} cover={} ms={}",
+                shortId(saved.getId()), jdText.length(), selected.size(),
+                includeCoverLetter, a.getPipelineDurationMs());
         return saved;
 
         } catch (RuntimeException e) {
@@ -633,7 +636,9 @@ public class ApplicationService {
             }
         }
         a.setPipelineDurationMs(tRerender.stop());
-        return repo.save(a);
+        Application saved = repo.save(a);
+        log.info("APP_RERENDER app={} ms={}", shortId(saved.getId()), a.getPipelineDurationMs());
+        return saved;
     }
 
     /**
@@ -918,6 +923,9 @@ public class ApplicationService {
     }
 
     private static String nz(String s) { return s == null ? "" : s; }
+
+    /** First 8 chars of the id for log events — short enough to grep, long enough not to collide. */
+    private static String shortId(UUID id) { return id == null ? "?" : id.toString().substring(0, 8); }
 
     /** The id is validated against the rendered set before it gets here; parse defensively anyway. */
     private static UUID parseUuid(String s) {

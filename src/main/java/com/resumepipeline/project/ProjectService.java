@@ -84,14 +84,17 @@ public class ProjectService {
 
     @Async
     public void fetchAndCacheRepoContext(UUID projectId, String githubUrl) {
+        long start = System.currentTimeMillis();
         try {
             String context = githubFetcher.fetch(githubUrl);
             repo.findById(projectId).ifPresent(p -> {
                 p.setRepoContext(context);
                 repo.save(p);
             });
+            log.info("PROJECT_ENRICH project={} ok=true ms={}", projectId, System.currentTimeMillis() - start);
         } catch (Exception e) {
-            log.warn("Failed to cache repo context for project {}: {}", projectId, e.getMessage());
+            log.warn("PROJECT_ENRICH project={} ok=false ms={} cause={}",
+                    projectId, System.currentTimeMillis() - start, e.getMessage());
         }
     }
 

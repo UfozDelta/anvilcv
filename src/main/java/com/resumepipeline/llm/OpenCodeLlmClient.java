@@ -26,4 +26,7 @@ public class OpenCodeLlmClient extends OpenAiCompatibleLlmClient {
                       String cleanJdModel, GenerationConfigService configService) {
         super(builder, generateModel, matchModel, cleanJdModel, configService);
     }
+
+    @Override
+    protected String providerName() { return "opencode"; }
 }

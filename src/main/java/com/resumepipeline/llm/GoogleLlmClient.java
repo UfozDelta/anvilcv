@@ -63,6 +63,8 @@ public class GoogleLlmClient extends BaseLlmClient {
     protected String matchModel()    { return matchModel; }
     @Override
     protected String cleanJdModel()  { return cleanJdModel; }
+    @Override
+    protected String providerName()  { return "gemini"; }
 
     @Override
     protected String callJson(String model, String prompt, SchemaSpec spec, double temperature,

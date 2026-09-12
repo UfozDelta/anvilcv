@@ -43,18 +43,24 @@ public abstract class BaseLlmClient implements LlmClient {
                                        double temperature, ProgressLog progress,
                                        TokenAccumulator tokens, boolean stream, String label);
 
+    /** Short provider tag for the LLM_CALL event log line — "gemini", "openai", "opencode". */
+    protected abstract String providerName();
+
     // Transient-failure safety net around callJson: one retry after a short pause. Deliberately
     // NOT stacked with the recovery pass in generateBullets below (that's a separate,
     // content-quality layer) and does not retry timeouts, which are already expensive.
     private String callJsonWithRetry(String model, String prompt, SchemaSpec schema, double temperature,
                                      ProgressLog progress, TokenAccumulator tokens, boolean stream, String label) {
+        long start = System.currentTimeMillis();
         try {
-            return callJson(model, prompt, schema, temperature, progress, tokens, stream, label);
+            String json = callJson(model, prompt, schema, temperature, progress, tokens, stream, label);
+            logLlmCall(model, label, tokens, start);
+            return json;
         } catch (RuntimeException e) {
             if (e.getCause() instanceof TimeoutException) {
                 throw e;
             }
-            log.warn("{}: LLM call failed ({}), retrying once...", label, e.getMessage());
+            log.warn("LLM_RETRY label={} cause={}", label, e.getMessage());
             progress.emit(label + ": call failed, retrying...");
             try {
                 Thread.sleep(1000);
@@ -62,8 +68,17 @@ public abstract class BaseLlmClient implements LlmClient {
                 Thread.currentThread().interrupt();
                 throw e;
             }
-            return callJson(model, prompt, schema, temperature, progress, tokens, stream, label);
+            String json = callJson(model, prompt, schema, temperature, progress, tokens, stream, label);
+            logLlmCall(model, label, tokens, start);
+            return json;
         }
+    }
+
+    private void logLlmCall(String model, String label, TokenAccumulator tokens, long start) {
+        long ms = System.currentTimeMillis() - start;
+        TokenAccumulator.CallTokens t = tokens != null ? tokens.lastCall() : null;
+        log.info("LLM_CALL provider={} model={} purpose={} in_tok={} out_tok={} ms={}",
+                providerName(), model, label, t != null ? t.inTok() : -1, t != null ? t.outTok() : -1, ms);
     }
 
     /**
