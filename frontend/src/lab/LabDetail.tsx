@@ -383,7 +383,7 @@ function ReviewPane({ selected, onJump }: { selected: Set<string>; onJump: () =>
       {app.recruiterStale && (
         <div className="callout">
           <div className="callout__head">Out of date</div>
-          This review scored an earlier selection. Rebuild the PDF to re-score.
+          This review scored an earlier selection. Re-score the page to refresh it.
         </div>
       )}
 

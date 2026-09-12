@@ -405,27 +405,7 @@ public class ApplicationService {
                 a.setFitDimensions("{}");
             }
         }
-        if (recruiter != null) {
-            a.setRecruiterScore(recruiter.overall());
-            a.setRecruiterVerdict(recruiter.verdict());
-            try {
-                a.setRecruiterDimensions(mapper.writeValueAsString(Map.of(
-                        "evidenceStrength", recruiter.evidenceStrength(),
-                        "relevanceDensity", recruiter.relevanceDensity())));
-            } catch (JsonProcessingException e) {
-                a.setRecruiterDimensions("{}");
-            }
-            try {
-                a.setRecruiterBulletVerdicts(mapper.writeValueAsString(recruiter.bulletVerdicts()));
-            } catch (JsonProcessingException e) {
-                a.setRecruiterBulletVerdicts("[]");
-            }
-            a.setRecruiterWeaknesses(recruiter.weaknesses() == null
-                    ? new String[0] : recruiter.weaknesses().toArray(new String[0]));
-            a.setRecruiterThinnestRequirement(recruiter.thinnestRequirement());
-            a.setRecruiterWeakestBulletId(parseUuid(recruiter.weakestBulletId()));
-        }
-        a.setRecruiterStale(false);
+        applyRecruiter(a, recruiter);
         a.setPageCount(r.success() ? r.pageCount() : null);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
@@ -476,6 +456,121 @@ public class ApplicationService {
             tTotal.stop("FAILED");
             throw e;
         }
+    }
+
+    /**
+     * Writes a recruiter scorecard onto the application, or records that the page is unscored
+     * when the pass failed.
+     *
+     * <p>The stale flag is part of the same decision, which is why it lives here rather than at
+     * the call site. It used to be set to false unconditionally, so a failed, malformed or
+     * timed-out recruiter pass stored a null score against a not-stale flag - the UI then drew a
+     * bare em dash with no alert tone, indistinguishable from an application that had never been
+     * scored at all. A failure is now stale: the score is absent AND known to be out of date,
+     * which is exactly the state the re-score action exists to clear.
+     */
+    private void applyRecruiter(Application a, LlmClient.RecruiterResult recruiter) {
+        if (recruiter == null) {
+            a.setRecruiterStale(true);
+            return;
+        }
+        a.setRecruiterScore(recruiter.overall());
+        a.setRecruiterVerdict(recruiter.verdict());
+        try {
+            a.setRecruiterDimensions(mapper.writeValueAsString(Map.of(
+                    "evidenceStrength", recruiter.evidenceStrength(),
+                    "relevanceDensity", recruiter.relevanceDensity())));
+        } catch (JsonProcessingException e) {
+            a.setRecruiterDimensions("{}");
+        }
+        try {
+            a.setRecruiterBulletVerdicts(mapper.writeValueAsString(recruiter.bulletVerdicts()));
+        } catch (JsonProcessingException e) {
+            a.setRecruiterBulletVerdicts("[]");
+        }
+        a.setRecruiterWeaknesses(recruiter.weaknesses() == null
+                ? new String[0] : recruiter.weaknesses().toArray(new String[0]));
+        a.setRecruiterThinnestRequirement(recruiter.thinnestRequirement());
+        a.setRecruiterWeakestBulletId(parseUuid(recruiter.weakestBulletId()));
+        a.setRecruiterStale(false);
+    }
+
+    /**
+     * Cap on the stored JD text fed back into a re-score. The generate pipeline scores against
+     * {@code cleanJd}, the LLM-condensed JD, but only the raw paste is persisted - so a re-score
+     * has to work from that. Mirrors BaseLlmClient's own JD cap (package-private there) so a
+     * 200k-character careers-page paste cannot push the recruiter call past its timeout.
+     */
+    private static final int RESCORE_MAX_JD_CHARS = 30_000;
+
+    /**
+     * Re-run the recruiter pass against the selection currently on the page.
+     *
+     * <p>This is the only way to score an application after it is created: the generate pipeline
+     * is the sole other caller of {@link LlmClient#reviewResume}, and rerender/refit deliberately
+     * make no LLM calls. Without it a scorecard that failed at generation time - or one marked
+     * stale by a later edit - stayed that way permanently, and the UI told the user to rebuild
+     * the PDF to re-score, which did nothing.
+     *
+     * <p>Makes one LLM call and no PDF compile: the page is not re-selected or re-rendered, only
+     * re-judged. Callers must run it off the request thread (the pass has been observed at 42.6s).
+     */
+    public Application rescore(UUID userId, UUID applicationId, ProgressLog progress) {
+        Application a = get(userId, applicationId);
+        UUID[] selectedIds = a.getSelectedBulletIds();
+        if (selectedIds.length == 0) {
+            throw new IllegalStateException("Nothing on the page to score - render a selection first.");
+        }
+
+        Map<UUID, Bullet> bulletById = bulletRepo.findByIdsAndProjectUserId(selectedIds, userId).stream()
+                .collect(Collectors.toMap(Bullet::getId, b -> b));
+        // Preserve page order, and drop ids whose bullet has since been deleted from the bank.
+        List<Bullet> selected = Arrays.stream(selectedIds)
+                .map(bulletById::get).filter(Objects::nonNull).toList();
+        if (selected.isEmpty()) {
+            throw new IllegalStateException("Every bullet on this page has been deleted - re-render first.");
+        }
+        Set<UUID> projectIds = selected.stream().map(Bullet::getProjectId).collect(Collectors.toSet());
+        Map<UUID, Project> projectById = projectRepo.findByIdIn(projectIds).stream()
+                .collect(Collectors.toMap(Project::getId, p -> p));
+
+        List<LlmClient.RenderedBullet> renderedBullets = selected.stream()
+                .map(b -> new LlmClient.RenderedBullet(
+                        b.getId().toString(), b.getText(),
+                        projectById.containsKey(b.getProjectId()) ? projectById.get(b.getProjectId()).getName() : ""))
+                .toList();
+
+        // Same reconstruction rerender uses: the original keyword list is the union of the two
+        // ATS buckets, since every keyword landed in exactly one of them.
+        Set<String> keywords = new LinkedHashSet<>(Arrays.asList(a.getAtsMatched()));
+        keywords.addAll(Arrays.asList(a.getAtsMissing()));
+
+        String jd = a.getJdText() == null ? "" : a.getJdText();
+        if (jd.length() > RESCORE_MAX_JD_CHARS) jd = jd.substring(0, RESCORE_MAX_JD_CHARS);
+
+        List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
+        Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
+
+        PipelineTimer tRescore = PipelineTimer.start("rescore");
+        TokenAccumulator tokens = new TokenAccumulator();
+        LlmClient.RecruiterResult recruiter = null;
+        try {
+            recruiter = llm.reviewResume(new LlmClient.RecruiterRequest(jd, a.getCompany(), a.getRole(),
+                    List.copyOf(keywords), a.getRoleEmphasis(), renderedBullets, selectedSkills, selectedCourses),
+                    progress, tokens);
+        } catch (RuntimeException e) {
+            // Same policy as the generate pipeline: a missing scorecard is a nuisance, and a
+            // 500 here would lose the user the page they were editing. Report it and leave the
+            // application stale so the button stays available.
+            log.warn("Re-score failed: {}", e.getMessage());
+            progress.emit("Re-score failed: " + e.getMessage());
+        }
+        tRescore.stop("scored=" + (recruiter != null));
+
+        applyRecruiter(a, recruiter);
+        Application saved = repo.save(a);
+        llmUsageService.record(userId, "application_rescore", tokens, saved.getId(), null);
+        return saved;
     }
 
     /** Override selection and re-render. Does NOT re-call the LLM. */

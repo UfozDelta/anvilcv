@@ -1,6 +1,7 @@
 package com.resumepipeline.bullet;
 
 import com.resumepipeline.application.ApplicationRenderer;
+import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
@@ -54,11 +55,15 @@ public class BulletService {
     // retry loop — see BulletLineMeasurer's class javadoc for why).
     private final BulletLineMeasurer measurer;
     private final BulletMeasureDiagnosticRepository diagnosticRepo;
+    // Editing a bullet changes what is printed on every page that already renders it, so the
+    // recruiter scorecard for those pages stops describing reality — see markStaleFor below.
+    private final ApplicationRepository applicationRepo;
 
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
                          LlmUsageService llmUsageService, GenerationConfigService configService,
                          ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler,
-                         BulletLineMeasurer measurer, BulletMeasureDiagnosticRepository diagnosticRepo) {
+                         BulletLineMeasurer measurer, BulletMeasureDiagnosticRepository diagnosticRepo,
+                         ApplicationRepository applicationRepo) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
@@ -69,6 +74,33 @@ public class BulletService {
         this.projectRepo = projectRepo;
         this.renderer = renderer;
         this.compiler = compiler;
+        this.applicationRepo = applicationRepo;
+    }
+
+    /**
+     * Mark every scored application that renders one of these bullets as out of date.
+     *
+     * <p>A bullet edit keeps the bullet's id, so an application's {@code selectedBulletIds} still
+     * resolves and the page keeps rendering — with new text sitting beside a recruiter verdict
+     * written about the old text, under a score that graded the old text, with nothing telling
+     * the user. Flagging here is what makes that visible and what makes the re-score action
+     * reachable. Only the selected set matters: a bullet sitting unselected in the bank never
+     * reached the recruiter pass, so editing it cannot invalidate anything.
+     *
+     * <p>Never fails the write it follows. The edit is the user's actual request; losing it
+     * because a bookkeeping flag could not be set would be the worse outcome.
+     */
+    private void markStaleFor(UUID userId, List<UUID> bulletIds) {
+        if (bulletIds.isEmpty()) return;
+        try {
+            String joined = bulletIds.stream().map(UUID::toString).collect(Collectors.joining(","));
+            int flagged = applicationRepo.markRecruiterStaleForBullets(userId, joined);
+            if (flagged > 0) {
+                log.info("Bullet edit invalidated {} scored application(s) for user {}", flagged, userId);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Could not flag applications stale after bullet edit: {}", e.getMessage());
+        }
     }
 
     /**
@@ -113,7 +145,10 @@ public class BulletService {
         projectService.get(userId, b.getProjectId()); // verify ownership
         if (text != null) b.setText(text);
         if (tags != null) b.setTags(tags);
-        return repo.save(b);
+        Bullet saved = repo.save(b);
+        // Tags do not print, but text does — only a text change can invalidate a scorecard.
+        if (text != null) markStaleFor(userId, List.of(bulletId));
+        return saved;
     }
 
     private static final java.util.Set<String> VALID_STATUSES = java.util.Set.of("PENDING", "APPROVED", "REJECTED");
@@ -134,6 +169,10 @@ public class BulletService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bullet not found: " + bulletId));
         projectService.get(userId, b.getProjectId()); // verify ownership
         repo.deleteById(bulletId);
+        // Note this leaves any application's selectedBulletIds pointing at a row that no longer
+        // exists — a separate, pre-existing bug. Flagging stale does not fix that; it only stops
+        // the score claiming to describe a page that has lost a bullet.
+        markStaleFor(userId, List.of(bulletId));
     }
 
     /**
@@ -221,6 +260,7 @@ public class BulletService {
         Map<String, BulletLineMeasurer.Measured> rewriteMeasured = measurer.measure(rewriteTexts);
 
         int rewritten = 0;
+        List<UUID> rewrittenIds = new ArrayList<>();
         for (LlmClient.BulletToRefit r : result.bullets()) {
             Bullet b = byId.remove(r.id());
             if (b == null) continue;                       // unknown or duplicated id
@@ -239,6 +279,7 @@ public class BulletService {
             otherTexts.add(text);
             b.setText(text);
             repo.save(b);
+            rewrittenIds.add(b.getId());
             rewritten++;
             progress.emit("Refit " + before + "c -> " + after + "c"
                     + (inBand ? "" : " (still off-band, but " + linesAfter
@@ -249,6 +290,8 @@ public class BulletService {
         log.info("BULLET_REFIT project={} checked={} approved_skipped={} off_band={} rewritten={} unchanged={}",
                 projectId, eligible.size(), skipped, offBand.size(), rewritten, unchanged);
         progress.emit("Refit done: " + rewritten + " rewritten, " + unchanged + " left as they were.");
+        // One statement for the whole batch, not one per bullet.
+        markStaleFor(userId, rewrittenIds);
         return new RefitOutcome(eligible.size(), offBand.size(), rewritten, unchanged,
                 repo.findByProjectIdOrderByCreatedAtAsc(projectId));
     }

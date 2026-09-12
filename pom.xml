@@ -18,6 +18,14 @@
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
+        <!--
+            Overrides the byte-buddy Spring Boot manages (1.15.10), which cannot instrument
+            classes on a JDK newer than it knows about. The build targets release 21, but
+            Surefire runs the tests on whatever JVM Maven itself is on - a JDK 26 toolchain
+            made Mockito fail to create inline mocks and took out every mock-based suite:
+            315 tests, 71 errors, all "Mockito cannot mock this class". Harmless on 21.
+        -->
+        <byte-buddy.version>1.17.8</byte-buddy.version>
     </properties>
 
     <dependencies>

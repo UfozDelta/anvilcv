@@ -125,6 +125,29 @@ public class ApplicationController {
         return new SubmitResponse(jobId);
     }
 
+    /**
+     * Re-run the recruiter pass on the current selection. Async only: the pass has been observed
+     * at 42.6s and this app sits behind a cloudflared tunnel, so a synchronous variant would
+     * hold a request thread past the proxy's patience for no benefit.
+     */
+    @PostMapping("/{id}/rescore/submit")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SubmitResponse rescoreSubmit(Authentication auth, @PathVariable UUID id) {
+        UUID userId = AuthUtils.userId(auth);
+        UUID jobId = UUID.randomUUID();
+        jobStore.start(jobId, userId);
+        ASYNC_EXECUTOR.submit(() -> {
+            ProgressLog progress = msg -> jobStore.append(jobId, msg);
+            try {
+                Application a = service.rescore(userId, id, progress);
+                jobStore.complete(jobId, a.getId());
+            } catch (Exception e) {
+                jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            }
+        });
+        return new SubmitResponse(jobId);
+    }
+
     @PatchMapping("/{id}/locks")
     public ApplicationResponse setLocked(Authentication auth, @PathVariable UUID id,
                                          @RequestBody LockRequest req) {

@@ -25,6 +25,9 @@ export function useApplicationDetail(id: string | undefined) {
   const [locksSaving, setLocksSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rerenderStreaming, setRerenderStreaming] = useState(false);
+  // Re-running the recruiter pass. Its own flag rather than reusing rerenderStreaming: a
+  // re-score compiles no PDF, so the viewer must not be told to reload one.
+  const [rescoreStreaming, setRescoreStreaming] = useState(false);
   /** Which refit is running: `{ projectId: null }` for the whole page, a project id for one entry. */
   const [refitTarget, setRefitTarget] = useState<{ projectId: string | null } | null>(null);
   /** Bullet ids newly picked by the last refit, for the "NEW" badge — cleared on next load/refit. */
@@ -227,6 +230,7 @@ export function useApplicationDetail(id: string | undefined) {
 
   return {
     app, bullets, projectById, busy, rerenderStreaming, setRerenderStreaming,
+    rescoreStreaming, setRescoreStreaming,
     pdfBlobUrl, pdfVersion, setPdfVersion, expandedWhys, showTail, setShowTail,
     expandedGroups, selectedIds, ranking, bulletsReady, grouped,
     toggleGroup, setOutcome, toggleBullet, toggleWhy, load,

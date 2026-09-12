@@ -1,5 +1,6 @@
 package com.resumepipeline.bullet;
 
+import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
@@ -32,6 +33,7 @@ class BulletServiceTest {
     @Mock LlmClient llm;
     @Mock LlmUsageService llmUsageService;
     @Mock GenerationConfigService configService;
+    @Mock ApplicationRepository applicationRepo;
     @InjectMocks BulletService service;
 
     private static Project project(UUID user, Project.Kind kind) {
@@ -78,6 +80,51 @@ class BulletServiceTest {
 
         assertEquals("original", out.getText());
         assertArrayEquals(new String[]{"backend"}, out.getTags());
+    }
+
+    @Test
+    void editingTheTextInvalidatesScoredPagesRenderingIt() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID(), id = UUID.randomUUID();
+        Bullet b = new Bullet(proj, "original", new String[]{"backend"}, "general");
+        when(repo.findById(id)).thenReturn(Optional.of(b));
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.update(user, id, "rewritten", null);
+
+        // The bullet keeps its id, so every application still renders it - under a scorecard
+        // that graded the old wording. Nothing else in the app flags that.
+        verify(applicationRepo).markRecruiterStaleForBullets(user, id.toString());
+    }
+
+    @Test
+    void editingOnlyTagsLeavesScorecardsAlone() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID(), id = UUID.randomUUID();
+        Bullet b = new Bullet(proj, "original", new String[]{"backend"}, "general");
+        when(repo.findById(id)).thenReturn(Optional.of(b));
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.update(user, id, null, new String[]{"data"});
+
+        // Tags steer selection; they are not printed, so no rendered page changed.
+        verifyNoInteractions(applicationRepo);
+    }
+
+    @Test
+    void aFailedStaleFlagNeverLosesTheEdit() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID(), id = UUID.randomUUID();
+        Bullet b = new Bullet(proj, "original", new String[]{"backend"}, "general");
+        when(repo.findById(id)).thenReturn(Optional.of(b));
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(applicationRepo.markRecruiterStaleForBullets(any(), any()))
+                .thenThrow(new RuntimeException("db down"));
+
+        // The edit is the user's actual request; bookkeeping must not be able to fail it.
+        Bullet out = service.update(user, id, "rewritten", null);
+
+        assertEquals("rewritten", out.getText());
     }
 
     @Test

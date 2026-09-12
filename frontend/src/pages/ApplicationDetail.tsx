@@ -110,9 +110,11 @@ export function ApplicationDetail() {
           unit="/100"
           tone={app.recruiterStale ? 'alert' : undefined}
           caption={
-            app.recruiterStale
-              ? 'Stale — scored before your last edit.'
-              : `How the resume sells you. ${app.recruiterVerdict ?? ''}`
+            app.recruiterScore === null
+              ? 'Never scored — run Re-score.'
+              : app.recruiterStale
+                ? 'Stale — scored before your last edit.'
+                : `How the resume sells you. ${app.recruiterVerdict ?? ''}`
           }
         />
 
@@ -281,6 +283,19 @@ export function ApplicationDetail() {
         />
       )}
 
+      {s.rescoreStreaming && (
+        <EventStream
+          submitUrl={`/api/applications/${app.id}/rescore/submit`}
+          submitBody={{}}
+          pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
+          // No setPdfVersion bump: a re-score re-judges the page, it does not recompile it.
+          onDone={async () => { await s.load(); s.setRescoreStreaming(false); }}
+          onClose={() => s.setRescoreStreaming(false)}
+          title="RE-SCORING PAGE..."
+          doneLabel="DONE →"
+        />
+      )}
+
       {s.refitTarget && (
         <EventStream
           submitUrl={`/api/applications/${app.id}/refit-selection/submit`}
@@ -398,15 +413,39 @@ function ReviewPane({ s, app, verdicts }: {
   const weakestId = app.recruiterWeakestBulletId;
 
   if (app.fitScore === null && app.recruiterScore === null) {
-    return <p className="muted" style={{ margin: 0, fontSize: 13 }}>This application has not been scored.</p>;
+    // Fit is only ever written by the generate pipeline, so it stays unavailable here — but the
+    // recruiter pass can be re-run on demand, which is the whole point of the button.
+    return (
+      <div>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>This application has not been scored.</p>
+        <button
+          className="minibtn"
+          style={{ marginTop: 10 }}
+          disabled={s.rescoreStreaming}
+          onClick={() => s.setRescoreStreaming(true)}
+        >
+          Re-score page
+        </button>
+      </div>
+    );
   }
 
   return (
     <div>
       {app.recruiterStale && (
         <div className="callout">
-          <div className="callout__head">Out of date</div>
-          This review scored an earlier selection. Rebuild the PDF to re-score.
+          <div className="callout__head">{app.recruiterScore === null ? 'Not scored' : 'Out of date'}</div>
+          {app.recruiterScore === null
+            ? 'The recruiter pass did not complete for this page.'
+            : 'This review scored an earlier selection.'}{' '}
+          <button
+            className="minibtn"
+            style={{ marginTop: 8 }}
+            disabled={s.rescoreStreaming}
+            onClick={() => s.setRescoreStreaming(true)}
+          >
+            Re-score page
+          </button>
         </div>
       )}
 

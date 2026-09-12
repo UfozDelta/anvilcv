@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -227,6 +228,9 @@ class ApplicationServiceTest {
             assertEquals(0, out.getRecruiterWeaknesses().length);
             assertNull(out.getRecruiterThinnestRequirement());
             assertNull(out.getRecruiterWeakestBulletId());
+            // A failed pass is stale, not fresh. Left false, the UI drew a bare em dash with no
+            // alert tone - identical to a page that had simply never been scored.
+            assertTrue(out.isRecruiterStale());
         }
 
         @Test
@@ -454,6 +458,112 @@ class ApplicationServiceTest {
             assertTrue(out.getSelectedBulletIds().length > onPage.size(),
                     "an unscoped refit fills the page rather than preserving the prior entries");
             assertTrue(out.isRecruiterStale());
+        }
+    }
+
+    /**
+     * The only path that scores an application after it is created. Everything here used to be
+     * impossible: a scorecard that failed at generation time, or went stale on an edit, stayed
+     * that way for the life of the application.
+     */
+    @Nested
+    class Rescore {
+
+        private Application scoredApp(UUID proj) {
+            Application a = new Application();
+            a.setJdText("jd text");
+            a.setCompany("Acme");
+            a.setRole("Backend Engineer");
+            a.setRoleEmphasis("backend");
+            a.setAtsMatched(new String[]{"java"});
+            a.setAtsMissing(new String[]{"kubernetes"});
+            a.setSelectedSkills("{}");
+            return a;
+        }
+
+        @Test
+        void rescoreWritesTheScorecardAndClearsStale() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            Application a = scoredApp(proj);
+            a.setSelectedBulletIds(new UUID[]{b.getId()});
+            a.setRecruiterStale(true);
+
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
+            when(llm.reviewResume(any(), any(), any())).thenReturn(new LlmClient.RecruiterResult(
+                    80, 60, 70, "Solid", b.getId().toString(), "Kubernetes at scale",
+                    List.of("no metrics"), List.of()));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rescore(user, appId, ProgressLog.noOp());
+
+            assertEquals(70, out.getRecruiterScore());
+            assertEquals("Solid", out.getRecruiterVerdict());
+            assertFalse(out.isRecruiterStale());
+            assertEquals(b.getId(), out.getRecruiterWeakestBulletId());
+            // Judges the page only - no re-selection, no LaTeX, no tectonic.
+            verifyNoInteractions(renderer, compiler);
+        }
+
+        @Test
+        void rescoreSendsTheRenderedSelectionAndRebuiltKeywords() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            Application a = scoredApp(proj);
+            a.setSelectedBulletIds(new UUID[]{b.getId()});
+
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
+            when(llm.reviewResume(any(), any(), any())).thenReturn(new LlmClient.RecruiterResult(
+                    50, 50, 50, "Serviceable", null, "thin", List.of(), List.of()));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.rescore(user, appId, ProgressLog.noOp());
+
+            ArgumentCaptor<LlmClient.RecruiterRequest> req =
+                    ArgumentCaptor.forClass(LlmClient.RecruiterRequest.class);
+            verify(llm).reviewResume(req.capture(), any(), any());
+            assertEquals(1, req.getValue().bullets().size());
+            assertEquals(b.getId().toString(), req.getValue().bullets().get(0).bulletId());
+            // The original keyword list is the union of the two ATS buckets.
+            assertEquals(List.of("java", "kubernetes"), req.getValue().keywords());
+        }
+
+        @Test
+        void rescoreFailureLeavesThePageStaleInsteadOf500ing() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            Application a = scoredApp(proj);
+            a.setSelectedBulletIds(new UUID[]{b.getId()});
+
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
+            when(llm.reviewResume(any(), any(), any())).thenThrow(new RuntimeException("model down"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rescore(user, appId, ProgressLog.noOp());
+
+            assertNull(out.getRecruiterScore());
+            assertTrue(out.isRecruiterStale());   // button stays available
+        }
+
+        @Test
+        void rescoreRefusesWhenNothingIsOnThePage() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID();
+            Application a = new Application();
+            a.setSelectedBulletIds(new UUID[0]);
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+
+            assertThrows(IllegalStateException.class,
+                    () -> service.rescore(user, appId, ProgressLog.noOp()));
+            verifyNoInteractions(llm);
         }
     }
 }
