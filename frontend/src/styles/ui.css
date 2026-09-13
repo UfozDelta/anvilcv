@@ -117,6 +117,14 @@
 
 .approw:hover { background: var(--paper-2); }
 
+/* Delete isn't instant — the row sits and fades so you can see what's leaving before it's gone. */
+.approw--removing,
+.bullet--removing {
+  opacity: 0.25;
+  transition: opacity 450ms ease;
+  pointer-events: none;
+}
+
 .approw__link {
   position: absolute;
   inset: 0;

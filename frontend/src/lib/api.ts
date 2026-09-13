@@ -80,6 +80,8 @@ export interface Project {
   githubUrl?: string | null;
   repoContextReady?: boolean;
   techStack?: string | null;
+  /** Canonical tech names matched out of `techStack` server-side (see TechStackSummary.java) — use this for anything that needs discrete tokens instead of re-parsing the prose. */
+  techTerms?: string[];
   yourRole?: string | null;
   ownership?: string | null;
   scaleImpact?: string | null;

@@ -79,7 +79,7 @@ export function ProjectDetail() {
 
         <div className={filledCount === 0 ? 'stat stat--alert' : 'stat'}>
           <div className="stat__label">Context</div>
-          <div className="stat__value">{filledCount}<small>/5 fields</small></div>
+          <div className="stat__value">{filledCount}<small>/8 fields</small></div>
           <div className="stat__caption">
             {filledCount === 0 ? 'Empty — bullets generate generic without it.' : 'Filled in — see Info & Context.'}
           </div>
@@ -227,6 +227,7 @@ export function ProjectDetail() {
                   <EditBullet key={b.id} bullet={b} cfg={s.cfg} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
                 ) : (
                   <BulletRow key={b.id} bullet={b} index={i} cfg={s.cfg} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+                    removing={s.deletingBulletIds.has(b.id)}
                     onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')} />
                 ))}
               </div>
@@ -241,6 +242,7 @@ export function ProjectDetail() {
                     <EditBullet key={b.id} bullet={b} cfg={s.cfg} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
                   ) : (
                     <BulletRow key={b.id} bullet={b} index={i} cfg={s.cfg} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+                      removing={s.deletingBulletIds.has(b.id)}
                       onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')}
                       categoryLabel={cat} />
                   );

@@ -18,6 +18,7 @@ export function Experiences() {
   const [sort, setSort] = useState<Sort>('newest');
   const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   async function load() {
     setLoading(true);
@@ -43,11 +44,15 @@ export function Experiences() {
 
   async function del(id: string, label: string) {
     setErr(null);
+    setDeletingIds(s => new Set(s).add(id));
+    await new Promise(r => setTimeout(r, 450));
     try {
       await api.del(`/api/projects/${id}`);
       await load();
     } catch (e: any) {
       setErr(e?.message || `Failed to delete "${label}"`);
+    } finally {
+      setDeletingIds(s => { const n = new Set(s); n.delete(id); return n; });
     }
   }
 
@@ -95,7 +100,7 @@ export function Experiences() {
               const title = p.title || p.name;
               const meta = [p.company, p.location, p.dates].filter(Boolean).join(' · ') || '—';
               return (
-                <div className="approw" key={p.id} style={{ gridTemplateColumns: 'minmax(0,1fr) 150px 34px' }}>
+                <div className={`approw${deletingIds.has(p.id) ? ' approw--removing' : ''}`} key={p.id} style={{ gridTemplateColumns: 'minmax(0,1fr) 150px 34px' }}>
                   <Link className="approw__link" to={`/experiences/${p.id}`}>{title}</Link>
 
                   <div>

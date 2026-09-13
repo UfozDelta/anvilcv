@@ -2,6 +2,8 @@ package com.resumepipeline.render;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,5 +45,23 @@ class TechStackSummaryTest {
         String out = TechStackSummary.shorten(
                 "Java 21, Spring Boot 3.4.0 (web), PostgreSQL, Redis, Kafka, Docker, Kubernetes, Terraform");
         assertTrue(out.length() <= 60, out);
+    }
+
+    // Unlike shorten(), matchAll() has no 4-term cap — callers like the Generate-tab
+    // lens strip need every match, not just enough for a resume heading.
+    @Test void matchAllReturnsEveryHitUncapped() {
+        assertEquals(
+                List.of("Java", "Spring Boot", "PostgreSQL", "Redis", "Kafka", "Docker", "Kubernetes", "Terraform"),
+                TechStackSummary.matchAll(
+                        "Java 21, Spring Boot 3.4.0 (web), PostgreSQL, Redis, Kafka, Docker, Kubernetes, Terraform"));
+    }
+
+    @Test void matchAllOnUnmatchedStackIsEmpty() {
+        assertEquals(List.of(), TechStackSummary.matchAll("Frobnicator 9, Widgetron mesh"));
+    }
+
+    @Test void matchAllNullAndBlankAreEmpty() {
+        assertEquals(List.of(), TechStackSummary.matchAll(null));
+        assertEquals(List.of(), TechStackSummary.matchAll("   "));
     }
 }

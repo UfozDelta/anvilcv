@@ -64,6 +64,7 @@ export function Applications() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   // The whole set is fetched once and filtered here, so the tab counts describe
   // everything you have rather than whatever the last filter left behind.
@@ -114,14 +115,16 @@ export function Applications() {
   }
 
   async function deleteApp(a: ApplicationSummary) {
-    const snapshot = rows;
-    setRows(rs => rs.filter(r => r.id !== a.id));
     setErr(null);
+    setDeletingIds(s => new Set(s).add(a.id));
+    await new Promise(r => setTimeout(r, 450));
     try {
       await api.del(`/api/applications/${a.id}`);
+      setRows(rs => rs.filter(r => r.id !== a.id));
     } catch (e) {
-      setRows(snapshot);
       setErr(`Could not delete ${a.company || 'application'}: ${(e as Error).message}`);
+    } finally {
+      setDeletingIds(s => { const n = new Set(s); n.delete(a.id); return n; });
     }
   }
 
@@ -182,7 +185,7 @@ export function Applications() {
               </div>
             ))
           : shown.map(a => (
-              <div className="approw" key={a.id}>
+              <div className={`approw${deletingIds.has(a.id) ? ' approw--removing' : ''}`} key={a.id}>
                 {/* One stretched link covers the row; real controls sit above it. */}
                 <Link className="approw__link" to={`/applications/${a.id}`}>{a.company || 'Untitled'}</Link>
 

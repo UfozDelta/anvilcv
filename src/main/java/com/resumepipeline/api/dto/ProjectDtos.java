@@ -1,9 +1,11 @@
 package com.resumepipeline.api.dto;
 
 import com.resumepipeline.project.Project;
+import com.resumepipeline.render.TechStackSummary;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public class ProjectDtos {
@@ -41,6 +43,7 @@ public class ProjectDtos {
             String githubUrl,
             boolean repoContextReady,
             String techStack,
+            List<String> techTerms,
             String yourRole,
             String ownership,
             String scaleImpact,
@@ -55,7 +58,7 @@ public class ProjectDtos {
             return new ProjectResponse(
                     p.getId(), p.getKind(), p.getName(), p.getDescription(), p.getContextDescription(),
                     p.getGithubUrl(), p.getRepoContext() != null,
-                    p.getTechStack(), p.getYourRole(), p.getOwnership(),
+                    p.getTechStack(), TechStackSummary.matchAll(p.getTechStack()), p.getYourRole(), p.getOwnership(),
                     p.getScaleImpact(), p.getHardestProblem(),
                     p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                     p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),

@@ -2,7 +2,7 @@ import type { Bullet, GenerationConfig } from '../../lib/api';
 import { markdownBoldToHtml } from '../../lib/markdown';
 import { charCount, fitOf, fitHint, needsRefit, FIT_LABEL } from '../../lib/bulletLength';
 
-export function BulletRow({ bullet, index, onEdit, onDelete, onToggleApprove, categoryLabel, cfg }: {
+export function BulletRow({ bullet, index, onEdit, onDelete, onToggleApprove, categoryLabel, cfg, removing }: {
   bullet: Bullet;
   index: number;
   onEdit: () => void;
@@ -10,12 +10,13 @@ export function BulletRow({ bullet, index, onEdit, onDelete, onToggleApprove, ca
   onToggleApprove?: () => void;
   categoryLabel?: { label: string; blurb: string };
   cfg: GenerationConfig;
+  removing?: boolean;
 }) {
   const approved = bullet.status === 'APPROVED';
   const fit = fitOf(bullet.text, cfg);
   const bad = needsRefit(fit);
   return (
-    <div className="bullet">
+    <div className={`bullet${removing ? ' bullet--removing' : ''}`}>
       <div className="bullet__rank">#{String(index + 1).padStart(2, '0')}</div>
       <div style={{ width: '100%' }}>
         <div className="bullet__text" dangerouslySetInnerHTML={{ __html: markdownBoldToHtml(bullet.text) }} />

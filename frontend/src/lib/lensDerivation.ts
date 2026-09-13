@@ -99,16 +99,8 @@ export function narrativeBullet(slug: string, project: Project): string {
   }
 }
 
-/** Splits a comma/slash-separated tech-stack string into individual lens candidates. */
-const MAX_TECH_TOKEN_LENGTH = 40;
-
-export function techTokens(techStack: string | null | undefined): string[] {
-  if (!techStack) return [];
-  return techStack.split(/[,/\n]/).map(t => t.trim()).filter(t => t.length > 1 && t.length <= MAX_TECH_TOKEN_LENGTH);
-}
-
 export function deriveLenses(project: Project): Lens[] {
-  const tech: Lens[] = techTokens(project.techStack).map(token => ({
+  const tech: Lens[] = (project.techTerms ?? []).map(token => ({
     slug: token.toLowerCase(),
     label: token,
     blurb: `Bullets that specifically demonstrate ${token}`,

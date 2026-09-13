@@ -13,6 +13,7 @@ export function useProjectDetail(id: string | undefined) {
   const [generating, setGenerating] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [deletingBulletIds, setDeletingBulletIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set(['ai-ml', 'backend']));
   const [sortMode, setSortMode] = useState<'category' | 'date'>('category');
@@ -187,8 +188,11 @@ export function useProjectDetail(id: string | undefined) {
 
   async function delBullet(b: Bullet) {
     if (!confirm(`Delete this bullet?`)) return;
+    setDeletingBulletIds(s => new Set(s).add(b.id));
+    await new Promise(r => setTimeout(r, 450));
     await api.del(`/api/bullets/${b.id}`);
     await load();
+    setDeletingBulletIds(s => { const n = new Set(s); n.delete(b.id); return n; });
   }
   async function setBulletStatus(b: Bullet, status: Bullet['status']) {
     await api.patch<Bullet>(`/api/bullets/${b.id}/status`, { status });
@@ -261,6 +265,7 @@ export function useProjectDetail(id: string | undefined) {
   return {
     project, bullets, loading, generating, setGenerating, err,
     editing, setEditing, adding, setAdding, picked, togglePick,
+    deletingBulletIds,
     sortMode, setSortMode, filterCat, setFilterCat,
     statusTab, setStatusTab,
     enrichOpen, setEnrichOpen, enrichSaving, enrichErr, saveEnrich,

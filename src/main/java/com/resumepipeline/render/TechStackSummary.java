@@ -89,6 +89,22 @@ public final class TechStackSummary {
     public static String shorten(String raw) {
         if (raw == null || raw.isBlank()) return "";
 
+        List<String> all = matchAll(raw);
+        if (!all.isEmpty()) {
+            return String.join(", ", all.subList(0, Math.min(MAX_TERMS, all.size())));
+        }
+        return fallback(DETAIL.matcher(raw).replaceAll(" "));
+    }
+
+    /**
+     * Every canonical term the allowlist finds in {@code raw}, author's order, no cap —
+     * unlike {@link #shorten}, which exists for the fixed-width resume heading, callers
+     * that want the full picture (e.g. Generate-tab lenses) use this directly.
+     * Null/blank in, empty list out.
+     */
+    public static List<String> matchAll(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+
         String cleaned = DETAIL.matcher(raw).replaceAll(" ");
 
         // Claimed character ranges, so a term nested inside a longer one is not emitted twice
@@ -108,12 +124,9 @@ public final class TechStackSummary {
         // Author's order is meaningful — the primary language is usually written first.
         hits.sort(Comparator.comparingInt(h -> h[0]));
         LinkedHashSet<String> picked = new LinkedHashSet<>();
-        for (int[] h : hits) {
-            picked.add(TERMS.get(h[1]).canonical());
-            if (picked.size() == MAX_TERMS) break;
-        }
+        for (int[] h : hits) picked.add(TERMS.get(h[1]).canonical());
 
-        return picked.isEmpty() ? fallback(cleaned) : String.join(", ", picked);
+        return List.copyOf(picked);
     }
 
     private static boolean overlapsClaimed(boolean[] claimed, int start, int end) {

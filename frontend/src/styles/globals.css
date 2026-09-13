@@ -531,7 +531,7 @@ body::before {
 a { color: var(--ink); }
 a:focus-visible, button:focus-visible {
   outline: 3px solid var(--acid);
-  outline-offset: 2px;
+  outline-offset: -3px;
 }
 
 /* -------- Responsive grid utilities -------- */
