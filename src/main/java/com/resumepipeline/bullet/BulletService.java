@@ -374,7 +374,7 @@ public class BulletService {
             result = llm.generateBullets(
                     new LlmClient.GenerateBulletsRequest(
                             userId, sk, cat,
-                            p.getName(), p.getDescription(), p.getRepoContext(),
+                            p.getName(), p.getDescription(), p.getContextDescription(), p.getRepoContext(),
                             p.getTechStack(), p.getYourRole(), p.getOwnership(),
                             p.getScaleImpact(), p.getHardestProblem(),
                             p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),

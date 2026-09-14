@@ -1257,6 +1257,12 @@ public abstract class BaseLlmClient implements LlmClient {
                         ? "Description of work (what was built, with what tech, at what scale):\n"
                         : "Project description:\n")
           .append(untag(nz(req.description()))).append("\n");
+        // The extractor packs this with grounded evidence (verbatim code/diff spans, a repo
+        // skeleton) behind the prose overview — quotable material the short `description`
+        // field has no room for. Was collected from V29 onward but never wired into
+        // generation until now.
+        if (has(req.contextDescription()))
+            sb.append("\nArchitecture overview & evidence:\n").append(untag(req.contextDescription())).append("\n");
         if (has(req.techStack()))      sb.append("\nTech stack: ").append(untag(req.techStack())).append("\n");
         if (has(req.yourRole()))       sb.append("Your role: ").append(untag(req.yourRole())).append("\n");
         if (has(req.ownership()))      sb.append("\nWhat you owned:\n").append(untag(req.ownership())).append("\n");

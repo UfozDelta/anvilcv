@@ -105,7 +105,7 @@ class ContextAbHarness {
     private static LlmClient.GenerateBulletsRequest request(UUID user, Map<String, String> f, boolean full) {
         return new LlmClient.GenerateBulletsRequest(
                 user, LlmClient.SourceKind.PROJECT, "backend",
-                "AnvilCV", f.get("description"), null,
+                "AnvilCV", f.get("description"), null, null,
                 f.get("techStack"), f.get("yourRole"), f.get("ownership"),
                 f.get("scaleImpact"), f.get("hardestProblem"),
                 // The three V23 columns exist only in the new shape.

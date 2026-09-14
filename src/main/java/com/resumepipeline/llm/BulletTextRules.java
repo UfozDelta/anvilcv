@@ -89,6 +89,10 @@ public final class BulletTextRules {
         Set<String> srcNumbers = new HashSet<>();
         Matcher srcMatcher = DIGITS.matcher(src);
         while (srcMatcher.find()) srcNumbers.add(stripLeadingZeros(srcMatcher.group()));
+        // Source prose sometimes spells a quantity out ("forty percent" instead of "40%") —
+        // without this, a bullet correctly quoting "40%" gets rejected as fabricated even
+        // though the source genuinely states it, just not in digits.
+        srcNumbers.addAll(wordNumbersToDigits(sourceContext == null ? "" : sourceContext));
 
         List<String> fabricated = new ArrayList<>();
         // Bold markers are dropped so "**64K**" and "**3 to 180** ms" read as plain text.
@@ -106,6 +110,66 @@ public final class BulletTextRules {
             if (!found) fabricated.add(m.group());
         }
         return fabricated;
+    }
+
+    private static final java.util.Map<String, Integer> SMALL_NUMBER_WORDS = java.util.Map.ofEntries(
+            java.util.Map.entry("zero", 0), java.util.Map.entry("one", 1), java.util.Map.entry("two", 2),
+            java.util.Map.entry("three", 3), java.util.Map.entry("four", 4), java.util.Map.entry("five", 5),
+            java.util.Map.entry("six", 6), java.util.Map.entry("seven", 7), java.util.Map.entry("eight", 8),
+            java.util.Map.entry("nine", 9), java.util.Map.entry("ten", 10), java.util.Map.entry("eleven", 11),
+            java.util.Map.entry("twelve", 12), java.util.Map.entry("thirteen", 13), java.util.Map.entry("fourteen", 14),
+            java.util.Map.entry("fifteen", 15), java.util.Map.entry("sixteen", 16), java.util.Map.entry("seventeen", 17),
+            java.util.Map.entry("eighteen", 18), java.util.Map.entry("nineteen", 19)
+    );
+    private static final java.util.Map<String, Integer> TENS_WORDS = java.util.Map.ofEntries(
+            java.util.Map.entry("twenty", 20), java.util.Map.entry("thirty", 30), java.util.Map.entry("forty", 40),
+            java.util.Map.entry("fifty", 50), java.util.Map.entry("sixty", 60), java.util.Map.entry("seventy", 70),
+            java.util.Map.entry("eighty", 80), java.util.Map.entry("ninety", 90)
+    );
+    private static final java.util.Map<String, Long> MULTIPLIER_WORDS = java.util.Map.of(
+            "hundred", 100L, "thousand", 1_000L, "million", 1_000_000L, "billion", 1_000_000_000L
+    );
+
+    /**
+     * Cardinal number words ("forty", "two hundred", "sixty-four thousand") converted to
+     * digit strings, so {@link #fabricatedNumbers} can credit a bullet's digit-form quantity
+     * against a source that spelled the same number out in prose. Handles the compounds a
+     * project description realistically uses; doesn't attempt ordinals, fractions, or
+     * decimals — those don't participate in the unit-bearing {@link #QUANTITY} match anyway.
+     */
+    private static Set<String> wordNumbersToDigits(String text) {
+        Set<String> found = new HashSet<>();
+        if (text == null || text.isBlank()) return found;
+        String[] tokens = text.toLowerCase().replace('-', ' ').split("[^a-z]+");
+
+        long result = 0;   // accumulated total once a multiplier closes out a group
+        long current = 0;  // value being built within the current group
+        boolean active = false;
+        for (String tok : tokens) {
+            if (tok.isEmpty() || tok.equals("and")) continue;
+            if (SMALL_NUMBER_WORDS.containsKey(tok)) {
+                current += SMALL_NUMBER_WORDS.get(tok);
+                active = true;
+            } else if (TENS_WORDS.containsKey(tok)) {
+                current += TENS_WORDS.get(tok);
+                active = true;
+            } else if (MULTIPLIER_WORDS.containsKey(tok)) {
+                long mult = MULTIPLIER_WORDS.get(tok);
+                current = (current == 0 ? 1 : current) * mult;
+                if (mult >= 1000) {
+                    result += current;
+                    current = 0;
+                }
+                active = true;
+            } else {
+                if (active) found.add(String.valueOf(result + current));
+                result = 0;
+                current = 0;
+                active = false;
+            }
+        }
+        if (active) found.add(String.valueOf(result + current));
+        return found;
     }
 
     /** Drop thousands separators so "64,000" is one digit run rather than two. */

@@ -55,6 +55,12 @@ public interface LlmClient {
             String category,   // slug from CategoryLenses or "general"
             String projectName,
             String description,
+            /**
+             * Long-form architecture/role overview (the project's "Info & Context" field) —
+             * distinct from {@code description}. Collected from users and from the context
+             * extractor's output but, until now, never actually reached generation.
+             */
+            String contextDescription,
             String repoContext,
             String techStack,
             String yourRole,
