@@ -65,6 +65,17 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
   cut.
 - Steer it with pinned/excluded paths, lenses, and notes. Each bullet links to the files or
   commits it traces to.
+- **Repo map**, built once per pinned commit from a single tarball download:
+  - *Deterministic (no LLM):* per-language symbol/route skeletons, module links from
+    cross-module references, PageRank so the code everything depends on ranks first, and facts
+    counted from the code (tests, endpoints, migrations, dependencies, lines of code). Counted
+    facts give XYZ bullets a sourced Y.
+  - *LLM, bottom-up:* the top 15 modules get a what/how/why summary. Then the project gets an
+    overview, its audience, 3-7 subsystems tagged with the lenses they feed, and 2-3 end-to-end
+    flows.
+  - Generation shares the overview across lenses. Each lens then writes from its own
+    subsystems' modules (or the subsystems you tick), so bullets cover different parts of the
+    system instead of rewording one summary.
 
 **Admin**
 - `/admin` — LLM provider, API keys, base URLs, and per-call models. Keys encrypted at rest
@@ -283,7 +294,7 @@ stored key undecryptable — they have to be re-entered.
 | `llm.settings` | `LlmSettings` entity + `SecretCipher` (AES-256-GCM) |
 | `render` | `LatexEscaper`, `LatexRenderer`, `PdfCompiler` |
 | `jd` | `JdFetcher` — URL scraping and JSON-LD extraction |
-| `github` | GitHub App auth (JWT, installation tokens), `GithubClient`, `RepoExplorer` tool loop, `SourceTracer` |
+| `github` | GitHub App auth (JWT, installation tokens), `GithubClient`, `RepoSnapshot` (tarball), `RepoMapBuilder` / `RepoMapService` / `RepoMapRenderer` (repo map), `RepoExplorer` tool loop, `SourceTracer` |
 | `progress` | `ProgressLog`, `PipelineTimer` |
 | `config` | Per-user `GenerationConfig`, SPA deep-link fallback |
 
@@ -310,8 +321,8 @@ apps     GET /api/applications           GET /api/applications/outcome-history
 import   POST /api/resume/parse          POST /api/resume/import
 admin    GET /api/admin/stats            GET|PUT /api/admin/llm   POST /api/admin/llm/test
 github   GET /api/github/status  /connect  /callback  /repos      DELETE /api/github
-         POST /api/github/link           GET /api/github/projects/{id}/tree|file|bullet-sources
-         POST /api/github/projects/{id}/explore/submit   (polls /api/projects/jobs/{jobId}/progress)
+         POST /api/github/link           GET /api/github/projects/{id}/tree|file|map|bullet-sources
+         POST /api/github/projects/{id}/explore/submit[?rebuildMap=true]   (polls /api/projects/jobs/{jobId}/progress)
 ```
 
 Session-cookie auth (`JSESSIONID`, httpOnly), BCrypt passwords, `/api/admin/**` gated on
@@ -346,8 +357,9 @@ jobs, and it does not survive horizontal scaling.
 | `llm_settings` | singleton row: provider, encrypted keys, base URLs, per-call models |
 | `github_installation` | one per user: GitHub App installation id + account login. No tokens |
 
-`project` also carries `repo_branch`, `repo_commit_sha` (the pinned snapshot), and
-`repo_evidence` (JSON of the explorer's verified spans, used for bullet tracing).
+`project` also carries `repo_branch`, `repo_commit_sha` (the pinned snapshot),
+`repo_evidence` (JSON of the explorer's verified spans, used for bullet tracing), and
+`repo_map` (JSON repo map for that commit, reused until it changes).
 
 Flyway owns the schema (`out-of-order: true`); JPA only validates it.
 
@@ -430,5 +442,12 @@ cd frontend && npm run build       # dist/ and a copy into src/main/resources/st
 14. No linter, formatter, `CONTRIBUTING.md`, or `LICENSE` in the repo yet.
 15. **GitHub callback lands on `/settings` of the API origin.** On a split-origin dev setup
     (`npm run dev` on 5173), you end up on 8080's built SPA after connecting.
-16. **Repo exploration costs LLM tokens on your key**, up to 40 steps per run. It is logged to
-    `llm_usage_log` as `repo_explore`.
+16. **Repo exploration costs LLM tokens on your key.** The first run on a commit builds the map
+    (about 16 calls: 15 modules on the JD-cleanup model plus 1 project call), then up to 40
+    explorer steps. Later runs reuse the map. All of it is logged to `llm_usage_log` as
+    `repo_explore`.
+17. **Symbol extraction is regex, not a parser.** It covers Java/Kotlin, TS/JS, Python, and Go
+    well, and other languages loosely. A missed symbol only weakens ranking. Nothing it extracts
+    is stated as fact except the counts, and each count names what it counted.
+18. **Big repos:** the tarball is capped at 100 MB compressed, and the snapshot keeps 25 MB of
+    text. Past that, files are dropped and the map says `(repo truncated)`.
