@@ -46,6 +46,13 @@ public interface LlmClient {
      */
     RecruiterResult reviewResume(RecruiterRequest req, ProgressLog progress, TokenAccumulator tokens);
 
+    /**
+     * One turn of the server-side repo explorer's tool loop: given its instructions and the
+     * transcript of tool calls and observations so far, choose the next tool call or finish
+     * with the extracted context. The explorer, not the model, executes the tools.
+     */
+    ExploreStep exploreStep(ExploreStepRequest req, ProgressLog progress, TokenAccumulator tokens);
+
     // --- types ---
 
     enum SourceKind { PROJECT, EXPERIENCE }
@@ -113,6 +120,17 @@ public interface LlmClient {
     record RecruiterRequest(String cleanJd, String company, String role, List<String> keywords,
                             String roleEmphasis, List<RenderedBullet> bullets,
                             java.util.Map<String, List<String>> skills, List<String> courses) {}
+    record ExploreStepRequest(String instructions, String transcript) {}
+    /** action: list_tree | read_file | search_code | git_log | finish. {@code result} is set only on finish. */
+    record ExploreStep(String action, String path, String query, String reason, ExtractResult result) {}
+    /** The 11-key context JSON (anvilcv-context-mcp's schema.json) plus the citations behind it. */
+    record ExtractResult(String name, String techStack, String description, String yourRole, String ownership,
+                         String scaleImpact, String hardestProblem, String technicalDecisions,
+                         String userImpact, String securityPosture, List<String> category,
+                         List<EvidenceRef> evidence) {}
+    /** A citation: a file line range the explorer read, or a commit sha it saw in git_log. */
+    record EvidenceRef(String field, String claim, String path, int startLine, int endLine, String commit) {}
+
     record RecruiterResult(int evidenceStrength, int relevanceDensity, int overall, String verdict,
                            String weakestBulletId, String thinnestRequirement,
                            List<String> weaknesses, List<BulletVerdict> bulletVerdicts) {}

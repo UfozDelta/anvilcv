@@ -1,5 +1,8 @@
 package com.resumepipeline.github;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectRepository;
 import com.resumepipeline.project.ProjectService;
@@ -25,6 +28,10 @@ public class GithubService {
 
     /** Files larger than this are refused outright in the viewer and by the explorer. */
     public static final int MAX_FILE_BYTES = 200_000;
+
+    /** Same ceiling GithubContextFetcher puts on repo context sent to generation. */
+    private static final int MAX_REPO_CONTEXT_CHARS = 30_000;
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     public record Status(boolean configured, boolean connected, String account, String manageUrl) {}
 
@@ -130,6 +137,59 @@ public class GithubService {
         Project p = linked(userId, projectId);
         long inst = installation(userId);
         return new RepoReader(client, inst, repoName(p), p.getRepoCommitSha());
+    }
+
+    /**
+     * Writes a verified explorer outcome onto the project. Only non-blank fields overwrite, so
+     * a field the explorer could not support keeps whatever the user typed. The verbatim
+     * evidence becomes {@code repoContext}, which bullet generation already reads as grounding.
+     */
+    public Project applyExplore(UUID userId, UUID projectId, RepoExplorer.Outcome outcome) {
+        Project p = linked(userId, projectId);
+        LlmClient.ExtractResult r = outcome.result();
+        set(r.techStack(), p::setTechStack);
+        set(r.description(), p::setContextDescription);
+        set(r.yourRole(), p::setYourRole);
+        set(r.ownership(), p::setOwnership);
+        set(r.scaleImpact(), p::setScaleImpact);
+        set(r.hardestProblem(), p::setHardestProblem);
+        set(r.technicalDecisions(), p::setTechnicalDecisions);
+        set(r.userImpact(), p::setUserImpact);
+        set(r.securityPosture(), p::setSecurityPosture);
+        p.setRepoContext(renderEvidence(repoName(p), p.getRepoCommitSha(), outcome.evidence()));
+        try {
+            p.setRepoEvidence(JSON.writeValueAsString(outcome.evidence()));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize evidence", e);
+        }
+        return projectRepo.save(p);
+    }
+
+    public List<RepoExplorer.Evidence> evidence(Project p) {
+        if (p.getRepoEvidence() == null || p.getRepoEvidence().isBlank()) return List.of();
+        try {
+            return JSON.readValue(p.getRepoEvidence(), new TypeReference<List<RepoExplorer.Evidence>>() {});
+        } catch (Exception e) {
+            log.warn("Unreadable repo_evidence on project {}: {}", p.getId(), e.getMessage());
+            return List.of();
+        }
+    }
+
+    static String renderEvidence(String repo, String sha, List<RepoExplorer.Evidence> evidence) {
+        if (evidence.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder("Verified evidence from " + repo + "@" + sha.substring(0, Math.min(7, sha.length()))
+                + " (verbatim spans re-read by AnvilCV):\n");
+        for (RepoExplorer.Evidence e : evidence) {
+            String ref = e.commit() != null ? "commit " + e.commit() : e.path() + ":" + e.startLine() + "-" + e.endLine();
+            String block = "\n[" + e.field() + "] " + e.claim() + "\n" + ref + "\n" + e.text() + "\n";
+            if (sb.length() + block.length() > MAX_REPO_CONTEXT_CHARS) break;
+            sb.append(block);
+        }
+        return sb.toString();
+    }
+
+    private static void set(String value, java.util.function.Consumer<String> setter) {
+        if (value != null && !value.isBlank()) setter.accept(value);
     }
 
     public Project linked(UUID userId, UUID projectId) {

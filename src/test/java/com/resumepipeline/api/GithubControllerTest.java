@@ -1,6 +1,8 @@
 package com.resumepipeline.api;
 
 import com.resumepipeline.github.GithubService;
+import com.resumepipeline.github.RepoExplorer;
+import com.resumepipeline.llm.LlmUsageService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -23,6 +25,9 @@ class GithubControllerTest {
 
     @Autowired MockMvc mvc;
     @MockitoBean GithubService github;
+    @MockitoBean RepoExplorer explorer;
+    @MockitoBean JobProgressStore jobStore;
+    @MockitoBean LlmUsageService usage;
 
     @Test
     void callbackWithoutMatchingSessionStateNeverConnects() throws Exception {

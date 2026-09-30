@@ -4,7 +4,14 @@ import com.resumepipeline.api.dto.ProjectDtos.ProjectResponse;
 import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.github.GithubClient;
 import com.resumepipeline.github.GithubException;
+import com.resumepipeline.api.dto.ApplicationDtos.SubmitResponse;
 import com.resumepipeline.github.GithubService;
+import com.resumepipeline.github.RepoExplorer;
+import com.resumepipeline.github.RepoReader;
+import com.resumepipeline.llm.LlmUsageService;
+import com.resumepipeline.llm.TokenAccumulator;
+import com.resumepipeline.obs.Mdc;
+import com.resumepipeline.progress.ProgressLog;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +27,8 @@ import java.security.SecureRandom;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/api/github")
@@ -29,10 +38,18 @@ public class GithubController {
     private static final String STATE_ATTR = "github.oauth.state";
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final GithubService github;
+    private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
-    public GithubController(GithubService github) {
+    private final GithubService github;
+    private final RepoExplorer explorer;
+    private final JobProgressStore jobStore;
+    private final LlmUsageService usage;
+
+    public GithubController(GithubService github, RepoExplorer explorer, JobProgressStore jobStore, LlmUsageService usage) {
         this.github = github;
+        this.explorer = explorer;
+        this.jobStore = jobStore;
+        this.usage = usage;
     }
 
     @GetMapping("/status")
@@ -98,6 +115,37 @@ public class GithubController {
     @GetMapping(value = "/projects/{id}/file", produces = MediaType.TEXT_PLAIN_VALUE)
     public String file(Authentication auth, @PathVariable UUID id, @RequestParam String path) {
         return github.file(AuthUtils.userId(auth), id, path);
+    }
+
+    /**
+     * Runs the repo explorer and fills the project's context from what it verified. Poll
+     * {@code /api/projects/jobs/{jobId}/progress}; on DONE the result id is the project id.
+     */
+    @PostMapping("/projects/{id}/explore/submit")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SubmitResponse explore(Authentication auth, @PathVariable UUID id, @RequestBody RepoExplorer.Steering steering) {
+        UUID userId = AuthUtils.userId(auth);
+        RepoReader reader = github.reader(userId, id); // fail fast: not linked / not connected
+        UUID jobId = UUID.randomUUID();
+        jobStore.start(jobId, userId);
+        ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
+            ProgressLog progress = msg -> jobStore.append(jobId, msg);
+            TokenAccumulator tokens = new TokenAccumulator();
+            try {
+                progress.emit("Exploring " + reader.repo() + " @ " + reader.sha().substring(0, 7) + "...");
+                RepoExplorer.Outcome out = explorer.explore(reader, steering, progress, tokens);
+                for (String d : out.droppedClaims()) progress.emit("cut: " + d);
+                github.applyExplore(userId, id, out);
+                progress.emit("saved context from " + out.steps() + " steps, " + out.evidence().size() + " verified citations");
+                jobStore.complete(jobId, id);
+            } catch (Exception e) {
+                log.error("EXPLORE_FAILED job={} cause={}", jobId, e.getMessage(), e);
+                jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            } finally {
+                usage.record(userId, "repo_explore", tokens, null, id);
+            }
+        }));
+        return new SubmitResponse(jobId);
     }
 
     private static ResponseEntity<Void> redirect(String location) {

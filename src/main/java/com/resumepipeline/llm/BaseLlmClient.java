@@ -1223,6 +1223,46 @@ public abstract class BaseLlmClient implements LlmClient {
         }
     }
 
+    // -------- exploreStep --------
+
+    @Override
+    public ExploreStep exploreStep(ExploreStepRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        SchemaSpec str = SchemaSpec.string();
+        LinkedHashMap<String, SchemaSpec> evidence = new LinkedHashMap<>();
+        evidence.put("field", str);
+        evidence.put("claim", str);
+        evidence.put("path", str);
+        evidence.put("startLine", SchemaSpec.integer());
+        evidence.put("endLine", SchemaSpec.integer());
+        evidence.put("commit", str);
+
+        LinkedHashMap<String, SchemaSpec> result = new LinkedHashMap<>();
+        for (String k : List.of("name", "techStack", "description", "yourRole", "ownership", "scaleImpact",
+                "hardestProblem", "technicalDecisions", "userImpact", "securityPosture")) {
+            result.put(k, str);
+        }
+        result.put("category", SchemaSpec.array(str));
+        result.put("evidence", SchemaSpec.array(SchemaSpec.object(evidence, List.of("field", "claim"))));
+
+        LinkedHashMap<String, SchemaSpec> step = new LinkedHashMap<>();
+        step.put("reason", str);
+        step.put("action", str);
+        step.put("path", str);
+        step.put("query", str);
+        step.put("result", SchemaSpec.object(result, List.of()));
+        SchemaSpec schema = SchemaSpec.object(step, List.of("reason", "action"));
+
+        String prompt = req.instructions() + "\n\n# Transcript so far\n\n" + req.transcript();
+        String json = callJsonWithRetry(generateModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, false, "Explore");
+        try {
+            return mapper.readerFor(ExploreStep.class)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(json);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse explorer step: " + json, e);
+        }
+    }
+
     // -------- model selectors (subclass config) --------
 
     protected abstract String generateModel();
