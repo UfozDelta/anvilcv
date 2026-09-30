@@ -83,6 +83,21 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(com.resumepipeline.github.GithubException.class)
+    public ResponseEntity<Map<String, Object>> handleGithub(com.resumepipeline.github.GithubException e) {
+        int status = switch (e) {
+            case com.resumepipeline.github.GithubException.NotConfigured x -> 503;
+            case com.resumepipeline.github.GithubException.NotConnected x -> 409;
+            case com.resumepipeline.github.GithubException.RateLimited x -> 429;
+            default -> 400;
+        };
+        return ResponseEntity.status(status).body(Map.of(
+                "source", "github",
+                "status", status,
+                "message", e.getMessage()
+        ));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException e) {
         // Unwrap LLM errors that escaped via parsing failures.

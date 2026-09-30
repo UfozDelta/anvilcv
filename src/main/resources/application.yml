@@ -93,6 +93,17 @@ llm:
       match:    gpt-4o-mini
       clean-jd: gpt-4o-mini
 
+# GitHub App for reading users' private repos (Settings > Connect GitHub). All blank
+# disables the feature; the rest of the app is unaffected. Setup steps: README > GitHub App.
+github:
+  app:
+    id:            ${GITHUB_APP_ID:}
+    slug:          ${GITHUB_APP_SLUG:}
+    client-id:     ${GITHUB_APP_CLIENT_ID:}
+    client-secret: ${GITHUB_APP_CLIENT_SECRET:}
+    # PEM, either multi-line or one line with literal \n escapes. PKCS#1 as downloaded is fine.
+    private-key:   ${GITHUB_APP_PRIVATE_KEY:}
+
 tectonic:
   binary: ${TECTONIC_BIN:tectonic}
   timeout-seconds: 30

@@ -42,6 +42,8 @@ public class ProjectDtos {
             String contextDescription,
             String githubUrl,
             boolean repoContextReady,
+            String repoBranch,
+            String repoCommitSha,
             String techStack,
             List<String> techTerms,
             String yourRole,
@@ -58,6 +60,7 @@ public class ProjectDtos {
             return new ProjectResponse(
                     p.getId(), p.getKind(), p.getName(), p.getDescription(), p.getContextDescription(),
                     p.getGithubUrl(), p.getRepoContext() != null,
+                    p.getRepoBranch(), p.getRepoCommitSha(),
                     p.getTechStack(), TechStackSummary.matchAll(p.getTechStack()), p.getYourRole(), p.getOwnership(),
                     p.getScaleImpact(), p.getHardestProblem(),
                     p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),

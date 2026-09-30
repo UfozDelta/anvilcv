@@ -39,6 +39,16 @@ public class Project {
     @Column(name = "repo_context", columnDefinition = "text")
     private String repoContext;
 
+    @Column(name = "repo_branch")
+    private String repoBranch;
+
+    @Column(name = "repo_commit_sha")
+    private String repoCommitSha;
+
+    /** JSON array of verbatim evidence spans the repo explorer read — see RepoEvidence. */
+    @Column(name = "repo_evidence", columnDefinition = "text")
+    private String repoEvidence;
+
     // Enrichment fields — user-provided context for better bullet generation
     @Column(name = "tech_stack")
     private String techStack;
@@ -108,6 +118,12 @@ public class Project {
     public void setGithubUrl(String githubUrl) { this.githubUrl = githubUrl; }
     public String getRepoContext() { return repoContext; }
     public void setRepoContext(String repoContext) { this.repoContext = repoContext; }
+    public String getRepoBranch() { return repoBranch; }
+    public void setRepoBranch(String repoBranch) { this.repoBranch = repoBranch; }
+    public String getRepoCommitSha() { return repoCommitSha; }
+    public void setRepoCommitSha(String repoCommitSha) { this.repoCommitSha = repoCommitSha; }
+    public String getRepoEvidence() { return repoEvidence; }
+    public void setRepoEvidence(String repoEvidence) { this.repoEvidence = repoEvidence; }
     public String getTechStack() { return techStack; }
     public void setTechStack(String techStack) { this.techStack = techStack; }
     public String getYourRole() { return yourRole; }
