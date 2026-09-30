@@ -8,6 +8,7 @@ import com.resumepipeline.api.dto.ApplicationDtos.SubmitResponse;
 import com.resumepipeline.github.GithubService;
 import com.resumepipeline.github.RepoExplorer;
 import com.resumepipeline.github.RepoReader;
+import com.resumepipeline.github.SourceTracer;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.obs.Mdc;
@@ -26,6 +27,7 @@ import java.net.URI;
 import java.security.SecureRandom;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -115,6 +117,11 @@ public class GithubController {
     @GetMapping(value = "/projects/{id}/file", produces = MediaType.TEXT_PLAIN_VALUE)
     public String file(Authentication auth, @PathVariable UUID id, @RequestParam String path) {
         return github.file(AuthUtils.userId(auth), id, path);
+    }
+
+    @GetMapping("/projects/{id}/bullet-sources")
+    public Map<UUID, List<SourceTracer.Source>> bulletSources(Authentication auth, @PathVariable UUID id) {
+        return github.bulletSources(AuthUtils.userId(auth), id);
     }
 
     /**

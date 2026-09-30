@@ -2,6 +2,8 @@ package com.resumepipeline.github;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectRepository;
@@ -11,7 +13,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.LongFunction;
@@ -40,11 +44,13 @@ public class GithubService {
     private final GithubInstallationRepository installs;
     private final ProjectService projects;
     private final ProjectRepository projectRepo;
+    private final BulletRepository bullets;
     private final String webBase;
 
     public GithubService(GithubAppAuth auth, GithubClient client, GithubInstallationRepository installs,
-                         ProjectService projects, ProjectRepository projectRepo,
+                         ProjectService projects, ProjectRepository projectRepo, BulletRepository bullets,
                          @Value("${github.web-base:https://github.com}") String webBase) {
+        this.bullets = bullets;
         this.auth = auth;
         this.client = client;
         this.installs = installs;
@@ -173,6 +179,18 @@ public class GithubService {
             log.warn("Unreadable repo_evidence on project {}: {}", p.getId(), e.getMessage());
             return List.of();
         }
+    }
+
+    /** bulletId -> the evidence spans it traces to. Bullets with no confident match are omitted. */
+    public Map<UUID, List<SourceTracer.Source>> bulletSources(UUID userId, UUID projectId) {
+        List<RepoExplorer.Evidence> ev = evidence(projects.get(userId, projectId));
+        Map<UUID, List<SourceTracer.Source>> out = new LinkedHashMap<>();
+        if (ev.isEmpty()) return out;
+        for (Bullet b : bullets.findByProjectIdOrderByCreatedAtAsc(projectId)) {
+            List<SourceTracer.Source> s = SourceTracer.trace(b.getText(), ev);
+            if (!s.isEmpty()) out.put(b.getId(), s);
+        }
+        return out;
     }
 
     static String renderEvidence(String repo, String sha, List<RepoExplorer.Evidence> evidence) {
