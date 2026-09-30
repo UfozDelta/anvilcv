@@ -428,6 +428,17 @@ public final class BulletTextRules {
                 : MAX_BOLD_SPANS;
     }
 
+    /**
+     * Bold ceiling for one bullet: HEAVY keeps its ceiling; otherwise a bullet that fits on one
+     * line gets 1 span and a 2-line bullet gets {@link #MAX_BOLD_SPANS}. A single-line bullet
+     * with two bolds splits a skimming recruiter's eye between them — one lands harder.
+     */
+    public static int maxBoldSpans(GenerationConfig cfg, String text) {
+        int ceiling = maxBoldSpans(cfg);
+        if (cfg == null || ceiling != MAX_BOLD_SPANS) return ceiling;
+        return charCount(text) <= singleHighChars(cfg) ? 1 : MAX_BOLD_SPANS;
+    }
+
     private static final Pattern BOLD_SPAN = Pattern.compile("\\*\\*(.+?)\\*\\*");
 
     /**

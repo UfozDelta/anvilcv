@@ -89,7 +89,8 @@ public class ProjectController {
         return bullets.generateForProject(AuthUtils.userId(auth), id).stream().map(BulletResponse::from).toList();
     }
 
-    public record GenerateBankRequest(List<String> categories) {}
+    /** subsystems: optional repo-map subsystem names to write from instead of each lens's tagged ones. */
+    public record GenerateBankRequest(List<String> categories, List<String> subsystems) {}
 
     @PostMapping("/{id}/bullets/generate-bank")
     public List<BulletResponse> generateBank(Authentication auth, @PathVariable UUID id,
@@ -123,7 +124,8 @@ public class ProjectController {
         ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
-                bullets.generateBank(userId, id, req.categories(), progress);
+                bullets.generateBank(userId, id, req.categories(),
+                        req.subsystems() == null ? List.of() : req.subsystems(), progress);
                 jobStore.complete(jobId, id);
             } catch (Exception e) {
                 log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);

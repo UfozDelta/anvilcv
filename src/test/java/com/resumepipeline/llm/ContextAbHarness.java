@@ -112,7 +112,7 @@ class ContextAbHarness {
                 full ? f.get("technicalDecisions") : null,
                 full ? f.get("userImpact") : null,
                 full ? f.get("securityPosture") : null,
-                null, null, null, null, List.of(), List.of());
+                null, null, null, null, List.of(), List.of(), null);
     }
 
     @Test

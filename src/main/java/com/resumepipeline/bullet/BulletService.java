@@ -3,6 +3,7 @@ package com.resumepipeline.bullet;
 import com.resumepipeline.application.ApplicationRenderer;
 import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.config.GenerationConfig;
+import com.resumepipeline.github.RepoMapRenderer;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
@@ -247,7 +248,6 @@ public class BulletService {
         // write one bullet's rewrite over a different bullet's row.
         Map<String, Bullet> byId = offBand.stream()
                 .collect(Collectors.toMap(b -> b.getId().toString(), b -> b));
-        int maxBold = BulletTextRules.maxBoldSpans(cfg);
         // Dedup is against every OTHER bullet on the project, so a rewrite cannot converge onto
         // a bullet that already exists -- including one that was in band and never sent.
         List<String> otherTexts = new ArrayList<>(all.stream().map(Bullet::getText).toList());
@@ -257,7 +257,8 @@ public class BulletService {
         Map<String, String> rewriteTexts = new LinkedHashMap<>();
         for (LlmClient.BulletToRefit r : result.bullets()) {
             if (!byId.containsKey(r.id())) continue;
-            rewriteTexts.put(r.id(), BulletTextRules.capBoldSpans(BulletTextRules.ensureTerminalPeriod(r.text()), maxBold));
+            String t = BulletTextRules.ensureTerminalPeriod(r.text());
+            rewriteTexts.put(r.id(), BulletTextRules.capBoldSpans(t, BulletTextRules.maxBoldSpans(cfg, t)));
         }
         Map<String, BulletLineMeasurer.Measured> rewriteMeasured = measurer.measure(rewriteTexts);
 
@@ -351,7 +352,8 @@ public class BulletService {
 
     /** Call the LLM for one project/category. No shared state — safe to run concurrently. */
     private RawGeneration generateBulletsOnly(UUID userId, UUID projectId, String category,
-                                              List<String> siblingCategories, ProgressLog progress) {
+                                              List<String> siblingCategories, List<String> subsystems,
+                                              ProgressLog progress) {
         Project p = projectService.get(userId, projectId);
 
         LlmClient.SourceKind sk = p.getKind() == Project.Kind.EXPERIENCE
@@ -379,7 +381,8 @@ public class BulletService {
                             p.getScaleImpact(), p.getHardestProblem(),
                             p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                             p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
-                            existing, siblingCategories),
+                            existing, siblingCategories,
+                            RepoMapRenderer.lensFocus(RepoMapRenderer.parse(p.getRepoMap()), cat, subsystems)),
                     progress, tokens);
         } finally {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
@@ -409,7 +412,7 @@ public class BulletService {
     private List<Bullet> saveDeduped(UUID userId, UUID projectId, RawGeneration gen,
                                      List<String> bankTexts, List<String> siblingTexts,
                                      ProgressLog progress) {
-        int maxBold = BulletTextRules.maxBoldSpans(configService.get(userId));
+        GenerationConfig cfg = configService.get(userId);
         List<Bullet> saved = new ArrayList<>();
         int dupDropped = 0;
         int variantsKept = 0;
@@ -433,7 +436,7 @@ public class BulletService {
             // which caller produced it. Applied after the dedup check on purpose — isNearDuplicate
             // already strips ** internally (see wordSet/quantityTokens), so capping first vs.
             // after cannot change a dedup decision either way.
-            String text = BulletTextRules.capBoldSpans(g.text(), maxBold);
+            String text = BulletTextRules.capBoldSpans(g.text(), BulletTextRules.maxBoldSpans(cfg, g.text()));
             bankTexts.add(text);
             saved.add(repo.save(new Bullet(projectId, text, g.tags().toArray(new String[0]), gen.category())));
         }
@@ -457,7 +460,7 @@ public class BulletService {
     /** Generate bullets for one project and one category lens. */
     public List<Bullet> generateForProjectAndCategory(UUID userId, UUID projectId, String category, ProgressLog progress) {
         // No siblings: a standalone generation is the only call in flight.
-        RawGeneration gen = generateBulletsOnly(userId, projectId, category, List.of(), progress);
+        RawGeneration gen = generateBulletsOnly(userId, projectId, category, List.of(), List.of(), progress);
         // Fetched fresh here (not passed in) so this standalone entry point still sees any
         // bullets saved by other calls in the meantime — same behavior as before the split.
         List<String> bankTexts = new ArrayList<>(
@@ -467,6 +470,15 @@ public class BulletService {
     }
 
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, ProgressLog progress) {
+        return generateBank(userId, projectId, categories, List.of(), progress);
+    }
+
+    /**
+     * @param subsystems repo-map subsystem names the user ticked; every lens then writes from
+     *                   those instead of the subsystems tagged for it. Empty = use the tags.
+     */
+    public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, List<String> subsystems,
+                                     ProgressLog progress) {
         if (categories == null || categories.isEmpty()) {
             throw new IllegalArgumentException("categories cannot be empty");
         }
@@ -484,7 +496,7 @@ public class BulletService {
         List<CompletableFuture<RawGeneration>> futures = categories.stream()
                 .map(c -> CompletableFuture.supplyAsync(
                         Mdc.wrap(() -> generateBulletsOnly(userId, projectId, c,
-                                categories.stream().filter(o -> !o.equals(c)).toList(),
+                                categories.stream().filter(o -> !o.equals(c)).toList(), subsystems,
                                 tagged(progress, c))), PARALLEL_EXECUTOR))
                 .toList();
 

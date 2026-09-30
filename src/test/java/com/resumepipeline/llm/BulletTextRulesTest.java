@@ -384,6 +384,19 @@ class BulletTextRulesTest {
         assertEquals(BulletTextRules.MAX_BOLD_SPANS, BulletTextRules.maxBoldSpans(null));
     }
 
+    @Test void oneLineBulletsGetOneBoldTwoLineBulletsGetTwo() {
+        GenerationConfig c = new GenerationConfig();
+        String oneLine = "Encrypted OAuth tokens at rest with **AES-256-GCM**.";
+        String twoLine = "x".repeat(BulletTextRules.singleHighChars(c) + 1);
+        assertEquals(1, BulletTextRules.maxBoldSpans(c, oneLine));
+        assertEquals(BulletTextRules.MAX_BOLD_SPANS, BulletTextRules.maxBoldSpans(c, twoLine));
+
+        GenerationConfig heavy = new GenerationConfig();
+        heavy.setBoldDensity(GenerationConfig.BoldDensity.HEAVY);
+        assertEquals(BulletTextRules.MAX_BOLD_SPANS_HEAVY, BulletTextRules.maxBoldSpans(heavy, oneLine));
+        assertEquals(BulletTextRules.MAX_BOLD_SPANS, BulletTextRules.maxBoldSpans(null, oneLine));
+    }
+
     @Test void capBoldSpansDoesNotChangeCharCount() {
         // The length filter measures charCount() with ** stripped — capping bold must not
         // move a bullet across a keep/drop boundary.

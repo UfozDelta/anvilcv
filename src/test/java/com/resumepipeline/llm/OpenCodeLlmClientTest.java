@@ -93,12 +93,45 @@ class OpenCodeLlmClientTest {
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, null, "Java", null, null, null, null,
                         null, null, null,
-                        null, null, null, null, List.of(), List.of()),
+                        null, null, null, null, List.of(), List.of(), null),
                 ProgressLog.noOp(), new TokenAccumulator());
 
         assertEquals(2, result.bullets().size());
         assertEquals("Built a backend service.", result.bullets().get(0).text());
         assertEquals(List.of("backend"), result.bullets().get(0).tags());
+        server.verify();
+    }
+
+    @Test
+    void lensFocusReachesPromptTailAndVouchesForItsNumbers() {
+        GenerationConfig cfg = new GenerationConfig();
+        cfg.setWordFilterEnabled(false);
+        GenerationConfigService configService = new GenerationConfigService(null) {
+            @Override
+            public GenerationConfig get(UUID userId) {
+                return cfg;
+            }
+        };
+
+        OpenCodeLlmClient client = client(configService);
+        server.expect(anyRequest())
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("REPO MAP — this lens's part of the system")))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Built a polling job store answering in **40ms**.\\",\\"tags\\":[\\"java\\"]}]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.BulletGenerationResult result = client.generateBullets(
+                new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
+                        "backend", "proj", "desc", null, null, "Java", null, null, null, null,
+                        null, null, null,
+                        null, null, null, null, List.of(), List.of(),
+                        "### Jobs — tracks work\n- module src/jobs\n    what/how: polls a job store, p50 40ms per poll\n"),
+                ProgressLog.noOp(), new TokenAccumulator());
+
+        // "40ms" appears only in the lens slice; it must count as source, not be cut as fabricated.
+        assertEquals(1, result.bullets().size());
         server.verify();
     }
 
@@ -124,7 +157,7 @@ class OpenCodeLlmClientTest {
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, null, "Java", null, null, null, null,
                         null, null, null,
-                        null, null, null, null, List.of(), List.of()),
+                        null, null, null, null, List.of(), List.of(), null),
                 ProgressLog.noOp(), new TokenAccumulator());
 
         // "kubernetes" survives via the K8s alias; "terraform" is nowhere in the text, and an
@@ -159,7 +192,7 @@ class OpenCodeLlmClientTest {
                 new LlmClient.GenerateBulletsRequest(UUID.randomUUID(), LlmClient.SourceKind.PROJECT,
                         "general", "proj", "desc", null, null, "Java", null, null, null, null,
                         null, null, null,
-                        null, null, null, null, List.of(), List.of()),
+                        null, null, null, null, List.of(), List.of(), null),
                 ProgressLog.noOp(), new TokenAccumulator());
 
         assertEquals(2, result.bullets().size());

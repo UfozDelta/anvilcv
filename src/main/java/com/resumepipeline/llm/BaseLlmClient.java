@@ -144,7 +144,19 @@ public abstract class BaseLlmClient implements LlmClient {
 
         String repoBlock = req.repoContext() == null || req.repoContext().isBlank()
                 ? ""
-                : "\nRepo context (README + file listing):\n" + req.repoContext();
+                : "\nRepo context:\n" + req.repoContext();
+
+        // The per-lens slice of the repo map. Tail of the prompt with the lens (varies per lens,
+        // so it must stay out of the shared cacheable prefix), and part of the number check's
+        // source so a bullet may quote what the slice states.
+        String focusBlock = req.lensFocus() == null || req.lensFocus().isBlank() ? "" :
+                "\n─────────────────────────────────────────────────────────────\n"
+                + "## REPO MAP — this lens's part of the system\n\n"
+                + "Write each bullet about ONE subsystem or module below, framed by the project overview in the\n"
+                + "repo context: what it does for users (X), how it was built (Z), and — only when a counted\n"
+                + "fact or a number in the source supports it — how much (Y). Different bullets should cover\n"
+                + "different modules where the material allows.\n\n"
+                + req.lensFocus() + "\n";
 
         // Without this the model happily rewrites bullets the bank already holds; the dedup
         // pass then deletes them, so we pay full output tokens for discarded work.
@@ -242,14 +254,17 @@ public abstract class BaseLlmClient implements LlmClient {
                   • 2-line bullet: %d to %d characters (roughly %d to %d words).
                   • NEVER produce a bullet of %d-%d characters — that range half-fills line 2.
 
-                Aim for a roughly even mix of 1-line and 2-line bullets, and prefer the 1-line form
-                when the substance fits it — a resume is one page, and every 2-liner spends double
-                the vertical space of a 1-liner that lands just as hard.
+                Aim for about 70%% 1-line and 30%% 2-line bullets. Recruiters skim a page in seconds
+                and dense multi-line bullets get skipped, so use the 2-line form only when the
+                substance genuinely needs it — every 2-liner spends double the vertical space of a
+                1-liner that lands just as hard.
 
                 ## 2. FORMAT — Google XYZ pattern
 
-                Every bullet reads as:
-                  [STRONG ACTION VERB] + [WHAT was built] + [at WHAT SCALE] + [with WHAT OUTCOME].
+                Every bullet reads as "Accomplished X, as measured by Y, by doing Z":
+                  [STRONG ACTION VERB] + [WHAT was built, X] + [HOW, Z] + [MEASURE, Y].
+                Y is a real number from the source material or a counted fact — when none exists,
+                write X + Z and stop. A tight bullet without Y beats one padded with a vague outcome.
 
                 Strong verbs only — open each bullet with one of:
                   Built · Designed · Shipped · Engineered · Owned · Led · Authored ·
@@ -262,8 +277,8 @@ public abstract class BaseLlmClient implements LlmClient {
 
                 ## 3. BOLD — **double asterisks** (compiles to \\textbf{})
 
-                Use AT MOST 2 bolds per bullet — bold is emphasis, and a bullet that bolds
-                everything emphasizes nothing. Reserve it for the one or two things a recruiter's
+                Use AT MOST 1 bold in a 1-line bullet and 2 in a 2-line bullet — bold is emphasis,
+                and a bullet that bolds everything emphasizes nothing. Reserve it for the one or two things a recruiter's
                 eye should land on first: usually the biggest quantified claim. Pick from these
                 categories, in priority order:
 
@@ -302,7 +317,7 @@ public abstract class BaseLlmClient implements LlmClient {
 
                   ✓ Built a RAG pipeline over **64K** MLS listings with hybrid full-text + vector search, RRF-k fusion, and a semantic cache, cutting query latency under **300ms** and LLM calls by 40%%.
 
-                  ✓ Engineered a real-time geospatial pipeline over **64K live listings** with React-Leaflet, Turf.js, and MongoDB 2dsphere viewport queries, cutting map re-render from **180ms to 70ms**.
+                  ✓ Engineered a real-time geospatial pipeline over 64K live listings with React-Leaflet and MongoDB 2dsphere viewport queries, cutting map re-render from **180ms to 70ms**.
 
                   ✓ Designed a sub-cent-precision credit ledger clearing **120K transactions/month**.
 
@@ -322,7 +337,7 @@ public abstract class BaseLlmClient implements LlmClient {
                         cfg.getDoubleLineLow(), cfg.getDoubleLineHigh(),
                         BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
                         sourceWord, contextBlock, repoBlock, existingBlock)
-                + lensBlock + siblingBlock;
+                + lensBlock + focusBlock + siblingBlock;
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
@@ -342,7 +357,7 @@ public abstract class BaseLlmClient implements LlmClient {
 
         progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
-        String sourceContext = contextBlock + repoBlock;
+        String sourceContext = contextBlock + repoBlock + focusBlock;
         FilterResult first = callAndFilter(prompt, schema, target, cfg, progress, tokens, sourceContext);
         List<GeneratedBullet> kept = new ArrayList<>(first.kept());
 

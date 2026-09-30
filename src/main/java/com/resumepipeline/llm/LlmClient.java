@@ -94,7 +94,13 @@ public interface LlmClient {
              * Their bullets do not exist yet, so the prompt can only be told to stay off their
              * angles; empty for a standalone generation with no siblings.
              */
-            List<String> siblingCategories
+            List<String> siblingCategories,
+            /**
+             * This lens's slice of the repo map — the subsystems tagged for it (or picked by the
+             * user), with their modules' what/how/why. Null when the project has no map. Varies
+             * per lens, so it goes at the prompt's tail with the lens, not in the shared prefix.
+             */
+            String lensFocus
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     record GeneratedBullet(String text, List<String> tags) {}
