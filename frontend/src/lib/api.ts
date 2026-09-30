@@ -130,6 +130,23 @@ export interface RepoTree {
   truncated: boolean;
 }
 
+/** Hierarchical repo map for the pinned commit — see RepoMap.java. */
+export interface RepoMap {
+  sha: string;
+  facts: { label: string; value: string; source: string }[];
+  modules: {
+    path: string; files: number; loc: number; languages: string[]; rank: number;
+    symbols: string[]; routes: string[]; dependsOn: string[]; topFile: string;
+    summary: string | null; purpose: string | null;
+  }[];
+  project: {
+    overview: string;
+    audience: string;
+    subsystems: { name: string; purpose: string; lenses: string[]; modules: string[] }[];
+    flows: { name: string; steps: string[] }[];
+  } | null;
+}
+
 /** One evidence span a bullet traces to — a file line range, or a commit. */
 export interface BulletSource {
   path: string | null;

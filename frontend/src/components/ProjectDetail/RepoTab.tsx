@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, CATEGORIES, type Bullet, type BulletSource, type Project, type RepoTree } from '../../lib/api';
+import { api, CATEGORIES, type Bullet, type BulletSource, type Project, type RepoMap, type RepoTree } from '../../lib/api';
 import { markdownBoldToHtml } from '../../lib/markdown';
 import { EventStream } from '../EventStream';
 import { RepoPicker } from '../github/RepoPicker';
+import { RepoMapView } from './RepoMapView';
 import type { useProjectDetail } from '../../hooks/useProjectDetail';
 
 type S = ReturnType<typeof useProjectDetail>;
@@ -43,11 +44,19 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
   const [sources, setSources] = useState<Record<string, BulletSource[]>>({});
   const [err, setErr] = useState<string | null>(null);
   const [pulling, setPulling] = useState(false);
+  const [map, setMap] = useState<RepoMap | null>(null);
+  const [focusSubs, setFocusSubs] = useState<Set<string>>(new Set());
+  const [rebuildMap, setRebuildMap] = useState(false);
 
   useEffect(() => {
     setTree(null);
     api.get<RepoTree>(`/api/github/projects/${id}/tree`).then(setTree).catch(e => setErr(e?.message || 'Could not load repo tree'));
   }, [id, project.repoCommitSha]);
+
+  useEffect(() => {
+    // 204 (no body) until the first exploration builds the map.
+    api.get<RepoMap | ''>(`/api/github/projects/${id}/map`).then(m => setMap(m || null)).catch(() => setMap(null));
+  }, [id, project.repoCommitSha, project.repoContextReady, exploring]);
 
   useEffect(() => {
     api.get<Record<string, BulletSource[]>>(`/api/github/projects/${id}/bullet-sources`).then(setSources).catch(() => setSources({}));
@@ -130,6 +139,12 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
 
         {/* ---------------------------------------------------------- bank side */}
         <div className="stack-sm" style={{ minWidth: 0 }}>
+          {map && (
+            <RepoMapView map={map} picked={focusSubs}
+              onToggle={name => toggle(focusSubs, setFocusSubs, name)}
+              onOpenFile={path => openFile(path)} />
+          )}
+
           <div className="panel panel--inset stack-sm">
             <div className="label">STEER THE EXPLORER</div>
             <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
@@ -147,15 +162,24 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
               <div className="label muted">{pins.size} PINNED · {excludes.size} EXCLUDED</div>
             )}
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn--acid btn--sm" onClick={() => setExploring(true)} disabled={exploring || s.generating}>
-                {exploring ? <span className="spinner">EXPLORING</span> : '⌕ EXPLORE REPO'}
+              <button className="btn btn--acid btn--sm" onClick={() => { setRebuildMap(false); setExploring(true); }} disabled={exploring || s.generating}>
+                {exploring ? <span className="spinner">EXPLORING</span> : map ? '⌕ EXPLORE REPO' : '⌕ MAP + EXPLORE REPO'}
               </button>
+              {map && (
+                <button className="btn btn--ghost btn--sm" onClick={() => { setRebuildMap(true); setExploring(true); }} disabled={exploring || s.generating}
+                  title="Re-summarize the map even though the commit hasn't changed">
+                  ↻ REBUILD MAP
+                </button>
+              )}
               <button className="btn btn--sm" onClick={() => s.generateBank(lenses)} disabled={s.generating || exploring || lenses.size === 0}
                 title="Generate bullets from the explored context, one batch per lens">
                 {s.generating ? <span className="spinner">GENERATING</span> : '↻ GENERATE BANK'}
               </button>
             </div>
-            <div className="label muted">Explore fills Info &amp; Context from verified code. Generate writes PENDING bullets — approve the ones you want.</div>
+            <div className="label muted">
+              Explore maps the repo (once per commit) and fills Info &amp; Context from verified code. Generate writes
+              PENDING bullets{focusSubs.size > 0 ? ` from the ${focusSubs.size} ticked subsystem(s)` : ', each lens from its own subsystems'} — approve the ones you want.
+            </div>
           </div>
 
           <div className="label">BANK · {bank.length}</div>
@@ -170,7 +194,7 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
 
       {exploring && (
         <EventStream
-          submitUrl={`/api/github/projects/${id}/explore/submit`}
+          submitUrl={`/api/github/projects/${id}/explore/submit${rebuildMap ? '?rebuildMap=true' : ''}`}
           submitBody={{ pinPaths: [...pins], excludePaths: [...excludes], notes, lenses: [...lenses] }}
           pollUrl={jobId => `/api/projects/jobs/${jobId}/progress`}
           onDone={() => { setExploring(false); s.load(); }}
@@ -182,7 +206,7 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
       {s.generating && (
         <EventStream
           submitUrl={`/api/projects/${id}/bullets/generate-bank/submit`}
-          submitBody={{ categories: [...lenses] }}
+          submitBody={{ categories: [...lenses], subsystems: [...focusSubs] }}
           pollUrl={jobId => `/api/projects/jobs/${jobId}/progress`}
           onDone={() => { s.setGenerating(false); s.load(); }}
           onClose={() => s.setGenerating(false)}
