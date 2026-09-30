@@ -1,7 +1,6 @@
 # Adding a new project from its code
 
-AnvilCV reads the repo itself. The old "copy the extractor prompt into a
-coding agent and paste the JSON back" flow is retired.
+AnvilCV reads the repo itself and fills the project from what it finds.
 
 1. **Settings › Connect GitHub** once. It installs the AnvilCV GitHub App,
    read-only, on only the repos you pick.
