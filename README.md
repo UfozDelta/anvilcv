@@ -54,6 +54,11 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
 - LLM token usage and USD cost recorded per application.
 
 **GitHub repos**
+
+![GitHub repo to verified, source-traced bullet bank](docs/repo-explorer-flow.svg)
+
+Full writeup: [docs/github-repo-explorer.html](docs/github-repo-explorer.html).
+
 - Connect a GitHub App with read-only access to the repos you pick, private included. See
   [GitHub App](#github-app).
 - Import a repo as a project, pinned to a commit. The Repo tab shows its tree and files beside

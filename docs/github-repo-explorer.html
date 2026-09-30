@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Repo Explorer</title>
+<meta name="description" content="How AnvilCV reads a private GitHub repo, maps it, and turns it into verified, source-traced resume bullets.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1b1f24; --muted: #57606a; --rule: #d0d7de; --panel: #f6f8fa;
+    --accent: #0969da; --ok: #1a7f37; --warn: #9a6700; --code: #eff1f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --rule: #30363d; --panel: #161b22;
+      --accent: #4493f8; --ok: #3fb950; --warn: #d29922; --code: #1f242c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --rule: #30363d; --panel: #161b22;
+    --accent: #4493f8; --ok: #3fb950; --warn: #d29922; --code: #1f242c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.6 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 16px; margin: 24px 0 6px; }
+  p, li { max-width: 72ch; }
+  .lede { color: var(--muted); font-size: 17px; margin: 0 0 24px; }
+  a { color: var(--accent); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  .tldr { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 20px; }
+  .tldr ul { margin: 0; padding-left: 20px; }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 10px; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin-top: 0; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <h1>GitHub repo explorer &amp; repo map</h1>
+  <p class="lede">AnvilCV now reads your code itself, private repos included, and builds resume bullets from what
+    it actually finds. That replaces copying a prompt into a coding agent and pasting its output back.</p>
+
+  <div class="tldr">
+    <strong>TL;DR</strong>
+    <ul>
+      <li><strong>Connect GitHub</strong> (read-only, repos you pick) and <strong>import a repo</strong> as a project pinned to a commit.</li>
+      <li>AnvilCV downloads the repo once and builds a <strong>repo map</strong>: modules ranked by importance, <strong>numbers counted from the code</strong>, and summaries from modules up to the whole project.</li>
+      <li>An <strong>explorer</strong> uses the map to read the right files and fills project context. Anything it can't back with code is dropped.</li>
+      <li>Each lens writes bullets from <strong>its own part of the system</strong>. Every bullet links to the files or commits it came from.</li>
+      <li>Bullet rules follow recruiter research: mostly one line, one bold on those, and numbers only when real.</li>
+      <li>The old <em>Copy for LLM</em> button and the agent download are gone. Manual paste still works.</li>
+    </ul>
+  </div>
+
+  <h2>The flow</h2>
+  <figure>
+    <img src="repo-explorer-flow.svg" alt="Nine-step flow: connect GitHub, import repo, download snapshot, build repo map, summarize bottom-up, explorer loop, verify and save, generate per lens, triage bank with source links.">
+    <figcaption>Grey steps are deterministic, blue steps use the LLM, green steps are checks and user control.</figcaption>
+  </figure>
+
+  <h2>What each stage does</h2>
+  <div class="grid">
+    <div class="card"><h3>1 · Connect</h3><p>GitHub App with <code>contents:read</code> + <code>metadata:read</code> only. The callback checks a one-time session state and links an installation only if the user's own OAuth token lists it. Only the installation id is stored.</p></div>
+    <div class="card"><h3>2 · Import</h3><p><em>Import from GitHub</em> lists the repos you granted. The project is pinned to the branch head commit, so the tree, files, map, and evidence all describe the same snapshot.</p></div>
+    <div class="card"><h3>3 · Snapshot</h3><p>One tarball request instead of one API call per file. Vendored, lockfile, binary, and oversized files are skipped. Caps: 100 MB download, 25 MB of text.</p></div>
+    <div class="card"><h3>4 · Repo map (no LLM)</h3><p>Aider-style skeleton: public symbols and routes per file (regex, per language), module links from cross-module references, and PageRank so the code everything depends on ranks first. Also counts tests, endpoints, migrations, dependencies, lines of code, and CI.</p></div>
+    <div class="card"><h3>5 · Summaries</h3><p>Bottom-up, like CodeWiki / RepoAgent. The top 15 modules get what / how / why. Then the project gets an overview, its audience, 3-7 subsystems tagged with the lenses they feed, and 2-3 end-to-end flows. Cached per commit.</p></div>
+    <div class="card"><h3>6 · Explorer</h3><p>LLM tool loop (<code>read_file</code>, <code>git_log</code>, <code>search_code</code>, <code>list_tree</code>) that sees the map first. Budgets on steps, files, tokens, and time. Ported from <code>anvilcv-context-mcp</code>'s instructions.</p></div>
+    <div class="card"><h3>7 · Verify</h3><p>Citations to files it never read are dropped. Evidence text is re-sliced from the real file. Any sentence whose number appears nowhere in the code is cut. Blank fields keep what the user typed.</p></div>
+    <div class="card"><h3>8 · Generate</h3><p>Every lens shares the project overview. Each then gets its own slice: the subsystems tagged for it, or the ones you ticked. Counted facts supply the Y in XYZ bullets.</p></div>
+    <div class="card"><h3>9 · Triage</h3><p>The Repo tab puts the file tree and map beside the bank. Each bullet shows its sources; click one to open the cited lines. Approve or reject inline.</p></div>
+  </div>
+
+  <h2>Why bullets should get better</h2>
+  <ul>
+    <li><strong>Before:</strong> every lens rewrote the same ~10 text fields, so bullets overlapped and stayed generic.</li>
+    <li><strong>After:</strong> each lens gets different modules with concrete what / how / why. For example, the security lens gets the auth code and the data lens gets the pipelines.</li>
+    <li><strong>The Y problem:</strong> code rarely states outcomes. Counted facts ("352 test cases", "47 endpoints") are real numbers taken straight from the code. The fabricated-number check therefore never cuts them.</li>
+  </ul>
+
+  <h3>Rule changes (recruiter research)</h3>
+  <div class="scroll">
+  <table>
+    <tr><th>Rule</th><th>Before</th><th>Now</th><th>Basis</th></tr>
+    <tr><td>1-line vs 2-line mix</td><td>≈50 / 50</td><td>≈70 / 30</td><td><span class="tag ok">data</span> Ladders eye-tracking study: ~7 s first scan, long sentences scored worst</td></tr>
+    <tr><td>Bold spans</td><td>≤2 per bullet</td><td>≤1 on 1-line, ≤2 on 2-line (enforced in code)</td><td><span class="tag warn">opinion</span> strategic bolding</td></tr>
+    <tr><td>XYZ formula</td><td>X + scale + outcome always</td><td>Y only from a real number, otherwise X + Z</td><td><span class="tag warn">opinion</span> full XYZ runs 35-50 words</td></tr>
+    <tr><td>27-40 word dead zone, 15 per page, 3 per project</td><td colspan="2">Unchanged</td><td>—</td></tr>
+  </table>
+  </div>
+
+  <h2>Changes by layer</h2>
+  <h3>Backend (<code>com.resumepipeline.github</code>)</h3>
+  <ul>
+    <li><code>GithubAppAuth</code>: app JWT from the private key (PKCS#1 or PKCS#8). <code>GithubClient</code>: installation tokens, repos, tree, files, search, commits, tarball.</li>
+    <li><code>RepoSnapshot</code>, <code>RepoMapBuilder</code>, <code>RepoMapService</code>, and <code>RepoMapRenderer</code> build the repo map. <code>RepoExplorer</code> runs the tool loop. <code>SourceTracer</code> links bullets to their sources.</li>
+    <li><code>LlmClient</code> gains <code>exploreStep</code>, <code>summarizeModule</code>, and <code>summarizeProject</code>. <code>GenerateBulletsRequest</code> gains <code>lensFocus</code>.</li>
+  </ul>
+  <h3>API</h3>
+  <div class="scroll">
+  <table>
+    <tr><th>Endpoint</th><th>Purpose</th></tr>
+    <tr><td><code>GET /api/github/status · /connect · /callback · /repos</code></td><td>Connection and repo list</td></tr>
+    <tr><td><code>DELETE /api/github</code></td><td>Disconnect</td></tr>
+    <tr><td><code>POST /api/github/link</code></td><td>Create or re-point a project at a repo commit</td></tr>
+    <tr><td><code>GET /api/github/projects/{id}/tree · file · map · bullet-sources</code></td><td>Side-loaded repo view</td></tr>
+    <tr><td><code>POST /api/github/projects/{id}/explore/submit[?rebuildMap=true]</code></td><td>Async map + explore job (polls the existing progress endpoint)</td></tr>
+    <tr><td><code>POST /api/projects/{id}/bullets/generate-bank/submit</code></td><td>Now accepts optional <code>subsystems</code></td></tr>
+    <tr><td><s><code>GET /api/tools/context-agent[/prompt]</code></s></td><td>Removed</td></tr>
+  </table>
+  </div>
+  <h3>Data</h3>
+  <ul>
+    <li><code>V30</code>: <code>github_installation</code> (user → installation id, no tokens), plus <code>project.repo_branch</code>, <code>repo_commit_sha</code>, <code>repo_evidence</code>.</li>
+    <li><code>V31</code>: <code>project.repo_map</code> (JSON, reused until the pinned commit changes).</li>
+  </ul>
+  <h3>Frontend</h3>
+  <ul>
+    <li>Settings: GitHub connection panel. Projects: <em>Import from GitHub</em>.</li>
+    <li>Project detail: new <strong>Repo</strong> tab with the file tree and viewer, the repo map (subsystems you can tick), steering controls, and the bank with source links.</li>
+  </ul>
+
+  <h2>Setup</h2>
+  <p>Create a GitHub App (steps in the README under <em>GitHub App</em>). Set <code>GITHUB_APP_ID</code>, <code>_SLUG</code>, <code>_CLIENT_ID</code>, <code>_CLIENT_SECRET</code>, and <code>_PRIVATE_KEY</code>. With them unset the feature is off and nothing else changes. Migrations run on startup.</p>
+
+  <h2>Costs &amp; limits</h2>
+  <ul>
+    <li>The first explore on a commit makes about 16 map calls, then up to 40 explorer steps. Later runs reuse the map. Usage is logged as <code>repo_explore</code>.</li>
+    <li>Symbol extraction is regex-based. It is strong for Java, TS/JS, Python, and Go, and loose elsewhere. A missed symbol only weakens ranking and never adds a claim.</li>
+    <li>Pending bullets still feed tailoring (existing behavior). Bare counts without a unit (e.g. "10,000 users") are not number-checked.</li>
+    <li>Not yet run end-to-end against a live GitHub App.</li>
+  </ul>
+
+  <h2>Commits</h2>
+  <div class="scroll">
+  <table>
+    <tr><td><code>7b09d82</code></td><td>GitHub App connect, repo listing, and repo linking</td></tr>
+    <tr><td><code>bede55c</code></td><td>Server-side repo explorer fills project context</td></tr>
+    <tr><td><code>6eedc27</code></td><td>Trace bullets back to verified repo evidence</td></tr>
+    <tr><td><code>531e39c</code></td><td>GitHub connect, repo import, and side-loaded Repo tab</td></tr>
+    <tr><td><code>02e7f4c</code></td><td>Retire Copy-for-LLM and context-agent download</td></tr>
+    <tr><td><code>92e1570</code></td><td>Whole-repo snapshot and deterministic repo map</td></tr>
+    <tr><td><code>6dbec5e</code></td><td>Hierarchical repo map summaries feed the explorer</td></tr>
+    <tr><td><code>17204f1</code></td><td>Write each lens from its slice of the repo map</td></tr>
+    <tr><td><code>11c2513</code></td><td>Show the repo map and steer generation by subsystem</td></tr>
+    <tr><td><code>1a567e4</code></td><td>Document the repo map</td></tr>
+  </table>
+  </div>
+</main>
+</body>
+</html>

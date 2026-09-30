@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" width="960" height="470" role="img" aria-labelledby="t d">
+  <title id="t">AnvilCV GitHub repo explorer flow</title>
+  <desc id="d">Nine steps from connecting GitHub to an approved, source-traced bullet bank: connect, import, snapshot, deterministic repo map, LLM summaries, explorer loop, verification, per-lens generation, bank triage.</desc>
+  <style>
+    :root { --bg:#ffffff; --ink:#1b1f24; --muted:#57606a; --line:#8c959f; --box:#f6f8fa; --stroke:#d0d7de;
+            --llm:#ddf4ff; --llm-s:#54aeff; --chk:#dafbe1; --chk-s:#4ac26b; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0d1117; --ink:#e6edf3; --muted:#8d96a0; --line:#6e7681; --box:#161b22; --stroke:#30363d;
+              --llm:#0c2d6b; --llm-s:#1f6feb; --chk:#0f2e1a; --chk-s:#2ea043; }
+    }
+    .bg { fill: var(--bg); }
+    .box { fill: var(--box); stroke: var(--stroke); stroke-width: 1.5; }
+    .llm { fill: var(--llm); stroke: var(--llm-s); stroke-width: 1.5; }
+    .chk { fill: var(--chk); stroke: var(--chk-s); stroke-width: 1.5; }
+    .n { font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; fill: var(--muted); }
+    .h { font: 600 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); }
+    .s { font: 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--muted); }
+    .title { font: 700 18px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); }
+    .arrow { stroke: var(--line); stroke-width: 2; fill: none; marker-end: url(#a); }
+    .ah { fill: var(--line); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="ah" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="960" height="470"/>
+  <text class="title" x="20" y="30">GitHub repo → verified, source-traced bullet bank</text>
+
+  <!-- Row 1: left to right -->
+  <rect class="box" x="20" y="50" width="280" height="96" rx="8"/>
+  <text class="n" x="36" y="74">01</text>
+  <text class="h" x="62" y="75">Connect GitHub App</text>
+  <text class="s" x="36" y="100">Read-only, only the repos you pick.</text>
+  <text class="s" x="36" y="118">Callback verifies state + ownership.</text>
+  <text class="s" x="36" y="136">No token is stored.</text>
+
+  <rect class="box" x="340" y="50" width="280" height="96" rx="8"/>
+  <text class="n" x="356" y="74">02</text>
+  <text class="h" x="382" y="75">Import repo as project</text>
+  <text class="s" x="356" y="100">Pinned to the branch head commit.</text>
+  <text class="s" x="356" y="118">Every read describes that snapshot.</text>
+  <text class="s" x="356" y="136">PULL LATEST re-pins.</text>
+
+  <rect class="box" x="660" y="50" width="280" height="96" rx="8"/>
+  <text class="n" x="676" y="74">03</text>
+  <text class="h" x="702" y="75">Download snapshot</text>
+  <text class="s" x="676" y="100">Whole repo as one tarball request.</text>
+  <text class="s" x="676" y="118">Skips vendored, lockfile, binary.</text>
+  <text class="s" x="676" y="136">No per-file API calls or rate limits.</text>
+
+  <path class="arrow" d="M300,98 H336"/>
+  <path class="arrow" d="M620,98 H656"/>
+  <path class="arrow" d="M800,146 V186"/>
+
+  <!-- Row 2: right to left -->
+  <rect class="box" x="660" y="190" width="280" height="96" rx="8"/>
+  <text class="n" x="676" y="214">04</text>
+  <text class="h" x="702" y="215">Repo map (no LLM)</text>
+  <text class="s" x="676" y="240">Symbols + routes per file, module links,</text>
+  <text class="s" x="676" y="258">PageRank so core code ranks first.</text>
+  <text class="s" x="676" y="276">Counted facts: tests, endpoints, LOC…</text>
+
+  <rect class="llm" x="340" y="190" width="280" height="96" rx="8"/>
+  <text class="n" x="356" y="214">05</text>
+  <text class="h" x="382" y="215">Summaries, bottom-up</text>
+  <text class="s" x="356" y="240">Top 15 modules: what / how / why.</text>
+  <text class="s" x="356" y="258">Project: overview, audience, subsystems</text>
+  <text class="s" x="356" y="276">tagged by lens, key flows. Cached per sha.</text>
+
+  <rect class="llm" x="20" y="190" width="280" height="96" rx="8"/>
+  <text class="n" x="36" y="214">06</text>
+  <text class="h" x="62" y="215">Explorer tool loop</text>
+  <text class="s" x="36" y="240">Sees the map first, then read_file,</text>
+  <text class="s" x="36" y="258">git_log, search_code. Budgets on steps,</text>
+  <text class="s" x="36" y="276">files, tokens, and time.</text>
+
+  <path class="arrow" d="M660,238 H624"/>
+  <path class="arrow" d="M340,238 H304"/>
+  <path class="arrow" d="M160,286 V326"/>
+
+  <!-- Row 3: left to right -->
+  <rect class="chk" x="20" y="330" width="280" height="96" rx="8"/>
+  <text class="n" x="36" y="354">07</text>
+  <text class="h" x="62" y="355">Verify, then save context</text>
+  <text class="s" x="36" y="380">Drop citations to unread files.</text>
+  <text class="s" x="36" y="398">Cut sentences with unsourced numbers.</text>
+  <text class="s" x="36" y="416">Blank fields keep what the user typed.</text>
+
+  <rect class="llm" x="340" y="330" width="280" height="96" rx="8"/>
+  <text class="n" x="356" y="354">08</text>
+  <text class="h" x="382" y="355">Generate per lens</text>
+  <text class="s" x="356" y="380">Shared overview + this lens's subsystems</text>
+  <text class="s" x="356" y="398">(or the ones you ticked). ~70% 1-line,</text>
+  <text class="s" x="356" y="416">XYZ's Y only from real numbers.</text>
+
+  <rect class="chk" x="660" y="330" width="280" height="96" rx="8"/>
+  <text class="n" x="676" y="354">09</text>
+  <text class="h" x="702" y="355">Bank: approve / reject</text>
+  <text class="s" x="676" y="380">Each bullet links to the files or</text>
+  <text class="s" x="676" y="398">commits it traces to. Approved and</text>
+  <text class="s" x="676" y="416">pending bullets feed tailoring.</text>
+
+  <path class="arrow" d="M300,378 H336"/>
+  <path class="arrow" d="M620,378 H656"/>
+
+  <!-- Legend -->
+  <rect class="box" x="20" y="444" width="14" height="14" rx="3"/>
+  <text class="s" x="40" y="456">Deterministic</text>
+  <rect class="llm" x="140" y="444" width="14" height="14" rx="3"/>
+  <text class="s" x="160" y="456">LLM</text>
+  <rect class="chk" x="210" y="444" width="14" height="14" rx="3"/>
+  <text class="s" x="230" y="456">Checks / user control</text>
+</svg>
