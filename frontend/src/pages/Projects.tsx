@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, type Project } from '../lib/api';
 import { RowMenu } from '../components/ProjectsList/RowMenu';
 import { NewEntryForm } from '../components/ProjectsList/NewEntryForm';
+import { RepoPicker } from '../components/github/RepoPicker';
 
 type Sort = 'newest' | 'name';
 
@@ -17,6 +18,8 @@ export function Projects() {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
   const [showForm, setShowForm] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const navigate = useNavigate();
   const [err, setErr] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
@@ -108,7 +111,9 @@ export function Projects() {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     {p.githubUrl && (
                       <span className="kw" title={p.githubUrl}>
-                        {p.repoContextReady ? 'repo cached' : 'repo fetching…'}
+                        {p.repoCommitSha
+                          ? (p.repoContextReady ? 'repo explored' : 'repo linked')
+                          : (p.repoContextReady ? 'repo cached' : 'repo fetching…')}
                       </span>
                     )}
                   </div>
@@ -129,10 +134,15 @@ export function Projects() {
           </div>
 
           <div style={{ marginTop: 28 }}>
-            {!showForm ? (
-              <button className="btn btn--acid" onClick={() => setShowForm(true)}>+ NEW PROJECT</button>
-            ) : (
+            {showForm ? (
               <NewEntryForm kind="PROJECT" onCreate={create} onCancel={() => setShowForm(false)} />
+            ) : importing ? (
+              <RepoPicker onLinked={p => navigate(`/projects/${p.id}?tab=repo`)} onCancel={() => setImporting(false)} />
+            ) : (
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn btn--acid" onClick={() => setShowForm(true)}>+ NEW PROJECT</button>
+                <button className="btn" onClick={() => setImporting(true)}>⇣ IMPORT FROM GITHUB</button>
+              </div>
             )}
           </div>
         </>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { CATEGORIES } from '../lib/api';
 import { buildCopyForLlmText } from '../lib/copyForLlm';
@@ -11,15 +11,17 @@ import { AddBullet } from '../components/ProjectDetail/AddBullet';
 import { BulletRow } from '../components/ProjectDetail/BulletRow';
 import { EditBullet } from '../components/ProjectDetail/EditBullet';
 import { EnrichDrawer } from '../components/ProjectDetail/EnrichDrawer';
+import { RepoTab } from '../components/ProjectDetail/RepoTab';
 
 const MAX_TOTAL_LINES = 31;
 
-type Tab = 'bullets' | 'generate' | 'info';
+type Tab = 'bullets' | 'generate' | 'info' | 'repo';
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const s = useProjectDetail(id);
-  const [tab, setTab] = useState<Tab>('bullets');
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'repo' ? 'repo' : 'bullets');
 
   if (s.loading) return <div className="shell"><span className="spinner">LOADING</span></div>;
   if (!s.project) return <div className="shell">Not found.</div>;
@@ -97,6 +99,12 @@ export function ProjectDetail() {
           Info & context
           {filledCount === 0 && <span className="tabs__badge">!</span>}
         </button>
+        {!isExperience && (
+          <button className={tab === 'repo' ? 'is-on' : ''} onClick={() => setTab('repo')}>
+            Repo
+            {project.repoCommitSha && <span className="tabs__badge">{project.repoCommitSha.slice(0, 7)}</span>}
+          </button>
+        )}
       </div>
 
       <div className="tabpane">
@@ -259,6 +267,8 @@ export function ProjectDetail() {
         {tab === 'info' && (
           <InfoTab s={s} project={project} isExperience={isExperience} filledCount={filledCount} />
         )}
+
+        {tab === 'repo' && id && <RepoTab s={s} id={id} project={project} />}
       </div>
     </div>
   );

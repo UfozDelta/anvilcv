@@ -4,6 +4,7 @@ import { SingleSlider } from '../components/form/SingleSlider';
 import { SegmentedControl } from '../components/form/SegmentedControl';
 import { formStyles as styles } from '../components/form/styles';
 import { useGenerationConfig } from '../hooks/useGenerationConfig';
+import { GithubConnection } from '../components/github/GithubConnection';
 import type { BoldDensity, Tone, ActionVerbStyle, GenerationConfig } from '../lib/api';
 
 export function SettingsPage() {
@@ -127,6 +128,7 @@ export function SettingsPage() {
 
     <div className="panel" style={{ marginTop: 32 }}>
       <Section num="06.C" title="TOOLS" />
+      <GithubConnection />
       <div style={{ marginTop: 20 }}>
         <div style={{ marginBottom: 12 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', fontWeight: 600 }}>

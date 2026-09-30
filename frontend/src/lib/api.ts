@@ -79,6 +79,9 @@ export interface Project {
   contextDescription?: string | null;
   githubUrl?: string | null;
   repoContextReady?: boolean;
+  /** Set when linked through the GitHub App — the branch and the commit every repo read is pinned to. */
+  repoBranch?: string | null;
+  repoCommitSha?: string | null;
   techStack?: string | null;
   /** Canonical tech names matched out of `techStack` server-side (see TechStackSummary.java) — use this for anything that needs discrete tokens instead of re-parsing the prose. */
   techTerms?: string[];
@@ -105,6 +108,36 @@ export interface Bullet {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GithubStatus {
+  configured: boolean;
+  connected: boolean;
+  account: string | null;
+  manageUrl: string | null;
+}
+
+export interface GithubRepo {
+  fullName: string;
+  isPrivate: boolean;
+  defaultBranch: string;
+  description: string;
+  pushedAt: string;
+}
+
+export interface RepoTree {
+  entries: { path: string; size: number }[];
+  truncated: boolean;
+}
+
+/** One evidence span a bullet traces to — a file line range, or a commit. */
+export interface BulletSource {
+  path: string | null;
+  startLine: number;
+  endLine: number;
+  commit: string | null;
+  field: string;
+  claim: string;
 }
 
 /** Result of POST /api/projects/{id}/bullets/refit — `bullets` is the project's full bank after the pass. */
