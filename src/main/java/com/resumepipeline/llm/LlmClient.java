@@ -53,6 +53,15 @@ public interface LlmClient {
      */
     ExploreStep exploreStep(ExploreStepRequest req, ProgressLog progress, TokenAccumulator tokens);
 
+    /** Repo map, level 1: what one module does and why, from its skeleton and its central file. */
+    ModuleSummary summarizeModule(ModuleSummaryRequest req, ProgressLog progress, TokenAccumulator tokens);
+
+    /**
+     * Repo map, level 2: the whole project from its module summaries, README, and counted facts —
+     * what it does, for whom, its subsystems (each tagged with the lenses it feeds), and its main flows.
+     */
+    ProjectSummaryResult summarizeProject(ProjectSummaryRequest req, ProgressLog progress, TokenAccumulator tokens);
+
     // --- types ---
 
     enum SourceKind { PROJECT, EXPERIENCE }
@@ -130,6 +139,18 @@ public interface LlmClient {
                          List<EvidenceRef> evidence) {}
     /** A citation: a file line range the explorer read, or a commit sha it saw in git_log. */
     record EvidenceRef(String field, String claim, String path, int startLine, int endLine, String commit) {}
+
+    record ModuleSummaryRequest(String projectName, String modulePath, List<String> files, List<String> symbols,
+                                List<String> routes, List<String> dependsOn, String code) {}
+    /** summary: what it does and how. purpose: the user-facing reason it exists. */
+    record ModuleSummary(String summary, String purpose) {}
+
+    /** modules: one line each, "path — summary (purpose)", highest ranked first. */
+    record ProjectSummaryRequest(String projectName, String readme, String manifests, List<String> facts,
+                                 List<String> modules, List<String> lenses) {}
+    record ProjectSummaryResult(String overview, String audience, List<SubsystemSummary> subsystems, List<FlowSummary> flows) {}
+    record SubsystemSummary(String name, String purpose, List<String> lenses, List<String> modules) {}
+    record FlowSummary(String name, List<String> steps) {}
 
     record RecruiterResult(int evidenceStrength, int relevanceDensity, int overall, String verdict,
                            String weakestBulletId, String thinnestRequirement,

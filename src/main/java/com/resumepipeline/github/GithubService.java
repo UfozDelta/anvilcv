@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.TokenAccumulator;
+import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectRepository;
 import com.resumepipeline.project.ProjectService;
@@ -45,12 +47,15 @@ public class GithubService {
     private final ProjectService projects;
     private final ProjectRepository projectRepo;
     private final BulletRepository bullets;
+    private final RepoMapService mapper;
     private final String webBase;
 
     public GithubService(GithubAppAuth auth, GithubClient client, GithubInstallationRepository installs,
                          ProjectService projects, ProjectRepository projectRepo, BulletRepository bullets,
+                         RepoMapService mapper,
                          @Value("${github.web-base:https://github.com}") String webBase) {
         this.bullets = bullets;
+        this.mapper = mapper;
         this.auth = auth;
         this.client = client;
         this.installs = installs;
@@ -151,6 +156,14 @@ public class GithubService {
      * evidence becomes {@code repoContext}, which bullet generation already reads as grounding.
      */
     public Project applyExplore(UUID userId, UUID projectId, RepoExplorer.Outcome outcome) {
+        return applyExplore(userId, projectId, outcome, null);
+    }
+
+    /**
+     * As above, with the repo map's overview (project, subsystems, flows, counted facts) placed
+     * ahead of the evidence in {@code repoContext} — the top of the hierarchy every lens shares.
+     */
+    public Project applyExplore(UUID userId, UUID projectId, RepoExplorer.Outcome outcome, RepoMap map) {
         Project p = linked(userId, projectId);
         LlmClient.ExtractResult r = outcome.result();
         set(r.techStack(), p::setTechStack);
@@ -162,7 +175,10 @@ public class GithubService {
         set(r.technicalDecisions(), p::setTechnicalDecisions);
         set(r.userImpact(), p::setUserImpact);
         set(r.securityPosture(), p::setSecurityPosture);
-        p.setRepoContext(renderEvidence(repoName(p), p.getRepoCommitSha(), outcome.evidence()));
+        String overview = map == null ? "" : RepoMapRenderer.overview(map) + "\n";
+        String evidence = renderEvidence(repoName(p), p.getRepoCommitSha(), outcome.evidence(), MAX_REPO_CONTEXT_CHARS - overview.length());
+        String context = overview + (evidence == null ? "" : evidence);
+        p.setRepoContext(context.isBlank() ? null : context);
         try {
             p.setRepoEvidence(JSON.writeValueAsString(outcome.evidence()));
         } catch (Exception e) {
@@ -181,9 +197,38 @@ public class GithubService {
         }
     }
 
+    /**
+     * The project's map for its pinned commit, rebuilt from {@code snap} only when missing or
+     * stale. {@code force} rebuilds anyway (e.g. after the user wants fresher summaries).
+     */
+    public RepoMap ensureMap(UUID userId, UUID projectId, RepoSnapshot snap, boolean force,
+                             ProgressLog progress, TokenAccumulator tokens) {
+        Project p = linked(userId, projectId);
+        RepoMap cached = RepoMapRenderer.parse(p.getRepoMap());
+        if (!force && cached != null && p.getRepoCommitSha().equals(cached.sha())) {
+            progress.emit("Map: reusing map for " + cached.sha().substring(0, 7));
+            return cached;
+        }
+        RepoMap map = mapper.build(p.getName(), p.getRepoCommitSha(), snap, progress, tokens);
+        p.setRepoMap(RepoMapRenderer.toJson(map));
+        projectRepo.save(p);
+        return map;
+    }
+
+    /** Downloads the whole repo once for the explorer and the map builder. */
+    public RepoSnapshot snapshot(UUID userId, RepoReader reader) {
+        return withInstallation(userId, i -> reader.snapshot());
+    }
+
+    public RepoMap map(UUID userId, UUID projectId) {
+        return RepoMapRenderer.parse(projects.get(userId, projectId).getRepoMap());
+    }
+
     /** bulletId -> the evidence spans it traces to. Bullets with no confident match are omitted. */
     public Map<UUID, List<SourceTracer.Source>> bulletSources(UUID userId, UUID projectId) {
-        List<RepoExplorer.Evidence> ev = evidence(projects.get(userId, projectId));
+        Project project = projects.get(userId, projectId);
+        List<RepoExplorer.Evidence> ev = new java.util.ArrayList<>(evidence(project));
+        ev.addAll(moduleEvidence(RepoMapRenderer.parse(project.getRepoMap())));
         Map<UUID, List<SourceTracer.Source>> out = new LinkedHashMap<>();
         if (ev.isEmpty()) return out;
         for (Bullet b : bullets.findByProjectIdOrderByCreatedAtAsc(projectId)) {
@@ -193,14 +238,24 @@ public class GithubService {
         return out;
     }
 
-    static String renderEvidence(String repo, String sha, List<RepoExplorer.Evidence> evidence) {
-        if (evidence.isEmpty()) return null;
+    /** Summarized modules as traceable sources — a bullet about "the polling job store" links to that module's central file. */
+    static List<RepoExplorer.Evidence> moduleEvidence(RepoMap map) {
+        if (map == null) return List.of();
+        return map.modules().stream()
+                .filter(m -> m.summary() != null && !m.summary().isBlank())
+                .map(m -> new RepoExplorer.Evidence("module " + m.path(), m.summary(), m.topFile(), 1, 1, null,
+                        m.path() + "\n" + m.summary() + "\n" + String.join("\n", m.symbols())))
+                .toList();
+    }
+
+    static String renderEvidence(String repo, String sha, List<RepoExplorer.Evidence> evidence, int maxChars) {
+        if (evidence.isEmpty() || maxChars <= 0) return null;
         StringBuilder sb = new StringBuilder("Verified evidence from " + repo + "@" + sha.substring(0, Math.min(7, sha.length()))
                 + " (verbatim spans re-read by AnvilCV):\n");
         for (RepoExplorer.Evidence e : evidence) {
             String ref = e.commit() != null ? "commit " + e.commit() : e.path() + ":" + e.startLine() + "-" + e.endLine();
             String block = "\n[" + e.field() + "] " + e.claim() + "\n" + ref + "\n" + e.text() + "\n";
-            if (sb.length() + block.length() > MAX_REPO_CONTEXT_CHARS) break;
+            if (sb.length() + block.length() > maxChars) break;
             sb.append(block);
         }
         return sb.toString();

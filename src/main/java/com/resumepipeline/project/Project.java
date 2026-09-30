@@ -49,6 +49,10 @@ public class Project {
     @Column(name = "repo_evidence", columnDefinition = "text")
     private String repoEvidence;
 
+    /** JSON RepoMap for repo_commit_sha — see com.resumepipeline.github.RepoMap. */
+    @Column(name = "repo_map", columnDefinition = "text")
+    private String repoMap;
+
     // Enrichment fields — user-provided context for better bullet generation
     @Column(name = "tech_stack")
     private String techStack;
@@ -124,6 +128,8 @@ public class Project {
     public void setRepoCommitSha(String repoCommitSha) { this.repoCommitSha = repoCommitSha; }
     public String getRepoEvidence() { return repoEvidence; }
     public void setRepoEvidence(String repoEvidence) { this.repoEvidence = repoEvidence; }
+    public String getRepoMap() { return repoMap; }
+    public void setRepoMap(String repoMap) { this.repoMap = repoMap; }
     public String getTechStack() { return techStack; }
     public void setTechStack(String techStack) { this.techStack = techStack; }
     public String getYourRole() { return yourRole; }

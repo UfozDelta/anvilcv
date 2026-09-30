@@ -95,10 +95,23 @@ public class RepoExplorer {
     }
 
     public Outcome explore(RepoReader repo, Steering steering, ProgressLog progress, TokenAccumulator tokens) {
+        return explore(repo, steering, null, progress, tokens);
+    }
+
+    /**
+     * @param mapText the rendered repo map, shown as the first observation so the explorer spends
+     *                its reads on the central modules instead of discovering them. Its counted
+     *                facts and number-checked summaries count as observed source.
+     */
+    public Outcome explore(RepoReader repo, Steering steering, String mapText, ProgressLog progress, TokenAccumulator tokens) {
         Run run = new Run();
         Instant deadline = Instant.now().plus(budget.maxDuration());
         String prompt = instructions + steeringBlock(steering);
 
+        if (mapText != null && !mapText.isBlank()) {
+            observe(run, "repo_map (prebuilt by AnvilCV)", mapText);
+            run.observed.append(mapText).append('\n');
+        }
         observe(run, "list_tree \"\"", listTree(run, repo, steering, ""));
         for (String pin : steering.pinPaths()) {
             observe(run, "read_file " + pin + " (pinned by user)", readFile(run, repo, steering, pin));
@@ -350,7 +363,7 @@ public class RepoExplorer {
     }
 
     /** Drops each sentence that quotes a number found nowhere in the observations. */
-    private static String strip(String field, String corpus, String name, List<String> dropped) {
+    static String strip(String field, String corpus, String name, List<String> dropped) {
         if (field.isBlank()) return field;
         StringBuilder out = new StringBuilder();
         for (String sentence : field.split("(?<=[.!?])\\s+(?=[A-Z*`#])|(?<=\n)")) {

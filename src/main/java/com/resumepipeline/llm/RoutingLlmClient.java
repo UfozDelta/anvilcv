@@ -77,6 +77,16 @@ public class RoutingLlmClient implements LlmClient {
         return current().exploreStep(req, progress, tokens);
     }
 
+    @Override
+    public ModuleSummary summarizeModule(ModuleSummaryRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        return current().summarizeModule(req, progress, tokens);
+    }
+
+    @Override
+    public ProjectSummaryResult summarizeProject(ProjectSummaryRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        return current().summarizeProject(req, progress, tokens);
+    }
+
     /** The delegate for the settings as they stand right now. */
     // ponytail: unsynchronised read-then-write. BulletService generates categories in
     // parallel, so concurrent callers can each build a client and the last one wins.

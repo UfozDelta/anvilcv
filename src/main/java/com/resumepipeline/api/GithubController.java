@@ -7,7 +7,10 @@ import com.resumepipeline.github.GithubException;
 import com.resumepipeline.api.dto.ApplicationDtos.SubmitResponse;
 import com.resumepipeline.github.GithubService;
 import com.resumepipeline.github.RepoExplorer;
+import com.resumepipeline.github.RepoMap;
+import com.resumepipeline.github.RepoMapRenderer;
 import com.resumepipeline.github.RepoReader;
+import com.resumepipeline.github.RepoSnapshot;
 import com.resumepipeline.github.SourceTracer;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
@@ -119,6 +122,13 @@ public class GithubController {
         return github.file(AuthUtils.userId(auth), id, path);
     }
 
+    /** The hierarchical map for the project's pinned commit; 204 until the first exploration builds it. */
+    @GetMapping("/projects/{id}/map")
+    public ResponseEntity<RepoMap> map(Authentication auth, @PathVariable UUID id) {
+        RepoMap m = github.map(AuthUtils.userId(auth), id);
+        return m == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(m);
+    }
+
     @GetMapping("/projects/{id}/bullet-sources")
     public Map<UUID, List<SourceTracer.Source>> bulletSources(Authentication auth, @PathVariable UUID id) {
         return github.bulletSources(AuthUtils.userId(auth), id);
@@ -130,7 +140,8 @@ public class GithubController {
      */
     @PostMapping("/projects/{id}/explore/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public SubmitResponse explore(Authentication auth, @PathVariable UUID id, @RequestBody RepoExplorer.Steering steering) {
+    public SubmitResponse explore(Authentication auth, @PathVariable UUID id, @RequestBody RepoExplorer.Steering steering,
+                                  @RequestParam(defaultValue = "false") boolean rebuildMap) {
         UUID userId = AuthUtils.userId(auth);
         RepoReader reader = github.reader(userId, id); // fail fast: not linked / not connected
         UUID jobId = UUID.randomUUID();
@@ -139,10 +150,14 @@ public class GithubController {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             TokenAccumulator tokens = new TokenAccumulator();
             try {
-                progress.emit("Exploring " + reader.repo() + " @ " + reader.sha().substring(0, 7) + "...");
-                RepoExplorer.Outcome out = explorer.explore(reader, steering, progress, tokens);
+                progress.emit("Downloading " + reader.repo() + " @ " + reader.sha().substring(0, 7) + "...");
+                RepoSnapshot snap = github.snapshot(userId, reader);
+                RepoMap map = github.ensureMap(userId, id, snap, rebuildMap, progress, tokens);
+                progress.emit("Exploring with the map...");
+                RepoExplorer.Outcome out = explorer.explore(reader.withSnapshot(snap), steering,
+                        RepoMapRenderer.forExplorer(map), progress, tokens);
                 for (String d : out.droppedClaims()) progress.emit("cut: " + d);
-                github.applyExplore(userId, id, out);
+                github.applyExplore(userId, id, out, map);
                 progress.emit("saved context from " + out.steps() + " steps, " + out.evidence().size() + " verified citations");
                 jobStore.complete(jobId, id);
             } catch (Exception e) {

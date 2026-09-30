@@ -1263,6 +1263,103 @@ public abstract class BaseLlmClient implements LlmClient {
         }
     }
 
+    // -------- repo map summaries --------
+
+    @Override
+    public ModuleSummary summarizeModule(ModuleSummaryRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        String prompt = """
+                You are mapping the codebase of "%s" so a resume writer who cannot see the code can
+                describe the author's work accurately. Summarize ONE module.
+
+                - summary: 1-2 sentences — what this module does and HOW, naming the concrete
+                  techniques, libraries, and patterns the code actually shows (e.g. "polls an
+                  in-memory ConcurrentHashMap job store", not "handles jobs").
+                - purpose: 1 sentence — why it exists from a USER's point of view: the problem it
+                  solves for whoever uses the product.
+                - Claim only what the code below shows. No numbers unless they appear in the code.
+
+                Module: %s
+                Files: %s
+                Depends on modules: %s
+                Routes: %s
+                Public symbols:
+                %s
+
+                Central file:
+                %s
+                """.formatted(nz(req.projectName()), req.modulePath(), String.join(", ", req.files()),
+                String.join(", ", req.dependsOn()), String.join(", ", req.routes()),
+                String.join("\n", req.symbols()), nz(req.code()));
+        LinkedHashMap<String, SchemaSpec> props = new LinkedHashMap<>();
+        props.put("summary", SchemaSpec.string());
+        props.put("purpose", SchemaSpec.string());
+        String json = callJsonWithRetry(cleanJdModel(), prompt, SchemaSpec.object(props, List.of("summary", "purpose")),
+                EXTRACTION_TEMPERATURE, progress, tokens, false, "Map module");
+        return readLenient(json, ModuleSummary.class, "module summary");
+    }
+
+    @Override
+    public ProjectSummaryResult summarizeProject(ProjectSummaryRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        String prompt = """
+                You are mapping the codebase of "%s" top-down from summaries of its modules, so a
+                resume writer can explain what the author built and why it matters.
+
+                - overview: 3-4 sentences — what the product does, for whom, and how it is built
+                  (architecture in one breath). Lead with the problem it solves.
+                - audience: who uses it, in a few words.
+                - subsystems: 3-7 groups of related modules, each a coherent piece of the system
+                  (e.g. "Tailoring pipeline", "Auth & multi-tenancy"). For each: name, purpose (1
+                  sentence: what it does for the user, and how), lenses (1-3 of: %s — the resume
+                  angles this subsystem's work speaks to), and modules (EXACT module paths from the
+                  list below; every listed module belongs to at most one subsystem).
+                - flows: 2-3 end-to-end paths a user's action takes through the system, each a name
+                  and 3-6 short steps naming the subsystems involved.
+                - Only use facts from the material below. Quote numbers only from "Counted facts".
+
+                Counted facts (computed from the code):
+                %s
+
+                Modules, most central first ("path — summary (purpose)"):
+                %s
+
+                Manifests:
+                %s
+
+                README (excerpt, descriptive — trust code over it where they disagree):
+                %s
+                """.formatted(nz(req.projectName()), String.join(", ", req.lenses()),
+                String.join("\n", req.facts()), String.join("\n", req.modules()), nz(req.manifests()), nz(req.readme()));
+
+        SchemaSpec str = SchemaSpec.string();
+        LinkedHashMap<String, SchemaSpec> sub = new LinkedHashMap<>();
+        sub.put("name", str);
+        sub.put("purpose", str);
+        sub.put("lenses", SchemaSpec.array(str));
+        sub.put("modules", SchemaSpec.array(str));
+        LinkedHashMap<String, SchemaSpec> flow = new LinkedHashMap<>();
+        flow.put("name", str);
+        flow.put("steps", SchemaSpec.array(str));
+        LinkedHashMap<String, SchemaSpec> props = new LinkedHashMap<>();
+        props.put("overview", str);
+        props.put("audience", str);
+        props.put("subsystems", SchemaSpec.array(SchemaSpec.object(sub, List.of("name", "purpose", "lenses", "modules"))));
+        props.put("flows", SchemaSpec.array(SchemaSpec.object(flow, List.of("name", "steps"))));
+        String json = callJsonWithRetry(generateModel(), prompt,
+                SchemaSpec.object(props, List.of("overview", "audience", "subsystems", "flows")),
+                EXTRACTION_TEMPERATURE, progress, tokens, false, "Map project");
+        return readLenient(json, ProjectSummaryResult.class, "project summary");
+    }
+
+    private <T> T readLenient(String json, Class<T> type, String what) {
+        try {
+            return mapper.readerFor(type)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(json);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse " + what + ": " + json, e);
+        }
+    }
+
     // -------- model selectors (subclass config) --------
 
     protected abstract String generateModel();

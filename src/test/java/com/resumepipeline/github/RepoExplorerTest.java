@@ -97,6 +97,20 @@ class RepoExplorerTest {
     }
 
     @Test
+    void repoMapIsFirstObservationAndItsFactsCountAsSource() {
+        when(llm.exploreStep(any(), any(), any())).thenReturn(
+                new ExploreStep("finish", null, null, "done", result(List.of("backend"), "Backed by 352 test cases.", List.of())));
+
+        RepoExplorer.Outcome out = explorer(BIG).explore(repo, NONE,
+                "Counted facts:\n- 352 test cases (@Test across 41 files)\n", ProgressLog.noOp(), new TokenAccumulator());
+
+        assertEquals("Backed by 352 test cases.", out.result().scaleImpact());
+        ArgumentCaptor<LlmClient.ExploreStepRequest> req = ArgumentCaptor.forClass(LlmClient.ExploreStepRequest.class);
+        verify(llm).exploreStep(req.capture(), any(), any());
+        assertTrue(req.getValue().transcript().indexOf("repo_map") < req.getValue().transcript().indexOf("list_tree"));
+    }
+
+    @Test
     void budgetExhaustionForcesFinishThenGivesUp() {
         RepoExplorer.Budget tiny = new RepoExplorer.Budget(2, 10, 100_000, 1_000_000, Duration.ofMinutes(1));
         when(llm.exploreStep(any(), any(), any())).thenReturn(tool("list_tree", ""));

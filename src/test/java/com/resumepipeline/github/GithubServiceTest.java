@@ -25,7 +25,7 @@ class GithubServiceTest {
     void setUp() {
         when(auth.isConfigured()).thenReturn(true);
         service = new GithubService(auth, client, installs, mock(ProjectService.class),
-                mock(ProjectRepository.class), mock(com.resumepipeline.bullet.BulletRepository.class), "https://github.com");
+                mock(ProjectRepository.class), mock(com.resumepipeline.bullet.BulletRepository.class), mock(RepoMapService.class), "https://github.com");
     }
 
     @Test
@@ -62,7 +62,7 @@ class GithubServiceTest {
     void applyExploreKeepsUserFieldsTheExplorerLeftBlankAndGroundsGeneration() {
         ProjectService projects = mock(ProjectService.class);
         ProjectRepository repo = mock(ProjectRepository.class);
-        service = new GithubService(auth, client, installs, projects, repo, mock(com.resumepipeline.bullet.BulletRepository.class), "https://github.com");
+        service = new GithubService(auth, client, installs, projects, repo, mock(com.resumepipeline.bullet.BulletRepository.class), mock(RepoMapService.class), "https://github.com");
         UUID pid = UUID.randomUUID();
         com.resumepipeline.project.Project p = new com.resumepipeline.project.Project(
                 user, com.resumepipeline.project.Project.Kind.PROJECT, "app", "d", null, null, null, null, null);

@@ -27,6 +27,12 @@ Reply with exactly one JSON object per turn:
   - `finish` — `result` = the final object (Stage 6). Nothing else ends the run.
 - `path` / `query`: as the action needs.
 
+The first observation is usually a prebuilt REPO MAP: project overview,
+subsystems, counted facts, and modules ranked by how much the rest of the code
+depends on them, with summaries and key symbols. Use it to decide what to
+read — start with the central files of the top-ranked modules — but cite files
+you actually read, not the map. Counted facts may be quoted as-is.
+
 Tool output appears in the transcript as `OBSERVATION`. You have a fixed budget
 of steps and characters; when the transcript says BUDGET EXHAUSTED, `finish`
 immediately with what you have verified. Vendored, lockfile, binary, and
