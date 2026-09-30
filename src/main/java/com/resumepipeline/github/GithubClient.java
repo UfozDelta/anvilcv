@@ -152,6 +152,58 @@ public class GithubClient {
         return out;
     }
 
+    /**
+     * Whole repo at {@code sha} in one request. GitHub answers with a redirect to a
+     * pre-signed codeload URL; it is followed without our Authorization header, which the
+     * signed URL does not need and must not receive.
+     */
+    public RepoSnapshot snapshot(long installationId, String fullName, String sha) {
+        URI first = URI.create(apiBase + "/repos/" + repo(fullName) + "/tarball/" + sha(sha));
+        return rest.get()
+                .uri(first)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + installationToken(installationId))
+                .exchange((req, resp) -> {
+                    if (resp.getStatusCode().is3xxRedirection()) {
+                        URI location = resp.getHeaders().getLocation();
+                        if (location == null) throw new GithubException("Tarball redirect had no location");
+                        return rest.get().uri(location).exchange((r2, resp2) -> {
+                            if (resp2.getStatusCode().isError()) raise(r2, resp2);
+                            return readTarball(resp2);
+                        });
+                    }
+                    if (resp.getStatusCode().isError()) raise(req, resp);
+                    return readTarball(resp);
+                });
+    }
+
+    private static RepoSnapshot readTarball(ClientHttpResponse resp) throws java.io.IOException {
+        long len = resp.getHeaders().getContentLength();
+        if (len > MAX_TARBALL_BYTES) throw new GithubException("Repository too large to map (" + len / 1_000_000 + " MB)");
+        try (var in = new java.io.BufferedInputStream(resp.getBody())) {
+            return RepoSnapshot.fromTarGz(new LimitedInputStream(in, MAX_TARBALL_BYTES));
+        }
+    }
+
+    /** Compressed download ceiling; the snapshot separately caps the decompressed text it keeps. */
+    static final long MAX_TARBALL_BYTES = 100L * 1024 * 1024;
+
+    private static final class LimitedInputStream extends java.io.FilterInputStream {
+        private long left;
+        LimitedInputStream(java.io.InputStream in, long limit) { super(in); this.left = limit; }
+        @Override public int read() throws java.io.IOException {
+            if (left <= 0) throw new GithubException("Repository too large to map");
+            int b = super.read();
+            if (b >= 0) left--;
+            return b;
+        }
+        @Override public int read(byte[] b, int off, int len) throws java.io.IOException {
+            if (left <= 0) throw new GithubException("Repository too large to map");
+            int n = super.read(b, off, (int) Math.min(len, left));
+            if (n > 0) left -= n;
+            return n;
+        }
+    }
+
     public List<Commit> commits(long installationId, String fullName, String sha, String path) {
         String uri = "/repos/" + repo(fullName) + "/commits?per_page=30&sha=" + sha(sha)
                 + (path == null || path.isBlank() ? "" : "&path=" + UriUtils.encodeQueryParam(path, StandardCharsets.UTF_8));

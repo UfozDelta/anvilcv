@@ -99,6 +99,24 @@ class GithubClientTest {
     }
 
     @Test
+    void snapshotFollowsTarballRedirectWithoutLeakingToken() throws Exception {
+        expectToken();
+        HttpHeaders redirect = new HttpHeaders();
+        redirect.setLocation(java.net.URI.create("https://codeload.test/me/app/tar.gz/abcdef1?token=signed"));
+        server.expect(requestTo(API + "/repos/me/app/tarball/abcdef1"))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer inst-tok"))
+                .andRespond(withStatus(HttpStatus.FOUND).headers(redirect));
+        server.expect(requestTo("https://codeload.test/me/app/tar.gz/abcdef1?token=signed"))
+                .andExpect(r -> assertNull(r.getHeaders().getFirst(HttpHeaders.AUTHORIZATION)))
+                .andRespond(withSuccess(TarGz.of(java.util.Map.of("src/A.java", "class A {}")), MediaType.APPLICATION_OCTET_STREAM));
+
+        RepoSnapshot s = client.snapshot(7, "me/app", "abcdef1");
+
+        assertEquals("class A {}", s.read("src/A.java"));
+        server.verify();
+    }
+
+    @Test
     void readFileRejectsPathTraversalSegmentsAndBadRepoNames() {
         expectToken();
         server.expect(requestTo(API + "/repos/me/r/contents/src/a%20b.java?ref=abcdef1"))

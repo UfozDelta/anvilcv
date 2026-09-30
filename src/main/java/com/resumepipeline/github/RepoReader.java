@@ -35,4 +35,8 @@ public class RepoReader {
     public List<GithubClient.Commit> log(String path) {
         return client.commits(installationId, repo, sha, path);
     }
+
+    public RepoSnapshot snapshot() {
+        return client.snapshot(installationId, repo, sha);
+    }
 }
