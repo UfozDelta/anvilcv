@@ -129,25 +129,6 @@ export function SettingsPage() {
     <div className="panel" style={{ marginTop: 32 }}>
       <Section num="06.C" title="TOOLS" />
       <GithubConnection />
-      <div style={{ marginTop: 20 }}>
-        <div style={{ marginBottom: 12 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', fontWeight: 600 }}>
-            Project Context Extractor
-          </span>
-          <p style={{ fontFamily: 'var(--mono)', fontSize: '0.75rem', color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.6 }}>
-            A Claude Code agent definition. Drop it in your own repo's <code>.claude/agents/</code> —
-            it explores the repo, verifies its own citations, and prints a filled context JSON
-            ready to paste into your AnvilCV project fields.
-          </p>
-        </div>
-        <a
-          className="btn btn--ghost"
-          href="/api/tools/context-agent"
-          download="anvilcv-context-agent.md"
-        >
-          ↓ DOWNLOAD anvilcv-context-agent.md
-        </a>
-      </div>
     </div>
     </>
   );

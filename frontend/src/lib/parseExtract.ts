@@ -1,4 +1,5 @@
-// Parser for the "Project Context Extractor" (anvilcv-context-agent.md) output.
+// Parser for the context extractor's output (anvilcv-context-mcp) — the manual paste
+// fallback now that AnvilCV explores linked GitHub repos itself.
 //
 // That prompt emits plain headed markdown sections, each tagged with the
 // AnvilCV field it feeds (e.g. "→ AnvilCV field: **techStack**"). We map the

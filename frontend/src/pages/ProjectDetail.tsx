@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { CATEGORIES } from '../lib/api';
-import { buildCopyForLlmText } from '../lib/copyForLlm';
 import { deriveLenses, NARRATIVE_CATEGORY, matchTechCategory } from '../lib/lensDerivation';
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
@@ -265,7 +264,7 @@ export function ProjectDetail() {
         )}
 
         {tab === 'info' && (
-          <InfoTab s={s} project={project} isExperience={isExperience} filledCount={filledCount} />
+          <InfoTab s={s} project={project} isExperience={isExperience} filledCount={filledCount} setTab={setTab} />
         )}
 
         {tab === 'repo' && id && <RepoTab s={s} id={id} project={project} />}
@@ -419,41 +418,27 @@ function GenerateTab({ s, id, project, filledCount, setTab }: {
 
 // ---------------------------------------------------------------- info tab
 
-function InfoTab({ s, project, isExperience, filledCount }: {
+function InfoTab({ s, project, isExperience, filledCount, setTab }: {
   s: ReturnType<typeof useProjectDetail>;
   project: NonNullable<ReturnType<typeof useProjectDetail>['project']>;
   isExperience: boolean;
   filledCount: number;
+  setTab: (t: Tab) => void;
 }) {
-  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
-
-  async function copyForLlm() {
-    setCopyState('copying');
-    try {
-      const text = await buildCopyForLlmText(project);
-      await navigator.clipboard.writeText(text);
-      setCopyState('copied');
-      setTimeout(() => setCopyState('idle'), 2500);
-    } catch {
-      setCopyState('error');
-    }
-  }
-
   return (
     <div>
       {!isExperience && filledCount === 0 && (
         <div className="panel panel--inset stack-sm" style={{ marginBottom: 16 }}>
-          <div className="label">FILL THIS WITH AN LLM</div>
+          <div className="label">FILL THIS FROM THE CODE</div>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)', letterSpacing: '0.05em' }}>
-            Copies instructions for a coding agent with file access — Claude Code, Cursor, or
-            similar. It explores this repo, verifies its own citations, and prints JSON you paste
-            below. Won't work pasted into a plain chatbot with no files open.
+            {project.repoCommitSha
+              ? 'Explore the linked repo — AnvilCV reads it and fills these fields from verified code.'
+              : 'Link a GitHub repo and AnvilCV reads it for you. No repo? Paste extractor JSON under Architecture & Context.'}
           </div>
           <div className="row">
-            <button type="button" className="btn btn--acid btn--sm" onClick={copyForLlm} disabled={copyState === 'copying'}>
-              {copyState === 'copying' ? 'COPYING…' : copyState === 'copied' ? '✓ COPIED' : '⧉ COPY FOR LLM'}
+            <button type="button" className="btn btn--acid btn--sm" onClick={() => setTab('repo')}>
+              {project.repoCommitSha ? '⌕ EXPLORE REPO →' : '⇣ LINK GITHUB REPO →'}
             </button>
-            {copyState === 'error' && <span className="err" style={{ marginLeft: 8 }}>Couldn't copy — try again.</span>}
           </div>
         </div>
       )}

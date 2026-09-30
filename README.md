@@ -53,6 +53,19 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
 - Per-application outcome history, rendered as a d3-sankey flow diagram at `/flow`.
 - LLM token usage and USD cost recorded per application.
 
+**GitHub repos**
+- Connect a GitHub App with read-only access to the repos you pick, private included. See
+  [GitHub App](#github-app).
+- Import a repo as a project, pinned to a commit. The Repo tab shows its tree and files beside
+  the bullet bank.
+- A server-side explorer (an LLM tool loop over `list_tree` / `read_file` / `search_code` /
+  `git_log`) fills project context from the code. It follows the same instructions as
+  `anvilcv-context-mcp`, under step, file, token, and time budgets. Output is re-verified:
+  evidence citing unread files is dropped, and sentences with numbers absent from the repo are
+  cut.
+- Steer it with pinned/excluded paths, lenses, and notes. Each bullet links to the files or
+  commits it traces to.
+
 **Admin**
 - `/admin` — LLM provider, API keys, base URLs, and per-call models. Keys encrypted at rest
   (AES-256-GCM), masked on read, live-tested against the provider before save.
@@ -181,6 +194,41 @@ Hikari is tuned for Neon's scale-to-zero (pool 5, min idle 0, 4-minute max lifet
 
 ---
 
+### GitHub App
+
+| Var | Notes |
+|---|---|
+| `GITHUB_APP_ID` | numeric App ID |
+| `GITHUB_APP_SLUG` | the `<slug>` in `github.com/apps/<slug>` |
+| `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` | secret; the app's OAuth pair |
+| `GITHUB_APP_PRIVATE_KEY` | secret; the downloaded `.pem`, multi-line or one line with `\n` escapes |
+
+All blank disables the feature: the GitHub endpoints answer 503 and nothing else changes.
+
+---
+
+## GitHub App
+
+One app per AnvilCV deploy, created once by whoever runs it:
+
+1. GitHub > Settings > Developer settings > GitHub Apps > **New GitHub App**.
+2. **Callback URL**: `https://<your-host>/api/github/callback` (`http://localhost:8080/...`
+   locally). Tick **Request user authorization (OAuth) during installation**.
+3. **Webhook**: untick *Active*. Nothing here uses webhooks.
+4. **Repository permissions**: *Contents* read-only and *Metadata* read-only. Nothing else.
+5. **Where can this app be installed**: *Any account* if other people use your instance.
+6. Create it, then copy the App ID and Client ID, generate a client secret and a private key,
+   and set the env vars above.
+
+How the connect flow works: `/api/github/connect` stores a one-time `state` in the session and
+sends the user to the install page. GitHub redirects back with `code` + `installation_id`. The
+callback checks `state`, exchanges `code` for a user token, and links the installation only if
+that token lists it (the query param alone is forgeable). Then it drops the user token. Only the
+installation id is stored. Installation tokens are minted per use from the private key, narrowed
+to `contents:read` + `metadata:read`, and cached in memory until near expiry.
+
+---
+
 ## LLM providers and keys
 
 Provider, keys, base URLs, and per-call models live in the `llm_settings` table (a hard singleton
@@ -211,7 +259,7 @@ stored key undecryptable — they have to be re-entered.
 | `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V20` |
 | `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
-| `src/main/resources/anvilcv-context-agent.md` | Claude Code agent definition served by `GET /api/tools/context-agent` |
+| `src/main/resources/repo-explorer-instructions.md` | System prompt for the server-side repo explorer, ported from `anvilcv-context-mcp` |
 | `src/test/java/` | ~192 backend tests |
 | `frontend/` | React + Vite SPA |
 | `.github/workflows/ci.yml` | Maven job + Vite job |
@@ -235,6 +283,7 @@ stored key undecryptable — they have to be re-entered.
 | `llm.settings` | `LlmSettings` entity + `SecretCipher` (AES-256-GCM) |
 | `render` | `LatexEscaper`, `LatexRenderer`, `PdfCompiler` |
 | `jd` | `JdFetcher` — URL scraping and JSON-LD extraction |
+| `github` | GitHub App auth (JWT, installation tokens), `GithubClient`, `RepoExplorer` tool loop, `SourceTracer` |
 | `progress` | `ProgressLog`, `PipelineTimer` |
 | `config` | Per-user `GenerationConfig`, SPA deep-link fallback |
 
@@ -242,7 +291,7 @@ stored key undecryptable — they have to be re-entered.
 
 ```
 public   POST /api/login  /api/register  /api/logout   GET /api/me  /api/ping
-         GET  /api/public/stats          GET /api/tools/context-agent
+         GET  /api/public/stats
 
 profile  GET|PUT /api/profile
 config   GET|PUT /api/config/generation
@@ -260,6 +309,9 @@ apps     GET /api/applications           GET /api/applications/outcome-history
          GET  /api/applications/{id}/cover-letter   (text/plain)
 import   POST /api/resume/parse          POST /api/resume/import
 admin    GET /api/admin/stats            GET|PUT /api/admin/llm   POST /api/admin/llm/test
+github   GET /api/github/status  /connect  /callback  /repos      DELETE /api/github
+         POST /api/github/link           GET /api/github/projects/{id}/tree|file|bullet-sources
+         POST /api/github/projects/{id}/explore/submit   (polls /api/projects/jobs/{jobId}/progress)
 ```
 
 Session-cookie auth (`JSESSIONID`, httpOnly), BCrypt passwords, `/api/admin/**` gated on
@@ -292,6 +344,10 @@ jobs, and it does not survive horizontal scaling.
 | `generation_config` | per-user word-filter bounds, temperature, bold density, tone, verb style |
 | `llm_usage_log` | per-call tokens and cost, nullable app/project FKs |
 | `llm_settings` | singleton row: provider, encrypted keys, base URLs, per-call models |
+| `github_installation` | one per user: GitHub App installation id + account login. No tokens |
+
+`project` also carries `repo_branch`, `repo_commit_sha` (the pinned snapshot), and
+`repo_evidence` (JSON of the explorer's verified spans, used for bullet tracing).
 
 Flyway owns the schema (`out-of-order: true`); JPA only validates it.
 
@@ -372,3 +428,7 @@ cd frontend && npm run build       # dist/ and a copy into src/main/resources/st
     zeroed; OpenAI calls are not rated by the table in `TokenAccumulator`.
 13. **Job progress is in-memory**, so a restart loses it and multi-instance deploys break polling.
 14. No linter, formatter, `CONTRIBUTING.md`, or `LICENSE` in the repo yet.
+15. **GitHub callback lands on `/settings` of the API origin.** On a split-origin dev setup
+    (`npm run dev` on 5173), you end up on 8080's built SPA after connecting.
+16. **Repo exploration costs LLM tokens on your key**, up to 40 steps per run. It is logged to
+    `llm_usage_log` as `repo_explore`.
