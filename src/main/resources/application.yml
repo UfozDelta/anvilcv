@@ -108,6 +108,11 @@ github:
   # FRONTEND_ORIGIN, and to the API's own origin when neither is set.
   return-origin: ${GITHUB_RETURN_ORIGIN:${FRONTEND_ORIGIN:}}
 
+# Shared secret for the external Jobs API's job.new webhook (HMAC-SHA256 of the raw body).
+# Blank disables the webhook; the public /jobs list still serves what is stored.
+jobs:
+  webhook-secret: ${JOBS_WEBHOOK_SECRET:}
+
 tectonic:
   binary: ${TECTONIC_BIN:tectonic}
   timeout-seconds: 30

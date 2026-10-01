@@ -15,6 +15,7 @@ import java.util.UUID;
 import static com.resumepipeline.api.WebTestSecurity.admin;
 import static com.resumepipeline.api.WebTestSecurity.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -42,6 +43,15 @@ class SecurityRulesTest {
     void protectedRouteSucceedsWhenAuthenticated() throws Exception {
         mvc.perform(get("/api/ping").with(user(UUID.randomUUID())))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void jobFeedIsReachableWithoutLogin() throws Exception {
+        // 404, not 401: security let the anonymous request through; this slice has no handler.
+        mvc.perform(get("/api/public/jobs"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/public/jobs/webhook"))
+                .andExpect(status().isNotFound());
     }
 
     // /api/admin/** used to be .authenticated(), so anyone who registered could read
