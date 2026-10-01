@@ -19,6 +19,7 @@ import com.resumepipeline.progress.ProgressLog;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -46,12 +47,16 @@ public class GithubController {
     private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final GithubService github;
+    /** Where the browser lands after connecting: the frontend's origin on a split deploy, "" (same origin) otherwise. */
+    private final String returnOrigin;
     private final RepoExplorer explorer;
     private final JobProgressStore jobStore;
     private final LlmUsageService usage;
 
-    public GithubController(GithubService github, RepoExplorer explorer, JobProgressStore jobStore, LlmUsageService usage) {
+    public GithubController(GithubService github, RepoExplorer explorer, JobProgressStore jobStore, LlmUsageService usage,
+                            @Value("${github.return-origin:}") String returnOrigin) {
         this.github = github;
+        this.returnOrigin = returnOrigin.replaceAll("/+$", "");
         this.explorer = explorer;
         this.jobStore = jobStore;
         this.usage = usage;
@@ -82,21 +87,21 @@ public class GithubController {
         Object expected = session.getAttribute(STATE_ATTR);
         session.removeAttribute(STATE_ATTR);
         if (code == null) {
-            return redirect("/settings?github=error");
+            return redirect(returnOrigin + "/settings?github=error");
         }
         if (state == null || !state.equals(expected)) {
             if (state == null && installationId != null) return redirect("/api/github/connect");
-            return redirect("/settings?github=error");
+            return redirect(returnOrigin + "/settings?github=error");
         }
         try {
             github.connect(AuthUtils.userId(auth), code, installationId);
-            return redirect("/settings?github=connected");
+            return redirect(returnOrigin + "/settings?github=connected");
         } catch (GithubException.NoInstallation e) {
             // Authorized but not installed yet: send them to install, then back here.
             return redirect(github.installUrl(newState(session)));
         } catch (RuntimeException e) {
             log.warn("GITHUB_CONNECT_FAILED cause={}", e.getMessage());
-            return redirect("/settings?github=error");
+            return redirect(returnOrigin + "/settings?github=error");
         }
     }
 

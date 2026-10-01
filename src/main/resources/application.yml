@@ -103,6 +103,10 @@ github:
     client-secret: ${GITHUB_APP_CLIENT_SECRET:}
     # PEM, either multi-line or one line with literal \n escapes. PKCS#1 as downloaded is fine.
     private-key:   ${GITHUB_APP_PRIVATE_KEY:}
+  # Where the browser goes after connecting. The callback lives on the API host, so on a split
+  # deploy (frontend on another domain) this must be the frontend's origin; it defaults to
+  # FRONTEND_ORIGIN, and to the API's own origin when neither is set.
+  return-origin: ${GITHUB_RETURN_ORIGIN:${FRONTEND_ORIGIN:}}
 
 tectonic:
   binary: ${TECTONIC_BIN:tectonic}

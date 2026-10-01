@@ -51,7 +51,8 @@ Needs Java 21, Maven, Node 18+, PostgreSQL (with `pgcrypto`), `tectonic`, and an
 ## Connect GitHub (optional)
 
 1. Create a GitHub App:
-   - Callback URL: `https://<host>/api/github/callback`
+   - Callback URL: `https://<API host>/api/github/callback`. Use the backend's domain, not the
+     website's, if they differ.
    - Tick *Request user authorization during installation*
    - Webhook off
    - Permissions: *Contents* and *Metadata* read-only

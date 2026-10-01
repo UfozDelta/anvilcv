@@ -229,8 +229,9 @@ All blank disables the feature: the GitHub endpoints answer 503 and nothing else
 One app per AnvilCV deploy, created once by whoever runs it:
 
 1. GitHub > Settings > Developer settings > GitHub Apps > **New GitHub App**.
-2. **Callback URL**: `https://<your-host>/api/github/callback` (`http://localhost:8080/...`
-   locally). Tick **Request user authorization (OAuth) during installation**.
+2. **Callback URL**: `https://<API host>/api/github/callback` (`http://localhost:8080/...`
+   locally). On a split deploy this is the **backend's** domain. After connecting, the browser
+   returns to `FRONTEND_ORIGIN` (override with `GITHUB_RETURN_ORIGIN`). Tick **Request user authorization (OAuth) during installation**.
 3. **Webhook**: untick *Active*. Nothing here uses webhooks.
 4. **Repository permissions**: *Contents* read-only and *Metadata* read-only. Nothing else.
 5. **Where can this app be installed**: *Any account* if other people use your instance.
