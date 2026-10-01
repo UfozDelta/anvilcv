@@ -4,7 +4,7 @@ export function SegmentedControl<T extends string>({ value, options, onChange }:
   onChange: (v: T) => void;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 2 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
       {options.map(opt => (
         <button
           key={opt.value}

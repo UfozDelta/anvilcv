@@ -321,7 +321,7 @@ export function AdminPage() {
                     <tr key={i} style={{ borderBottom: '1px solid var(--rule-thin, #eee)' }}>
                       <td style={{ padding: '4px 8px' }}>{d.flagged ? '⚑' : ''}</td>
                       <td style={{ padding: '4px 8px' }}>{d.category}</td>
-                      <td style={{ padding: '4px 8px', maxWidth: 420 }}>
+                      <td style={{ padding: '4px 8px', minWidth: 200, maxWidth: 420 }}>
                         {d.bulletText.length > 90 ? d.bulletText.slice(0, 87) + '…' : d.bulletText}
                       </td>
                       <td style={{ padding: '4px 8px' }}>{d.charCount}</td>

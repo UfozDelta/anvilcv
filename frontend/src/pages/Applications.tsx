@@ -174,7 +174,7 @@ export function Applications() {
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="approw" aria-hidden>
-                <div>
+                <div className="approw__main">
                   <div style={{ height: 17, width: '42%', background: 'var(--paper-2)', marginBottom: 6 }} />
                   <div style={{ height: 11, width: '28%', background: 'var(--paper-2)' }} />
                 </div>
@@ -189,7 +189,7 @@ export function Applications() {
                 {/* One stretched link covers the row; real controls sit above it. */}
                 <Link className="approw__link" to={`/applications/${a.id}`}>{a.company || 'Untitled'}</Link>
 
-                <div>
+                <div className="approw__main">
                   <h3 className="approw__title">{a.company || 'Untitled'}</h3>
                   <div className="approw__role">{a.role || 'No role recorded'}</div>
                 </div>

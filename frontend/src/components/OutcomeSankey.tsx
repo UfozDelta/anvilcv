@@ -111,7 +111,7 @@ export function OutcomeSankey({ history }: { history: OutcomeHistoryEntry[] }) {
               y={((n.y0 ?? 0) + (n.y1 ?? 0)) / 2}
               textAnchor={leftHalf ? 'start' : 'end'}
               dominantBaseline="middle"
-              fontSize={11} fill="var(--ink)" style={{ textTransform: 'uppercase' }}
+              className="sankey__label" fill="var(--ink)" style={{ textTransform: 'uppercase' }}
             >
               {n.name} ({n.value})
             </text>

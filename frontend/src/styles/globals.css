@@ -92,7 +92,8 @@ body::before {
 .shell {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 var(--pad);
+  /* inline only — vertical padding belongs to whatever section wears .shell */
+  padding-inline: var(--pad);
 }
 
 .panel {
@@ -119,26 +120,45 @@ body::before {
 
 /* -------- Masthead -------- */
 
+/* Mobile-first: brand · meta · menu button on one line, nav hidden behind the button.
+   The min-width: 721px block at the end of this section restores the desktop bar. */
 .masthead {
   border-bottom: var(--rule-heavy);
-  padding: 10px 0 8px;
+  padding-block: 10px 8px;
   margin-bottom: calc(var(--pad-lg) * 0.6);
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: end;
-  gap: 18px;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
 }
 
 .masthead__brand {
   font-family: var(--serif);
   font-weight: 900;
   font-style: italic;
-  font-size: 26px;
+  font-size: 22px;
   letter-spacing: -0.03em;
   line-height: 0.9;
 }
 
+.masthead__date { display: none; }
+
+.masthead__burger {
+  min-width: 44px;
+  min-height: 44px;
+  border: var(--rule-thick);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.masthead__burger[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
+
 .masthead__rule {
+  display: none;
   border-top: var(--rule-thin);
   align-self: end;
   height: 1px;
@@ -205,29 +225,64 @@ body::before {
 }
 .masthead__settings-menu a:hover { background: var(--acid); opacity: 1; }
 
-/* Sub-nav under masthead */
+/* Sub-nav under masthead — on phones a stacked list opened by .masthead__burger */
 .nav {
-  display: flex;
-  gap: 16px;
+  display: none;
+  flex-direction: column;
   margin: 0 auto calc(var(--pad-lg) * 0.7);
   padding-bottom: 6px;
   border-bottom: var(--rule-thin);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
   font-weight: 700;
 }
+.nav--open { display: flex; }
 .nav a {
   color: var(--ink);
   text-decoration: none;
-  padding-bottom: 2px;
-  border-bottom: 2px solid transparent;
-  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 8px;
+  border-bottom: var(--rule-thin);
+  opacity: 0.6;
 }
 .nav a:hover { opacity: 0.85; }
 .nav a.active {
   opacity: 1;
-  border-bottom: 2px solid var(--acid);
+  background: var(--acid);
+}
+
+@media (min-width: 721px) {
+  .masthead {
+    grid-template-columns: auto 1fr auto;
+    align-items: end;
+    gap: 18px;
+  }
+  .masthead__brand { font-size: 26px; }
+  .masthead__rule { display: block; }
+  .masthead__date { display: inline; }
+  .masthead__burger { display: none; }
+
+  .nav {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 10.5px;
+  }
+  .nav a {
+    display: inline;
+    min-height: 0;
+    padding: 0 0 2px;
+    border-bottom: 2px solid transparent;
+    opacity: 0.5;
+  }
+  .nav a.active {
+    background: none;
+    border-bottom: 2px solid var(--acid);
+  }
 }
 
 /* -------- Section markers -------- */
@@ -491,7 +546,8 @@ body::before {
 /* -------- Misc -------- */
 
 .muted { color: var(--muted); }
-.center-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+/* minmax(0, …): an auto track sizes to the card's fixed width, so its max-width: 100% never applies */
+.center-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px; }
 
 .err {
   color: var(--rust);
@@ -549,27 +605,7 @@ a:focus-visible, button:focus-visible {
 
   .row { flex-wrap: wrap; }
 
-  /* Masthead stacks; meta drops to the left under the brand. */
-  .masthead {
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: calc(var(--pad-lg) * 0.6);
-  }
-  .masthead__brand { font-size: 22px; }
-  .masthead__rule { display: none; }
-  .masthead__meta { font-size: 10px; line-height: 1.5; }
-
-  /* Nav scrolls horizontally instead of wrapping into a wall of links. */
-  .nav {
-    gap: 16px;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    white-space: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .nav::-webkit-scrollbar { display: none; }
+  .masthead__settings-btn { padding: 8px; }
 
   .list__row { grid-template-columns: 1fr auto; gap: 12px; }
   .list__num { display: none; }

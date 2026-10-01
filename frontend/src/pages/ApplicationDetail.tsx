@@ -9,6 +9,13 @@ import { useApplicationDetail } from '../hooks/useApplicationDetail';
 import { RankedBulletRow } from '../components/ApplicationDetail/RankedBulletRow';
 import { BulletGroupSection } from '../components/ApplicationDetail/BulletGroupSection';
 
+// On phones the viewer stacks under the whole bullet list; on desktop it sits beside it and this is a no-op.
+function showViewer() {
+  if (window.matchMedia('(max-width: 980px)').matches) {
+    document.getElementById('viewer')?.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
 const OUTCOMES = ['applied', 'interview', 'offer', 'rejected'] as const;
 
 type Tab = 'page' | 'cover' | 'review' | 'ats';
@@ -193,7 +200,7 @@ export function ApplicationDetail() {
                     onRefit={pid => s.startRefit(pid)}
                     onToggleSelect={s.toggleBullet}
                     onToggleWhy={s.toggleWhy}
-                    onPreview={ids => { s.previewGroup(g.key, ids); setTab('page'); }}
+                    onPreview={ids => { s.previewGroup(g.key, ids); setTab('page'); showViewer(); }}
                     onEdit={bid => s.setEditingId(bid)}
                     onCancelEdit={() => s.setEditingId(null)}
                     onSaveBullet={(b, text, tags) => s.saveBullet(b, text, tags)}
@@ -240,12 +247,15 @@ export function ApplicationDetail() {
               >
                 Rebuild PDF →
               </button>
+              <button className="btn btn--sm actionbar__jump" style={{ borderWidth: 2 }} onClick={showViewer}>
+                Preview ↓
+              </button>
             </div>
           </div>
         </div>
 
         {/* ================= RIGHT: one viewer, four tabs ================= */}
-        <div>
+        <div id="viewer">
           <div className="tabs">
             <button className={tab === 'page' ? 'is-on' : ''} onClick={() => setTab('page')}>Page</button>
             <button className={tab === 'cover' ? 'is-on' : ''} onClick={() => setTab('cover')}>

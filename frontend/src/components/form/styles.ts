@@ -5,6 +5,7 @@ export const formStyles = {
   },
   row: {
     display: 'flex' as const,
+    flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
     gap: 16,
     marginBottom: 20,
