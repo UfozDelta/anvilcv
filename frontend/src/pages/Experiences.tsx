@@ -100,15 +100,15 @@ export function Experiences() {
               const title = p.title || p.name;
               const meta = [p.company, p.location, p.dates].filter(Boolean).join(' · ') || '—';
               return (
-                <div className={`approw${deletingIds.has(p.id) ? ' approw--removing' : ''}`} key={p.id} style={{ gridTemplateColumns: 'minmax(0,1fr) 150px 34px' }}>
+                <div className={`approw approw--entry${deletingIds.has(p.id) ? ' approw--removing' : ''}`} key={p.id}>
                   <Link className="approw__link" to={`/experiences/${p.id}`}>{title}</Link>
 
-                  <div>
+                  <div className="approw__main">
                     <h3 className="approw__title">{title}</h3>
                     <div className="approw__role">{meta}</div>
                   </div>
 
-                  <div />
+                  <div className="approw__aside" />
 
                   <RowMenu onDelete={() => del(p.id, title)} onDuplicate={() => dup(p.id)} />
                 </div>

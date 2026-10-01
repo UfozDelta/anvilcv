@@ -100,15 +100,15 @@ export function Projects() {
             {shown.map(p => {
               const meta = (p.description?.slice(0, 72) ?? '') + ((p.description?.length ?? 0) > 72 ? '…' : '');
               return (
-                <div className={`approw${deletingIds.has(p.id) ? ' approw--removing' : ''}`} key={p.id} style={{ gridTemplateColumns: 'minmax(0,1fr) 150px 34px' }}>
+                <div className={`approw approw--entry${deletingIds.has(p.id) ? ' approw--removing' : ''}`} key={p.id}>
                   <Link className="approw__link" to={`/projects/${p.id}`}>{p.name}</Link>
 
-                  <div>
+                  <div className="approw__main">
                     <h3 className="approw__title">{p.name}</h3>
                     <div className="approw__role">{meta}</div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <div className="approw__aside">
                     {p.githubUrl && (
                       <span className="kw" title={p.githubUrl}>
                         {p.repoCommitSha
