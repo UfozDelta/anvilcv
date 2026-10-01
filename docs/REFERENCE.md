@@ -238,9 +238,12 @@ One app per AnvilCV deploy, created once by whoever runs it:
    and set the env vars above.
 
 How the connect flow works: `/api/github/connect` stores a one-time `state` in the session and
-sends the user to the install page. GitHub redirects back with `code` + `installation_id`. The
-callback checks `state`, exchanges `code` for a user token, and links the installation only if
-that token lists it (the query param alone is forgeable). Then it drops the user token. Only the
+sends the user through the app's OAuth page. The callback checks `state`, exchanges `code` for a
+user token, and links an installation only if that token lists it (the `installation_id` query
+param alone is forgeable). If the user has no installation yet, they go to the install page.
+GitHub returns from there with `code` + `installation_id` but possibly no `state`, so the
+callback restarts OAuth, which bounces straight back with a `state` it can check. Then it drops
+the user token. Only the
 installation id is stored. Installation tokens are minted per use from the private key, narrowed
 to `contents:read` + `metadata:read`, and cached in memory until near expiry.
 

@@ -45,11 +45,12 @@ class GithubControllerTest {
     @Test
     void connectBindsStateThatCallbackThenAccepts() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(github.installUrl(anyString())).thenAnswer(i -> "https://github.com/apps/x/installations/new?state=" + i.getArgument(0));
+        when(github.authorizeUrl(anyString())).thenAnswer(i -> "https://github.com/login/oauth/authorize?client_id=x&state=" + i.getArgument(0));
         MockHttpSession session = new MockHttpSession();
 
         mvc.perform(get("/api/github/connect").session(session).with(user(userId)))
-                .andExpect(status().isFound());
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", org.hamcrest.Matchers.startsWith("https://github.com/login/oauth/authorize")));
         String state = (String) session.getAttribute("github.oauth.state");
 
         mvc.perform(get("/api/github/callback").session(session).with(user(userId))
@@ -61,6 +62,32 @@ class GithubControllerTest {
         mvc.perform(get("/api/github/callback").session(session).with(user(userId))
                         .param("code", "c").param("state", state))
                 .andExpect(header().string("Location", "/settings?github=error"));
+    }
+
+    @Test
+    void freshInstallWithoutStateRestartsOauthInsteadOfConnecting() throws Exception {
+        mvc.perform(get("/api/github/callback").session(new MockHttpSession()).with(user(UUID.randomUUID()))
+                        .param("code", "c").param("installation_id", "1").param("setup_action", "install"))
+                .andExpect(header().string("Location", "/api/github/connect"));
+
+        verify(github, never()).connect(any(), any(), any());
+    }
+
+    @Test
+    void authorizedButNotInstalledGoesToInstallPageWithFreshState() throws Exception {
+        UUID userId = UUID.randomUUID();
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("github.oauth.state", "s1");
+        when(github.connect(userId, "c", null)).thenThrow(new com.resumepipeline.github.GithubException.NoInstallation());
+        when(github.installUrl(anyString())).thenAnswer(i -> "https://github.com/apps/x/installations/new?state=" + i.getArgument(0));
+
+        mvc.perform(get("/api/github/callback").session(session).with(user(userId))
+                        .param("code", "c").param("state", "s1"))
+                .andExpect(header().string("Location", org.hamcrest.Matchers.startsWith("https://github.com/apps/x/installations/new?state=")));
+
+        Object fresh = session.getAttribute("github.oauth.state");
+        org.junit.jupiter.api.Assertions.assertNotNull(fresh);
+        org.junit.jupiter.api.Assertions.assertNotEquals("s1", fresh);
     }
 
     @Test

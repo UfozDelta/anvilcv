@@ -62,17 +62,18 @@ public class GithubController {
         return github.status(AuthUtils.userId(auth));
     }
 
-    /** Browser navigates here; we bind a one-time state to the session and bounce to GitHub. */
+    /** Browser navigates here; we bind a one-time state to the session and bounce to GitHub's OAuth page. */
     @GetMapping("/connect")
     public ResponseEntity<Void> connect(HttpSession session) {
-        byte[] b = new byte[16];
-        RANDOM.nextBytes(b);
-        String state = HexFormat.of().formatHex(b);
-        session.setAttribute(STATE_ATTR, state);
-        return redirect(github.installUrl(state));
+        return redirect(github.authorizeUrl(newState(session)));
     }
 
-    /** GitHub's "Callback URL" (OAuth during install). Always lands the browser back on Settings. */
+    /**
+     * GitHub's Callback URL, reached two ways: from OAuth ({@code code} + our {@code state}),
+     * or straight after a fresh install ({@code code} + {@code installation_id}, and possibly no
+     * {@code state}). The install hop is not trusted on its own: it restarts OAuth, which the
+     * user already approved, so it bounces straight back here with a state we can check.
+     */
     @GetMapping("/callback")
     public ResponseEntity<Void> callback(Authentication auth, HttpSession session,
                                          @RequestParam(required = false) String code,
@@ -80,12 +81,19 @@ public class GithubController {
                                          @RequestParam(name = "installation_id", required = false) Long installationId) {
         Object expected = session.getAttribute(STATE_ATTR);
         session.removeAttribute(STATE_ATTR);
-        if (code == null || state == null || !state.equals(expected)) {
+        if (code == null) {
+            return redirect("/settings?github=error");
+        }
+        if (state == null || !state.equals(expected)) {
+            if (state == null && installationId != null) return redirect("/api/github/connect");
             return redirect("/settings?github=error");
         }
         try {
             github.connect(AuthUtils.userId(auth), code, installationId);
             return redirect("/settings?github=connected");
+        } catch (GithubException.NoInstallation e) {
+            // Authorized but not installed yet: send them to install, then back here.
+            return redirect(github.installUrl(newState(session)));
         } catch (RuntimeException e) {
             log.warn("GITHUB_CONNECT_FAILED cause={}", e.getMessage());
             return redirect("/settings?github=error");
@@ -168,6 +176,14 @@ public class GithubController {
             }
         }));
         return new SubmitResponse(jobId);
+    }
+
+    private static String newState(HttpSession session) {
+        byte[] b = new byte[16];
+        RANDOM.nextBytes(b);
+        String state = HexFormat.of().formatHex(b);
+        session.setAttribute(STATE_ATTR, state);
+        return state;
     }
 
     private static ResponseEntity<Void> redirect(String location) {
