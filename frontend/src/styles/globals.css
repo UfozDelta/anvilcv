@@ -546,7 +546,8 @@ body::before {
 /* -------- Misc -------- */
 
 .muted { color: var(--muted); }
-.center-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+/* minmax(0, …): an auto track sizes to the card's fixed width, so its max-width: 100% never applies */
+.center-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px; }
 
 .err {
   color: var(--rust);
