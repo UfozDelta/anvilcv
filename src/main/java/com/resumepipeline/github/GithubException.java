@@ -15,6 +15,11 @@ public class GithubException extends RuntimeException {
         public NotConnected() { super("GitHub is not connected — connect it in Settings"); }
     }
 
+    /** The user authorized the app but hasn't installed it on any account they can access. */
+    public static class NoInstallation extends GithubException {
+        public NoInstallation() { super("No AnvilCV installation found on this GitHub account — install the app first"); }
+    }
+
     /** Primary or secondary rate limit hit; {@code resetSeconds} is how long GitHub asked us to wait. */
     public static class RateLimited extends GithubException {
         private final long resetSeconds;

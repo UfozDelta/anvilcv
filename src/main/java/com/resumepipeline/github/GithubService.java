@@ -70,7 +70,18 @@ public class GithubService {
                 i.map(x -> webBase + "/settings/installations/" + x.getInstallationId()).orElse(null));
     }
 
-    /** Install page for the app. GitHub hands {@code state} back to the callback. */
+    /**
+     * Where Connect starts: plain OAuth for the app. Unlike the install page it always returns
+     * {@code state}, and it works whether or not the app is already installed — once installed,
+     * the install page turns into a "Configure" screen that never redirects back.
+     */
+    public String authorizeUrl(String state) {
+        requireConfigured();
+        return webBase + "/login/oauth/authorize?client_id="
+                + java.net.URLEncoder.encode(auth.clientId(), java.nio.charset.StandardCharsets.UTF_8) + "&state=" + state;
+    }
+
+    /** Install page, used only when the authorized user has no installation yet. */
     public String installUrl(String state) {
         requireConfigured();
         return webBase + "/apps/" + auth.slug() + "/installations/new?state=" + state;
@@ -88,7 +99,7 @@ public class GithubService {
         GithubClient.Installation pick = mine.stream()
                 .filter(i -> installationIdParam == null || i.id() == installationIdParam)
                 .findFirst()
-                .orElseThrow(() -> new GithubException("No AnvilCV installation found on this GitHub account — install the app first"));
+                .orElseThrow(GithubException.NoInstallation::new);
         GithubInstallation row = installs.findById(userId).orElse(new GithubInstallation(userId, pick.id(), pick.accountLogin()));
         row.setInstallationId(pick.id());
         row.setAccountLogin(pick.accountLogin());
