@@ -583,6 +583,9 @@
 
 .actionbar__budget { min-width: 0; }
 
+/* The viewer only falls below the bullets once .labsplit stacks. */
+@media (min-width: 981px) { .actionbar__jump { display: none; } }
+
 .actionbar__line {
   display: flex;
   align-items: baseline;
