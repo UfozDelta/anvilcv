@@ -160,9 +160,13 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
               cursor: 'pointer',
               fontFamily: 'var(--mono)',
               fontSize: 13,
-              padding: '0 4px',
+              // 44px tap target; the negative margin keeps the header bar its original height
+              minWidth: 44,
+              minHeight: 44,
+              margin: '-14px -12px',
               lineHeight: 1,
             }}
+            aria-label="Close"
           >
             ✕
           </button>

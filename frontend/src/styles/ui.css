@@ -218,6 +218,10 @@
   .approw__date { display: block; }
 }
 
+/* Outcome Sankey labels are in viewBox units; the chart shrinks ~0.6x on a phone, so start larger. */
+.sankey__label { font-size: 17px; }
+@media (min-width: 721px) { .sankey__label { font-size: 11px; } }
+
 /* Two small labelled bars beat two bare numbers sitting side by side. */
 .scorepair { display: grid; gap: 5px; }
 
