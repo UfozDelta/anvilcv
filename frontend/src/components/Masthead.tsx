@@ -25,6 +25,7 @@ export function Masthead() {
   const { username, isAdmin, logout } = useAuth();
   const location = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -42,6 +43,9 @@ export function Masthead() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [settingsOpen]);
 
+  // Phone nav is a drop-down sheet; following any link should put it away.
+  useEffect(() => { setNavOpen(false); }, [location.pathname]);
+
   const items = isAdmin ? [...NAV, ADMIN_ITEM] : NAV;
 
   return (
@@ -52,8 +56,7 @@ export function Masthead() {
         </Link>
         <div className="masthead__rule" />
         <div className="masthead__meta">
-          VOL.0 — {today}
-          <br />
+          <span className="masthead__date">VOL.0 — {today}<br /></span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
             {username ? <>
               {username} · <a href="#" onClick={(e) => { e.preventDefault(); logout(); }}>LOG OUT</a>
@@ -76,8 +79,15 @@ export function Masthead() {
             </div>
           </span>
         </div>
+        <button
+          className="masthead__burger"
+          onClick={() => setNavOpen(o => !o)}
+          aria-expanded={navOpen}
+          aria-controls="site-nav"
+          aria-label="Menu"
+        >{navOpen ? '✕' : '☰'}</button>
       </header>
-      <nav className="nav shell">
+      <nav id="site-nav" className={`nav shell${navOpen ? ' nav--open' : ''}`}>
         {items.map((item, i) => (
           <Link key={item.to} to={item.to} className={isActive(item, location.pathname) ? 'active' : ''}>
             {String(i).padStart(2, '0')} — {item.label.toUpperCase()}
