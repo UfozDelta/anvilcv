@@ -467,6 +467,8 @@
 
 .brow:hover .brow__actions,
 .brow:focus-within .brow__actions { opacity: 1; }
+/* Touch screens have no hover to reveal them. */
+@media (hover: none) { .brow__actions { opacity: 1; } }
 
 .brow__why {
   margin-top: 8px;
@@ -523,7 +525,7 @@
 
 .grouphead {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   padding: 9px 10px;
@@ -547,7 +549,12 @@
   margin-top: 2px;
 }
 
-.grouphead__right { display: flex; align-items: center; gap: 6px; }
+.grouphead__right { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+@media (min-width: 721px) {
+  .grouphead { grid-template-columns: minmax(0, 1fr) auto; }
+  .grouphead__right { flex-wrap: nowrap; }
+}
 
 /* -------- sticky action bar -------- */
 
@@ -556,14 +563,18 @@
   bottom: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
   padding: 12px 14px;
   margin-top: 18px;
   background: var(--paper);
   border: var(--rule-thick);
   box-shadow: 0 -6px 0 rgba(10, 10, 10, 0.06);
+}
+
+@media (min-width: 721px) {
+  .actionbar { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
 }
 
 .actionbar__budget { min-width: 0; }
@@ -582,6 +593,10 @@
 }
 
 .actionbar__acts { display: flex; gap: 8px; align-items: center; }
+.actionbar__acts > * { flex: 1; justify-content: center; min-height: 44px; }
+@media (min-width: 721px) {
+  .actionbar__acts > * { flex: none; min-height: 0; }
+}
 
 .savestate {
   font-family: var(--mono);
