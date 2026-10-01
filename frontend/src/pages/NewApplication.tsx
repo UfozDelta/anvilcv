@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Section } from '../components/Section';
 import { EventStream } from '../components/EventStream';
@@ -17,7 +17,9 @@ const EMPHASES = [
 export function NewApplication() {
   const nav = useNavigate();
   const [jdText, setJdText] = useState('');
-  const [jdUrl, setJdUrl] = useState('');
+  // Prefilled when arriving from a posting's Tailor button on /jobs.
+  const [params] = useSearchParams();
+  const [jdUrl, setJdUrl] = useState(params.get('jdUrl') ?? '');
   const [roleEmphasis, setRoleEmphasis] = useState('backend');
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false);
   const [streaming, setStreaming] = useState(false);

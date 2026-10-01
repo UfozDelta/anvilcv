@@ -251,6 +251,8 @@ export function Landing() {
           <NavLink to="/login" className="lp-footer__link">GET STARTED</NavLink>
           <span className="lp-footer__sep">·</span>
           <NavLink to="/docs"  className="lp-footer__link">DOCS</NavLink>
+          <span className="lp-footer__sep">·</span>
+          <NavLink to="/jobs"  className="lp-footer__link">JOBS</NavLink>
         </nav>
         <span className="lp-label lp-muted">SPRING BOOT · REACT · NEON · TECTONIC</span>
       </footer>

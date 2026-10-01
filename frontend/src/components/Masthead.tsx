@@ -12,6 +12,7 @@ const NAV: NavItem[] = [
   { to: '/experiences', label: 'Experiences' },
   { to: '/applications', label: 'Applications' },
   { to: '/new', label: 'New application' },
+  { to: '/jobs', label: 'Jobs' },
   { to: '/flow', label: 'Outcome flow' },
   { to: '/settings', label: 'Settings' },
 ];

@@ -101,6 +101,24 @@
 
 .meter--thick { height: 16px; }
 
+/* -------- jobs feed -------- */
+
+.joblist { border-top: var(--rule-thick); }
+
+/* Mobile-first: actions wrap under the text; side by side once there's room. */
+.jobrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 14px 0;
+  border-bottom: var(--rule-thin);
+}
+.jobrow__main { flex: 1 1 320px; min-width: 0; }
+.jobrow__title { margin: 0 0 4px; font-size: 17px; }
+.jobrow__meta { font-size: 13px; color: var(--muted); margin-bottom: 6px; overflow-wrap: anywhere; }
+.jobrow__role { margin: 0 0 8px; font-size: 14px; }
+.jobrow__actions { display: flex; gap: 8px; align-items: flex-start; }
+
 /* -------- applications list -------- */
 
 .applist { border-top: var(--rule-thick); }

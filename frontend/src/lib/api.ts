@@ -183,6 +183,24 @@ export interface RankedBullet {
   why: string;
 }
 
+/** A posting from the public intern-job feed (GET /api/public/jobs). */
+export interface JobPosting {
+  id: string;
+  source: string;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  posted: string | null;
+  spotted: string | null;
+  url: string;
+  companyUrl: string | null;
+  role: string | null;
+  stack: string[];
+  receivedAt: string;
+}
+
+export interface JobList { jobs: JobPosting[]; total: number }
+
 export interface ApplicationSummary {
   id: string;
   company: string | null;

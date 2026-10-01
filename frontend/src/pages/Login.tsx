@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
 
@@ -14,6 +14,9 @@ type FieldErrors = Partial<Record<keyof Fields, string>>;
 export function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
+  // Where RequireAuth or the jobs feed's Tailor button sent us from. Internal paths only.
+  const from = (useLocation().state as { from?: string } | null)?.from;
+  const next = from && from.startsWith('/') && !from.startsWith('//') ? from : '/projects';
   const [fields, setFields] = useState<Fields>({ username: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [err, setErr] = useState<string | null>(null);
@@ -41,7 +44,7 @@ export function Login() {
     setBusy(true);
     try {
       await login(result.data.username, result.data.password);
-      nav('/projects', { replace: true });
+      nav(next, { replace: true });
     } catch {
       setErr('Invalid credentials.');
     } finally {

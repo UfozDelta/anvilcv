@@ -16,6 +16,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 import { DocsPage } from './pages/DocsPage';
 import { UploadPage } from './pages/UploadPage';
+import { Jobs } from './pages/Jobs';
 import { LabIndex } from './lab/LabIndex';
 import { LabList } from './lab/LabList';
 import { LabDetail } from './lab/LabDetail';
@@ -53,6 +54,8 @@ export function App() {
         <Route path="/admin"                element={<AuthedShell><AdminPage /></AuthedShell>} />
         <Route path="/upload"               element={<AuthedShell><UploadPage /></AuthedShell>} />
         <Route path="/docs"                 element={<DocsPage />} />
+        {/* Public on purpose: guests browse the feed; Tailor sends them to log in. */}
+        <Route path="/jobs"                 element={<><Masthead /><main style={{ paddingBottom: 80 }}><Jobs /></main></>} />
 
         {/* UI prototypes on placeholder data. Unauthenticated on purpose: they touch
             no API and exist to review the Applications redesign without a login. */}
