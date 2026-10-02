@@ -43,7 +43,7 @@ public class OpenRouterLlmClient extends OpenAiCompatibleLlmClient {
 
     @Override
     protected void addProviderFields(Map<String, Object> body, String label) {
-        body.put("provider", Map.of("data_collection", ""));
+        body.put("provider", Map.of("data_collection", "deny"));
         body.put("usage", Map.of("include", true));
         if (NO_THINKING_LABELS.contains(label)) {
             body.put("reasoning", Map.of("effort", "none"));
