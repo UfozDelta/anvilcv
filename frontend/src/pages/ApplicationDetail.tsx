@@ -117,7 +117,9 @@ export function ApplicationDetail() {
           unit="/100"
           tone={app.recruiterStale ? 'alert' : undefined}
           caption={
-            app.recruiterScore === null
+            app.recruiterPending
+              ? 'Scoring the page…'
+              : app.recruiterScore === null
               ? 'Never scored — run Re-score.'
               : app.recruiterStale
                 ? 'Stale — scored before your last edit.'
@@ -442,6 +444,9 @@ function ReviewPane({ s, app, verdicts }: {
 
   return (
     <div>
+      {app.recruiterPending && (
+        <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>Scoring the page…</p>
+      )}
       {app.recruiterStale && (
         <div className="callout">
           <div className="callout__head">{app.recruiterScore === null ? 'Not scored' : 'Out of date'}</div>

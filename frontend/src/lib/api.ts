@@ -309,3 +309,5 @@ export interface ApplicationResponse {
   outcome: string;
   createdAt: string;
 }
+  /** Recruiter pass still running in the background after create; poll until false. */
+  recruiterPending: boolean;

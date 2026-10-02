@@ -85,6 +85,16 @@ export function useApplicationDetail(id: string | undefined) {
   }
   useEffect(() => { load(); }, [id]);
 
+  // The recruiter pass runs after create returns the PDF. Poll the app (not load(), which
+  // would reset the selection) until the score lands.
+  useEffect(() => {
+    if (!app?.recruiterPending || !id) return;
+    const t = setTimeout(() => {
+      api.get<ApplicationResponse>(`/api/applications/${id}`).then(setApp).catch(() => {});
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [app, id]);
+
   useEffect(() => {
     if (!app?.pdfAvailable || !id) return;
     let cancelled = false;
