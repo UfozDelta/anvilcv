@@ -1,3 +1,4 @@
+import { dropPresent, ensurePresent, looksCurrent } from '../lib/dates';
 import { useMemo, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
@@ -469,8 +470,14 @@ function InfoTab({ s, project, isExperience, filledCount, setTab }: {
               </label>
               <label className="field">
                 <div className="field__label">Dates</div>
-                <input className="field__input" value={s.editDates} onChange={e => s.setEditDates(e.target.value)} placeholder="Jun 2024 – Aug 2024" />
+                <input className="field__input" value={s.editDates} onChange={e => { s.setEditDates(e.target.value); s.setEditCurrent(looksCurrent(e.target.value)); }} placeholder="Jun 2024 – Aug 2024" />
               </label>
+              {project.kind === 'EXPERIENCE' && (
+                <label className="na-check">
+                  <input type="checkbox" checked={s.editCurrent} onChange={e => { s.setEditCurrent(e.target.checked); s.setEditDates(d => (e.target.checked ? ensurePresent(d) : dropPresent(d))); }} />
+                  <span>I currently work here</span>
+                </label>
+              )}
               <label className="field">
                 <div className="field__label">Short description</div>
                 <textarea className="field__textarea" value={s.editDescription} onChange={e => s.setEditDescription(e.target.value)} style={{ minHeight: 52 }} placeholder="One or two sentences — shown in the list." />

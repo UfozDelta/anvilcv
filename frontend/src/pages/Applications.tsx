@@ -1,58 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api, type ApplicationSummary } from '../lib/api';
-import { Section } from '../components/Section';
+import { BulletBar, EXIT, EmptyState, PageTitle, RowMenu, UndoBar, ago, useUndoDelete } from '../components/ledger/shared';
+import { usePrefersReducedMotion } from '../components/landing/useHeroLoop';
 
-const OUTCOMES = ['applied', 'interview', 'offer', 'rejected'] as const;
+const OUTCOMES = ['applied', 'oa', 'interview', 'offer', 'rejected', 'ghosted'] as const;
+const outcomeLabel = (o: string) => (o === 'oa' ? 'OA' : o);
+const TABS: { key: string; label: string }[] = [{ key: '', label: 'All' }, ...OUTCOMES.map((o) => ({ key: o, label: outcomeLabel(o) }))];
 
 type Sort = 'newest' | 'oldest' | 'fit' | 'page';
 
 const SORTS: { key: Sort; label: string }[] = [
   { key: 'newest', label: 'Newest first' },
   { key: 'oldest', label: 'Oldest first' },
-  { key: 'fit',    label: 'Best fit first' },
-  { key: 'page',   label: 'Best page score first' },
+  { key: 'fit', label: 'Best fit first' },
+  { key: 'page', label: 'Best page first' },
 ];
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-}
-
-/** Small labelled bar. A bare 0-100 number tells you nothing about which 0-100 it is. */
-function ScoreBar({ k, v }: { k: string; v: number | null }) {
+/** One labelled 0–100 bar. A bare number never says which score it is. */
+function Score({ k, v, lead }: { k: string; v: number | null; lead?: boolean }) {
   return (
-    <div className="scorepair__row">
-      <span className="scorepair__key">{k}</span>
-      <span className="scorepair__bar"><i style={{ width: `${v ?? 0}%` }} /></span>
-      <span className="scorepair__num">{v ?? '—'}</span>
-    </div>
-  );
-}
-
-/** Delete lives here, not in the row, so it can never be hit while aiming for the link. */
-function RowMenu({ onDelete }: { onDelete: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  return (
-    <div className="rowmenu" onMouseLeave={() => { setOpen(false); setConfirming(false); }}>
-      <button
-        className="rowmenu__btn"
-        aria-label="Row actions"
-        aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
-      >⋯</button>
-      {open && (
-        <div className="rowmenu__pop">
-          {confirming ? (
-            <button className="is-danger" onClick={() => { onDelete(); setOpen(false); setConfirming(false); }}>
-              Really delete?
-            </button>
-          ) : (
-            <button className="is-danger" onClick={() => setConfirming(true)}>Delete</button>
-          )}
-        </div>
-      )}
-    </div>
+    <span className={`la-score${lead ? ' la-score--lead' : ''}`}>
+      <span className="la-score__k">{k}</span>
+      <span className="la-score__n">{v ?? '—'}</span>
+      <BulletBar n={v ?? 0} max={100} label={`${k} ${v ?? 'not scored'}`} />
+    </span>
   );
 }
 
@@ -64,37 +37,38 @@ export function Applications() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const reduced = usePrefersReducedMotion();
+
+  const del = useUndoDelete(rows, setRows, (a) => `/api/applications/${a.id}`, (a, e) => setErr(`Could not delete ${a.company || 'application'}: ${(e as Error).message}`), () => { api.get<ApplicationSummary[]>('/api/applications').then(setRows).catch(() => {}); });
 
   // The whole set is fetched once and filtered here, so the tab counts describe
   // everything you have rather than whatever the last filter left behind.
-  async function load() {
-    setLoading(true);
-    try {
-      setRows(await api.get<ApplicationSummary[]>('/api/applications'));
-    } finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    api.get<ApplicationSummary[]>('/api/applications')
+      .then(setRows)
+      .catch((e: Error) => setErr(`Could not load applications: ${e.message}`))
+      .finally(() => setLoading(false));
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { '': rows.length };
-    for (const o of OUTCOMES) c[o] = rows.filter(r => r.outcome === o).length;
+    for (const o of OUTCOMES) c[o] = rows.filter((r) => r.outcome === o).length;
     return c;
   }, [rows]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let out = rows.filter(r => !outcome || r.outcome === outcome);
+    let out = rows.filter((r) => !outcome || r.outcome === outcome);
     if (needle) {
-      out = out.filter(r =>
+      out = out.filter((r) =>
         (r.company ?? '').toLowerCase().includes(needle) ||
         (r.role ?? '').toLowerCase().includes(needle));
     }
     const by: Record<Sort, (a: ApplicationSummary, b: ApplicationSummary) => number> = {
       newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
       oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
-      fit:    (a, b) => (b.fitScore ?? -1) - (a.fitScore ?? -1),
-      page:   (a, b) => (b.recruiterScore ?? -1) - (a.recruiterScore ?? -1),
+      fit: (a, b) => (b.fitScore ?? -1) - (a.fitScore ?? -1),
+      page: (a, b) => (b.recruiterScore ?? -1) - (a.recruiterScore ?? -1),
     };
     return [...out].sort(by[sort]);
   }, [rows, outcome, q, sort]);
@@ -102,140 +76,122 @@ export function Applications() {
   /** Optimistic: the row reads back the server's value, and rolls back if the PATCH fails. */
   async function setRowOutcome(a: ApplicationSummary, next: string) {
     const prev = a.outcome;
-    setRows(rs => rs.map(r => (r.id === a.id ? { ...r, outcome: next } : r)));
+    setRows((rs) => rs.map((r) => (r.id === a.id ? { ...r, outcome: next } : r)));
     setSavingId(a.id);
     setErr(null);
     try {
       const updated = await api.patch<{ outcome: string }>(`/api/applications/${a.id}`, { outcome: next });
-      setRows(rs => rs.map(r => (r.id === a.id ? { ...r, outcome: updated.outcome } : r)));
+      setRows((rs) => rs.map((r) => (r.id === a.id ? { ...r, outcome: updated.outcome } : r)));
     } catch (e) {
-      setRows(rs => rs.map(r => (r.id === a.id ? { ...r, outcome: prev } : r)));
+      setRows((rs) => rs.map((r) => (r.id === a.id ? { ...r, outcome: prev } : r)));
       setErr(`Could not update ${a.company || 'application'}: ${(e as Error).message}`);
     } finally { setSavingId(null); }
   }
 
-  async function deleteApp(a: ApplicationSummary) {
-    setErr(null);
-    setDeletingIds(s => new Set(s).add(a.id));
-    await new Promise(r => setTimeout(r, 450));
-    try {
-      await api.del(`/api/applications/${a.id}`);
-      setRows(rs => rs.filter(r => r.id !== a.id));
-    } catch (e) {
-      setErr(`Could not delete ${a.company || 'application'}: ${(e as Error).message}`);
-    } finally {
-      setDeletingIds(s => { const n = new Set(s); n.delete(a.id); return n; });
-    }
-  }
+  const has = rows.length > 0;
+  const n = (o: string) => counts[o] ?? 0;
 
   return (
-    <div className="shell">
-      <Section num="03" title="Applications" count={rows.length} />
+    <div className="shell ap-page">
+      <PageTitle
+        title="Applications"
+        count={has && <><strong>{rows.length}</strong> sent · <strong>{n('interview')}</strong> interviewing · <strong>{n('offer')}</strong> offer{n('offer') === 1 ? '' : 's'}</>}
+        actions={has && <Link to="/new" className="ap-btn ap-btn--acid">+ New application</Link>}
+      />
 
-      <div className="toolbar">
-        <input
-          className="toolbar__search"
-          placeholder="Search company or role…"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-        />
+      {err && <div className="err ap-err" role="alert">{err}</div>}
 
-        <div className="filterset">
-          <button className={outcome === '' ? 'is-on' : ''} onClick={() => setOutcome('')}>
-            All <span className="filterset__count">{counts['']}</span>
-          </button>
-          {OUTCOMES.map(o => (
-            <button key={o} className={outcome === o ? 'is-on' : ''} onClick={() => setOutcome(o)}>
-              {o} <span className="filterset__count">{counts[o]}</span>
-            </button>
-          ))}
-        </div>
-
-        <select
-          className="approw__status"
-          style={{ width: 'auto' }}
-          value={sort}
-          aria-label="Sort applications"
-          onChange={e => setSort(e.target.value as Sort)}
-        >
-          {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </select>
-      </div>
-
-      {/* Two 0-100 numbers that measure different things need one sentence each. */}
-      <div className="legend" style={{ marginBottom: 16 }}>
-        <b>FIT</b> = how well you match the job. <b>PAGE</b> = how well the rendered resume
-        sells you. They move independently — a strong candidate can have a weak page.
-      </div>
-
-      {err && <div className="err" style={{ marginBottom: 12 }}>{err}</div>}
-
-      <div className="applist">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="approw" aria-hidden>
-                <div className="approw__main">
-                  <div style={{ height: 17, width: '42%', background: 'var(--paper-2)', marginBottom: 6 }} />
-                  <div style={{ height: 11, width: '28%', background: 'var(--paper-2)' }} />
-                </div>
-                <div style={{ height: 22, background: 'var(--paper-2)' }} />
-                <div style={{ height: 11, background: 'var(--paper-2)' }} />
-                <div style={{ height: 26, background: 'var(--paper-2)' }} />
-                <div />
-              </div>
-            ))
-          : shown.map(a => (
-              <div className={`approw${deletingIds.has(a.id) ? ' approw--removing' : ''}`} key={a.id}>
-                {/* One stretched link covers the row; real controls sit above it. */}
-                <Link className="approw__link" to={`/applications/${a.id}`}>{a.company || 'Untitled'}</Link>
-
-                <div className="approw__main">
-                  <h3 className="approw__title">{a.company || 'Untitled'}</h3>
-                  <div className="approw__role">{a.role || 'No role recorded'}</div>
-                </div>
-
-                <div className="scorepair approw__scores">
-                  <ScoreBar k="FIT" v={a.fitScore} />
-                  <ScoreBar k="PAGE" v={a.recruiterScore} />
-                </div>
-
-                <div className="approw__date">{fmtDate(a.createdAt)}</div>
-
-                <select
-                  className={`approw__status approw__status--${a.outcome}`}
-                  value={a.outcome}
-                  disabled={savingId === a.id}
-                  aria-label={`Status for ${a.company || 'application'}`}
-                  onChange={e => setRowOutcome(a, e.target.value)}
-                >
-                  {/* An outcome the backend set but this list does not offer still renders. */}
-                  {!OUTCOMES.includes(a.outcome as typeof OUTCOMES[number]) && (
-                    <option value={a.outcome}>{a.outcome}</option>
-                  )}
-                  {OUTCOMES.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-
-                <RowMenu onDelete={() => deleteApp(a)} />
-              </div>
-            ))}
-
-        {!loading && shown.length === 0 && (
-          <div style={{ padding: '44px 0', textAlign: 'center', borderBottom: 'var(--rule-thin)' }}>
-            <div className="editorial" style={{ fontSize: 17, marginBottom: 6 }}>
-              {rows.length === 0
-                ? 'No applications yet. Start with 04 — NEW APPLICATION.'
-                : q
-                  ? `Nothing matches “${q}”.`
-                  : `No applications marked ${outcome}.`}
-            </div>
-            {rows.length > 0 && (
-              <button className="minibtn" onClick={() => { setQ(''); setOutcome(''); }}>
-                Clear filters
+      {loading ? <span className="spinner">LOADING</span> : !has ? (
+        <EmptyState title="No applications yet." sub="Paste a job post and we tailor a one-page résumé from your bank.">
+          <div className="ap-empty__paths">
+            <Link to="/new" className="ap-path ap-path--primary">
+              <span className="ap-path__num">01</span>
+              <strong>Paste a job link</strong>
+              <span>We read the post, rank your bullets, render the PDF.</span>
+            </Link>
+            <Link to="/jobs" className="ap-path">
+              <span className="ap-path__num">02</span>
+              <strong>Browse open jobs</strong>
+              <span>Pick a posting from the feed and tailor in one click.</span>
+            </Link>
+          </div>
+        </EmptyState>
+      ) : (
+        <>
+          <div className="la-tabs" role="group" aria-label="Filter by outcome">
+            {TABS.map(({ key, label }) => (
+              <button key={key || 'all'} type="button" aria-pressed={outcome === key} onClick={() => setOutcome(key)}>
+                {label} <span className="la-tabs__n">{n(key)}</span>
               </button>
+            ))}
+          </div>
+          <div className="ap-tools">
+            <input className="ap-search" placeholder="Search company or role" aria-label="Search applications" value={q} onChange={(e) => setQ(e.target.value)} />
+            <select className="la-sort" value={sort} aria-label="Sort applications" onChange={(e) => setSort(e.target.value as Sort)}>
+              {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+            <span className="ap-tools__hint"><b>FIT</b> you vs. the job · <b>PAGE</b> how the résumé reads</span>
+          </div>
+          <div className="ld-table" role="table" aria-label="Applications">
+            <div className="ld-row la-row la-row--head ld-row--head" role="row">
+              <span role="columnheader">Company</span>
+              <span role="columnheader" className="ld-hide-sm">Fit / Page</span>
+              <span role="columnheader" className="ld-hide-sm">Sent</span>
+              <span role="columnheader">Status</span>
+              <span role="columnheader"><span className="sr-only">Actions</span></span>
+            </div>
+            <AnimatePresence initial={false}>
+              {shown.map((a) => (
+                <motion.div
+                  key={a.id}
+                  className="ld-row la-row"
+                  role="row"
+                  layout={reduced ? false : 'position'}
+                  initial={reduced ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, transition: EXIT }}
+                  transition={EXIT}
+                >
+                  <span className="ld-name" role="cell">
+                    <strong><Link to={`/applications/${a.id}`} className="ld-link">{a.company || 'Untitled'}</Link></strong>
+                    <span className="ld-desc">
+                      {a.role || 'No role recorded'}
+                      {a.fitScore !== null && <span className="la-fit-inline"> · Fit {a.fitScore}</span>}
+                    </span>
+                  </span>
+                  <span className="la-scores ld-hide-sm" role="cell">
+                    <Score k="FIT" v={a.fitScore} lead />
+                    <Score k="PAGE" v={a.recruiterScore} />
+                  </span>
+                  <span role="cell" className="ld-hide-sm ld-edited">{ago(a.createdAt)}</span>
+                  <span role="cell" className="ld-ctl">
+                    <select
+                      className="la-status"
+                      data-outcome={a.outcome}
+                      value={a.outcome}
+                      disabled={savingId === a.id}
+                      aria-label={`Status for ${a.company || 'application'}`}
+                      onChange={(e) => setRowOutcome(a, e.target.value)}
+                    >
+                      {/* An outcome the backend set but this list does not offer still renders. */}
+                      {!(OUTCOMES as readonly string[]).includes(a.outcome) && <option value={a.outcome}>{a.outcome}</option>}
+                      {OUTCOMES.map((o) => <option key={o} value={o}>{outcomeLabel(o)}</option>)}
+                    </select>
+                  </span>
+                  <RowMenu label={a.company || 'application'} onDelete={() => del.remove(a.id)} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {shown.length === 0 && (
+              <div className="ap-nomatch">
+                {q ? <>Nothing matches “{q}”.</> : <>No applications marked {outcomeLabel(outcome)}.</>}{' '}
+                <button type="button" onClick={() => { setQ(''); setOutcome(''); }}>Clear</button>
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
+      <UndoBar name={del.removed ? (del.removed.company || 'application') : null} more={del.more} onUndo={del.undo} />
     </div>
   );
 }

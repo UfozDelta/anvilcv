@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Section } from '../components/Section';
+import { PageTitle } from '../components/ledger/shared';
 import { EventStream } from '../components/EventStream';
 import { CATEGORIES } from '../lib/api';
 
@@ -14,6 +14,8 @@ const EMPHASES = [
   { value: 'generalist', label: 'Generalist' },
 ];
 
+const looksLikeUrl = (s: string) => /^https?:\/\/\S+\.\S+/i.test(s.trim());
+
 export function NewApplication() {
   const nav = useNavigate();
   const [jdText, setJdText] = useState('');
@@ -23,87 +25,67 @@ export function NewApplication() {
   const [roleEmphasis, setRoleEmphasis] = useState('backend');
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  const urlBad = jdUrl.trim() !== '' && !looksLikeUrl(jdUrl);
+  const ready = (jdText.trim().length > 0 || looksLikeUrl(jdUrl)) && !urlBad;
+  const missing = touched && !ready;
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    setStreaming(true);
+    setTouched(true);
+    if (ready) setStreaming(true);
   }
 
   return (
-    <div className="shell">
-      <Section num="04" title="New Application" />
+    <div className="shell ap-page na-page">
+      <PageTitle title="New application" />
 
-      <div className="row" style={{ marginBottom: 28, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div className="display" style={{ fontSize: 40, lineHeight: 1, marginBottom: 12 }}>
-            Paste the job. <br />
-            <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: '0.6em', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
-              AI cleans · ranks · drafts · renders
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <form onSubmit={submit} className="stack">
-        <label className="field">
-          <div className="field__label">Job description (text)</div>
+      <form className="na-form" onSubmit={submit} aria-busy={streaming}>
+        <fieldset className="na-sec" disabled={streaming}>
+          <legend className="sr-only">The job</legend>
           <textarea
-            className="field__textarea"
-            style={{ minHeight: 240 }}
+            className="na-input na-text"
             value={jdText}
             onChange={e => setJdText(e.target.value)}
-            placeholder="Paste the full posting here — responsibilities, requirements, tech stack."
+            placeholder="Paste the full posting"
+            aria-label="Job description"
+            aria-invalid={missing || undefined}
+            aria-describedby={missing || urlBad ? 'na-err' : undefined}
           />
-        </label>
-
-        <div className="row row--centered muted label" style={{ justifyContent: 'center', margin: '4px 0' }}>
-          — OR —
-        </div>
-
-        <label className="field">
-          <div className="field__label">JD URL</div>
           <input
-            className="field__input"
+            className="na-input na-url"
+            inputMode="url"
+            autoComplete="off"
             value={jdUrl}
             onChange={e => setJdUrl(e.target.value)}
-            placeholder="https://company.com/jobs/backend-engineer"
+            placeholder="…or paste a job URL"
+            aria-label="Job URL"
+            aria-invalid={urlBad || missing || undefined}
+            aria-describedby={missing || urlBad ? 'na-err' : undefined}
           />
-          <div className="field__hint">We'll fetch & strip it. Some sites block crawlers; paste the text if it fails.</div>
-        </label>
+          {(urlBad || missing) && (
+            <p id="na-err" className="na-hint na-hint--err" role="alert">
+              {urlBad ? 'URL needs to start with https://' : 'Add the posting text or a URL first.'}
+            </p>
+          )}
+        </fieldset>
 
-        <div>
-          <div className="field__label" style={{ marginBottom: 10 }}>Role emphasis</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <fieldset className="na-sec" disabled={streaming}>
+          <legend className="ap-label">Emphasis</legend>
+          <div className="na-lenses" role="group" aria-label="Role emphasis">
             {EMPHASES.map(o => (
-              <button
-                type="button"
-                key={o.value}
-                className={`btn btn--sm ${roleEmphasis === o.value ? '' : 'btn--ghost'}`}
-                style={roleEmphasis === o.value ? { background: 'var(--ink)', color: 'var(--paper)' } : { border: '2px solid var(--ink)' }}
-                onClick={() => setRoleEmphasis(o.value)}
-              >
-                {o.label.toUpperCase()}
-              </button>
+              <button key={o.value} type="button" aria-pressed={roleEmphasis === o.value} onClick={() => setRoleEmphasis(o.value)}>{o.label}</button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
-          <input
-            type="checkbox"
-            checked={includeCoverLetter}
-            onChange={e => setIncludeCoverLetter(e.target.checked)}
-            style={{ width: 16, height: 16, cursor: 'pointer' }}
-          />
-          <span className="field__label" style={{ margin: 0 }}>Generate cover letter</span>
-          <span className="label muted" style={{ fontSize: 10 }}>+~10s</span>
-        </label>
-
-        <div className="row row--between row--centered" style={{ marginTop: 12 }}>
-          <span className="label muted">SYNC · ~15-25S · MODAL WILL OPEN</span>
-          <button type="submit" className="btn btn--acid" disabled={streaming}>
-            {streaming ? <span className="spinner">TAILORING</span> : <>RUN PIPELINE &nbsp;→</>}
-          </button>
+        <div className="na-submit">
+          <label className="na-check">
+            <input type="checkbox" checked={includeCoverLetter} disabled={streaming} onChange={e => setIncludeCoverLetter(e.target.checked)} />
+            <span>Cover letter</span>
+          </label>
+          <button type="submit" className="ap-btn ap-btn--acid" disabled={streaming}>{streaming ? 'Tailoring…' : 'Run pipeline →'}</button>
         </div>
       </form>
 

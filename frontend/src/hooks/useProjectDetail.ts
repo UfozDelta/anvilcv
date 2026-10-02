@@ -1,3 +1,4 @@
+import { ensurePresent } from '../lib/dates';
 import { useEffect, useState, useMemo } from 'react';
 import { api, type Project, type Bullet, type RefitResponse, CATEGORIES } from '../lib/api';
 import { parseExtract, parseExtractJson } from '../lib/parseExtract';
@@ -41,6 +42,7 @@ export function useProjectDetail(id: string | undefined) {
   const [editCompany, setEditCompany] = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [editDates, setEditDates] = useState('');
+  const [editCurrent, setEditCurrent] = useState(false);
   const [editDescription, setEditDescription] = useState('');
   const [refitting, setRefitting] = useState(false);
   const [refitMsg, setRefitMsg] = useState<string | null>(null);
@@ -69,6 +71,7 @@ export function useProjectDetail(id: string | undefined) {
       setEditCompany(p.company || '');
       setEditLocation(p.location || '');
       setEditDates(p.dates || '');
+      setEditCurrent(!!p.current);
       setEditDescription(p.description || '');
     } finally { setLoading(false); }
   }
@@ -78,7 +81,7 @@ export function useProjectDetail(id: string | undefined) {
     if (!id) return;
     setInfoErr(null); setInfoSaving(true);
     try {
-      await api.put(`/api/projects/${id}`, { title: editTitle, company: editCompany, location: editLocation, dates: editDates, description: editDescription });
+      await api.put(`/api/projects/${id}`, { title: editTitle, company: editCompany, location: editLocation, dates: editCurrent ? ensurePresent(editDates) : editDates, current: editCurrent, description: editDescription });
       await load();
       setInfoOpen(false);
     } catch (e: any) {
@@ -277,7 +280,7 @@ export function useProjectDetail(id: string | undefined) {
     pasteOpen, setPasteOpen, pasteText, setPasteText, pasteMsg, parseAndFill,
     infoOpen, setInfoOpen, infoSaving, infoErr, saveInfo,
     editTitle, setEditTitle, editCompany, setEditCompany,
-    editLocation, setEditLocation, editDates, setEditDates,
+    editLocation, setEditLocation, editDates, setEditDates, editCurrent, setEditCurrent,
     editDescription, setEditDescription,
     load, generateBank, addBullet, saveBullet, delBullet, setBulletStatus,
     cfg, offBandIds, refitting, refitMsg, refitBullets,

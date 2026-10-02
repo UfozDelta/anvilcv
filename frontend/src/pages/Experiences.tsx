@@ -1,139 +1,161 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api, type Project } from '../lib/api';
-import { RowMenu } from '../components/ProjectsList/RowMenu';
+import { BulletBar, EXIT, EmptyState, PageTitle, RowMenu, UndoBar, useUndoDelete } from '../components/ledger/shared';
+import { endKey, looksCurrent, parseDates, tenure } from '../lib/dates';
+import { usePrefersReducedMotion } from '../components/landing/useHeroLoop';
 import { NewEntryForm } from '../components/ProjectsList/NewEntryForm';
 
-type Sort = 'newest' | 'name';
+type Sort = 'recent' | 'name';
 
 const SORTS: { key: Sort; label: string }[] = [
-  { key: 'newest', label: 'Newest first' },
+  { key: 'recent', label: 'Most recent first' },
   { key: 'name', label: 'A → Z' },
 ];
+
+/** Bar scale for bullet counts (a full bank). */
+const FULL_BANK = 12;
+
+/** Repo state from what the API says: none, linked but still being read, or read. */
+function repoState(p: Project): { state: 'none' | 'exploring' | 'explored'; label: string } {
+  if (!p.githubUrl) return { state: 'none', label: 'None' };
+  return p.repoContextReady ? { state: 'explored', label: 'Repo read' } : { state: 'exploring', label: 'Reading repo…' };
+}
+
+/** The explicit "I currently work here" flag; older rows fall back to what the dates text says. */
+const isCurrent = (p: Project) => p.current ?? looksCurrent(p.dates);
+const endKeyOf = (p: Project) => (isCurrent(p) ? Infinity : endKey(p.dates, p.createdAt));
 
 export function Experiences() {
   const [rows, setRows] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState<Sort>('newest');
+  const [sort, setSort] = useState<Sort>('recent');
   const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const reduced = usePrefersReducedMotion();
 
-  async function load() {
-    setLoading(true);
-    try { setRows(await api.get<Project[]>('/api/projects?kind=EXPERIENCE')); }
+  const del = useUndoDelete(rows, setRows, (p) => `/api/projects/${p.id}`, (p, e) => setErr((e as Error)?.message || `Failed to delete "${p.title || p.name}"`), () => void load(true));
+
+  async function load(quiet = false) {
+    if (!quiet) setLoading(true);
+    try { setRows((await api.get<Project[]>('/api/projects?kind=EXPERIENCE')).filter((p) => !del.isPending(p.id))); }
+    catch (e) { setErr((e as Error).message || 'Could not load experiences'); }
     finally { setLoading(false); }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let out = rows;
-    if (needle) {
-      out = out.filter(r =>
-        (r.title ?? '').toLowerCase().includes(needle) ||
-        (r.company ?? '').toLowerCase().includes(needle));
-    }
+    const out = needle
+      ? rows.filter((r) => (r.title ?? '').toLowerCase().includes(needle) || (r.company ?? '').toLowerCase().includes(needle))
+      : rows;
     const by: Record<Sort, (a: Project, b: Project) => number> = {
-      newest: (a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+      recent: (a, b) => endKeyOf(b) - endKeyOf(a) || (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
       name: (a, b) => (a.title || a.name).localeCompare(b.title || b.name),
     };
     return [...out].sort(by[sort]);
   }, [rows, q, sort]);
 
-  async function del(id: string, label: string) {
-    setErr(null);
-    setDeletingIds(s => new Set(s).add(id));
-    await new Promise(r => setTimeout(r, 450));
-    try {
-      await api.del(`/api/projects/${id}`);
-      await load();
-    } catch (e: any) {
-      setErr(e?.message || `Failed to delete "${label}"`);
-    } finally {
-      setDeletingIds(s => { const n = new Set(s); n.delete(id); return n; });
-    }
-  }
-
   async function dup(id: string) {
     setErr(null);
     try {
       await api.post(`/api/projects/${id}/duplicate`);
-      await load();
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to duplicate');
+      await load(true);
+    } catch (e) {
+      setErr((e as Error)?.message || 'Failed to duplicate');
     }
   }
 
   function create(p: Project) {
-    setRows(rs => [p, ...rs]);
+    setRows((rs) => [p, ...rs]);
     setShowForm(false);
   }
 
+  const has = rows.length > 0;
+
   return (
-    <div className="shell">
-      <div className="toolbar">
-        <input
-          className="toolbar__search"
-          placeholder="Search role or company…"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-        />
+    <div className="shell ap-page">
+      <PageTitle
+        title="Experiences"
+        count={has && <><strong>{rows.length}</strong> role{rows.length === 1 ? '' : 's'} · <strong>{rows.reduce((n, r) => n + (r.bulletCount ?? 0), 0)}</strong> bullets in your bank</>}
+        actions={has && !showForm && <button type="button" className="ap-btn ap-btn--acid" onClick={() => setShowForm(true)}>+ New experience</button>}
+      />
 
-        <select
-          className="approw__status"
-          style={{ width: 'auto' }}
-          value={sort}
-          onChange={e => setSort(e.target.value as Sort)}
-        >
-          {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </select>
-      </div>
+      {err && <div className="err ap-err" role="alert">{err}</div>}
 
-      {err && <div className="err" style={{ marginBottom: 12 }}>{err}</div>}
+      {showForm && <div className="ap-form"><NewEntryForm kind="EXPERIENCE" onCreate={create} onCancel={() => setShowForm(false)} /></div>}
 
-      {loading ? <span className="spinner">LOADING</span> : (
+      {loading ? <span className="spinner">LOADING</span> : !has ? (
+        !showForm && (
+          <EmptyState title="No experience yet." sub="Jobs, internships, research. Tailored résumés pull their work-history bullets from here.">
+            <button type="button" className="ap-btn ap-btn--acid" onClick={() => setShowForm(true)}>+ New experience</button>
+          </EmptyState>
+        )
+      ) : (
         <>
-          <div className="applist">
-            {shown.map(p => {
-              const title = p.title || p.name;
-              const meta = [p.company, p.location, p.dates].filter(Boolean).join(' · ') || '—';
-              return (
-                <div className={`approw approw--entry${deletingIds.has(p.id) ? ' approw--removing' : ''}`} key={p.id}>
-                  <Link className="approw__link" to={`/experiences/${p.id}`}>{title}</Link>
-
-                  <div className="approw__main">
-                    <h3 className="approw__title">{title}</h3>
-                    <div className="approw__role">{meta}</div>
-                  </div>
-
-                  <div className="approw__aside" />
-
-                  <RowMenu onDelete={() => del(p.id, title)} onDuplicate={() => dup(p.id)} />
-                </div>
-              );
-            })}
-
-            {shown.length === 0 && (
-              <div style={{ padding: '44px 0', textAlign: 'center', borderBottom: 'var(--rule-thin)' }}>
-                <div className="editorial" style={{ fontSize: 17, marginBottom: 6 }}>
-                  {q ? `Nothing matches "${q}".` : 'No experiences yet.'}
-                </div>
-                {q && <button className="minibtn" onClick={() => setQ('')}>Clear search</button>}
-              </div>
-            )}
+          <div className="ap-tools">
+            <input className="ap-search" placeholder="Search role or company" aria-label="Search experiences" value={q} onChange={(e) => setQ(e.target.value)} />
+            <select className="la-sort" value={sort} aria-label="Sort experiences" onChange={(e) => setSort(e.target.value as Sort)}>
+              {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
           </div>
-
-          <div style={{ marginTop: 28 }}>
-            {!showForm ? (
-              <button className="btn btn--acid" onClick={() => setShowForm(true)}>+ NEW EXPERIENCE</button>
-            ) : (
-              <NewEntryForm kind="EXPERIENCE" onCreate={create} onCancel={() => setShowForm(false)} />
+          <div className="ld-table" role="table" aria-label="Experiences">
+            <div className="ld-row xp-row xp-row--head ld-row--head" role="row">
+              <span role="columnheader">Role</span>
+              <span role="columnheader">Bullets</span>
+              <span role="columnheader" className="ld-hide-sm">Repo</span>
+              <span role="columnheader" className="ld-hide-sm">Dates</span>
+              <span role="columnheader"><span className="sr-only">Actions</span></span>
+            </div>
+            <AnimatePresence initial={false}>
+              {shown.map((p) => {
+                const title = p.title || p.name;
+                const repo = repoState(p);
+                const bullets = p.bulletCount ?? 0;
+                const now = isCurrent(p);
+                const span = parseDates(now && !looksCurrent(p.dates) ? `${p.dates ?? ''} – Present` : p.dates);
+                const meta = [p.company, p.location].filter(Boolean).join(' · ');
+                return (
+                  <motion.div
+                    key={p.id}
+                    className="ld-row xp-row"
+                    role="row"
+                    layout={reduced ? false : 'position'}
+                    initial={reduced ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, transition: EXIT }}
+                    transition={EXIT}
+                  >
+                    <span className="ld-name" role="cell">
+                      <strong>
+                        <Link to={`/experiences/${p.id}`} className="ld-link">{title}</Link>
+                        {now && <span className="ex-now">NOW</span>}
+                      </strong>
+                      <span className="ld-desc">{p.dates && <span className="ex-inline">{p.dates} · </span>}{meta || '—'}</span>
+                    </span>
+                    <span className="ld-bullets" role="cell">
+                      <span className={`ld-bullets__n${bullets === 0 ? ' ex-zero' : ''}`}>{bullets}</span>
+                      <BulletBar n={bullets} max={FULL_BANK} />
+                    </span>
+                    <span role="cell" className="ld-hide-sm ld-repo" data-state={repo.state} title={p.githubUrl ?? undefined}>{repo.label}</span>
+                    <span role="cell" className="ld-hide-sm ex-dates">
+                      {p.dates ? <strong>{p.dates}</strong> : '—'}
+                      {span && <span>{tenure(span)}</span>}
+                    </span>
+                    <RowMenu label={title} onDelete={() => del.remove(p.id)} onDuplicate={() => dup(p.id)} />
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+            {shown.length === 0 && (
+              <div className="ap-nomatch">Nothing matches “{q}”. <button type="button" onClick={() => setQ('')}>Clear</button></div>
             )}
           </div>
         </>
       )}
+      <UndoBar name={del.removed ? (del.removed.title || del.removed.name) : null} more={del.more} onUndo={del.undo} />
     </div>
   );
 }

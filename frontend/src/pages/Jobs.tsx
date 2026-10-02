@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, type JobPosting, type JobList } from '../lib/api';
+import { api, type JobPosting, type JobList, type JobCounts } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { Section } from '../components/Section';
+import { EmptyState, PageTitle, ago } from '../components/ledger/shared';
 
 const PAGE_SIZE = 50;
 /** New postings arrive by webhook; the list picks them up without a reload. */
@@ -36,20 +36,26 @@ export function Jobs() {
   const [q, setQ] = useState('');
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(true);
+  const [counts, setCounts] = useState<JobCounts | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Bumped by every load(); a poll or load-more that started under an older value is stale and ignored.
+  const gen = useRef(0);
 
   const load = useCallback(async () => {
+    const mine = ++gen.current;
     setLoading(true);
     setErr(null);
     try {
       const r = await api.get<JobList>(query(source, q, location, 0));
+      if (mine !== gen.current) return;
       setJobs(r.jobs);
       setTotal(r.total);
+      setCounts(r.counts ?? null);
       setPage(0);
     } catch (e) {
-      setErr(`Could not load jobs: ${(e as Error).message}`);
+      if (mine === gen.current) setErr(`Could not load jobs: ${(e as Error).message}`);
     } finally {
-      setLoading(false);
+      if (mine === gen.current) setLoading(false);
     }
   }, [source, q, location]);
 
@@ -62,22 +68,27 @@ export function Jobs() {
   // Poll the first page and put anything unseen on top; loaded pages below stay put.
   useEffect(() => {
     const t = setInterval(async () => {
+      const mine = gen.current;
       try {
         const r = await api.get<JobList>(query(source, q, location, 0));
+        if (mine !== gen.current) return;
         setJobs(js => {
           const seen = new Set(js.map(j => j.id));
           const fresh = r.jobs.filter(j => !seen.has(j.id));
           return fresh.length ? [...fresh, ...js] : js;
         });
         setTotal(r.total);
+        setCounts(r.counts ?? null);
       } catch { /* next tick retries */ }
     }, POLL_MS);
     return () => clearInterval(t);
   }, [source, q, location]);
 
   async function loadMore() {
+    const mine = gen.current;
     try {
       const r = await api.get<JobList>(query(source, q, location, page + 1));
+      if (mine !== gen.current) return;
       setJobs(js => {
         const seen = new Set(js.map(j => j.id));
         return [...js, ...r.jobs.filter(j => !seen.has(j.id))];
@@ -85,7 +96,7 @@ export function Jobs() {
       setTotal(r.total);
       setPage(page + 1);
     } catch (e) {
-      setErr(`Could not load more: ${(e as Error).message}`);
+      if (mine === gen.current) setErr(`Could not load more: ${(e as Error).message}`);
     }
   }
 
@@ -109,78 +120,83 @@ export function Jobs() {
     }
   }
 
-  return (
-    <div className="shell">
-      <Section num="00" title="Intern jobs" count={total} />
+  /** Tab counts follow the q/location filters; hidden until the API has sent them. */
+  function tabCount(key: string): number | null {
+    if (!counts) return null;
+    if (key === '') return counts.linkedin + counts.indeed;
+    if (key === SAVED) return counts.saved;
+    return counts[key as 'linkedin' | 'indeed'] ?? null;
+  }
 
-      <div className="toolbar">
-        <input
-          className="toolbar__search"
-          placeholder="Search title, company or role…"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-        />
-        <input
-          className="toolbar__search"
-          placeholder="Location…"
-          value={location}
-          onChange={e => setLocation(e.target.value)}
-        />
-        <div className="filterset">
-          {SOURCES.map(s => (
-            <button key={s.key} className={source === s.key ? 'is-on' : ''} onClick={() => setSource(s.key)}>
-              {s.label}
-            </button>
-          ))}
-          {username && (
-            <button className={source === SAVED ? 'is-on' : ''} onClick={() => setSource(SAVED)}>Saved</button>
-          )}
-        </div>
+  const none = !loading && jobs.length === 0;
+  const filtered = !!(source || q.trim() || location.trim());
+
+  return (
+    <div className="shell ap-page">
+      <PageTitle title="Jobs" count={total > 0 && <><strong>{total}</strong> intern postings · newest first</>} />
+
+      <div className="la-tabs" role="group" aria-label="Filter by source">
+        {SOURCES.map(s => (
+          <button key={s.key || 'all'} type="button" aria-pressed={source === s.key} onClick={() => setSource(s.key)}>
+            {s.label}{tabCount(s.key) !== null && <> <span className="la-tabs__n">{tabCount(s.key)}</span></>}
+          </button>
+        ))}
+        {username && (
+          <button type="button" aria-pressed={source === SAVED} onClick={() => setSource(SAVED)}>
+            Saved{tabCount(SAVED) !== null && <> <span className="la-tabs__n">{tabCount(SAVED)}</span></>}
+          </button>
+        )}
+      </div>
+      <div className="ap-tools">
+        <input className="ap-search" placeholder="Title or company" aria-label="Search jobs" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="ap-search" placeholder="Location" aria-label="Location" value={location} onChange={e => setLocation(e.target.value)} />
       </div>
 
-      {!username && (
-        <div className="legend" style={{ marginBottom: 16 }}>
-          Browse freely. <b>Tailor</b> builds a résumé for the posting — you&rsquo;ll sign in or create an account first.
-        </div>
+      {err && <div className="err ap-err" role="alert">{err}</div>}
+
+      {loading && jobs.length === 0 && <span className="spinner">LOADING</span>}
+
+      {none && (filtered
+        ? (
+          <div className="ap-nomatch">
+            {source === SAVED && !q.trim() && !location.trim() ? 'Nothing saved yet. Tap ☆ on a posting.' : 'No jobs match.'}{' '}
+            <button type="button" onClick={() => { setQ(''); setLocation(''); setSource(''); }}>Clear</button>
+          </div>
+        )
+        : <EmptyState title="No postings yet." sub="New roles arrive here as they are posted." />)}
+
+      {jobs.length > 0 && (
+        <ul className="ld-table jb-list" aria-label="Jobs">
+          {jobs.map(j => {
+            const name = `${j.title || 'Untitled role'} at ${j.company || 'unknown company'}`;
+            return (
+              <li key={j.id} className="ld-row jb-row">
+                <div className="ld-name">
+                  <strong className="jb-company">{j.company || 'Unknown company'}</strong>
+                  <span className="jb-title">{j.title || 'Untitled role'}</span>
+                  {j.role && <span className="jb-desc">{j.role}</span>}
+                  <span className="ld-desc">{[j.location, j.posted || ago(j.receivedAt)].filter(Boolean).join(' · ')}</span>
+                </div>
+                <div className="jb-actions">
+                  <button
+                    type="button"
+                    className="jb-save"
+                    aria-pressed={j.saved}
+                    aria-label={`${j.saved ? 'Unsave' : 'Save'} ${name}`}
+                    onClick={() => toggleSave(j)}
+                  >{j.saved ? '★' : '☆'}</button>
+                  <a href={j.url} target="_blank" rel="noopener noreferrer" className="ap-btn ap-btn--ghost jb-btn" aria-label={`View ${name} posting`}>View post ↗</a>
+                  <button type="button" className="ap-btn ap-btn--acid jb-btn" aria-label={`Tailor a résumé for ${name}`} onClick={() => tailor(j)}>Tailor →</button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      {err && <div className="err" style={{ marginBottom: 12 }}>{err}</div>}
-
-      <div className="joblist">
-        {!loading && jobs.length === 0 && <div className="muted" style={{ padding: '18px 0' }}>No jobs match.</div>}
-        {jobs.map(j => (
-          <div className="jobrow" key={j.id}>
-            <div className="jobrow__main">
-              <h3 className="jobrow__title">{j.title || 'Untitled role'}</h3>
-              <div className="jobrow__meta">
-                {j.companyUrl
-                  ? <a href={j.companyUrl} target="_blank" rel="noopener noreferrer">{j.company || 'Unknown company'}</a>
-                  : (j.company || 'Unknown company')}
-                {j.location && <> · {j.location}</>}
-                {j.posted && <> · {j.posted}</>}
-              </div>
-              {j.role && <p className="jobrow__role">{j.role}</p>}
-              <div>
-                <span className="tag tag--filled">{j.source}</span>
-                {j.stack.map((s, i) => <span className="tag" key={i}>{s}</span>)}
-              </div>
-            </div>
-            <div className="jobrow__actions">
-              <button className="btn btn--sm btn--ghost" onClick={() => toggleSave(j)} aria-pressed={j.saved}>
-                {j.saved ? '★ SAVED' : '☆ SAVE'}
-              </button>
-              <a className="btn btn--sm btn--ghost" href={j.url} target="_blank" rel="noopener noreferrer">POSTING ↗</a>
-              <button className="btn btn--sm btn--acid" onClick={() => tailor(j)}>TAILOR →</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {loading && jobs.length === 0 && <div className="center-page" style={{ minHeight: 120 }}><span className="spinner">LOADING</span></div>}
-
       {jobs.length < total && (
-        <div style={{ textAlign: 'center', marginTop: 20 }}>
-          <button className="btn btn--sm" onClick={loadMore}>LOAD MORE</button>
+        <div className="jb-more">
+          <button type="button" className="ap-btn ap-btn--ghost" onClick={loadMore}>Load more</button>
         </div>
       )}
     </div>

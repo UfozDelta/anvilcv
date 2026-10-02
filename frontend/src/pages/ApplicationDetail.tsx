@@ -16,7 +16,7 @@ function showViewer() {
   }
 }
 
-const OUTCOMES = ['applied', 'interview', 'offer', 'rejected'] as const;
+const OUTCOMES = ['applied', 'oa', 'interview', 'offer', 'rejected', 'ghosted'] as const;
 
 type Tab = 'page' | 'cover' | 'review' | 'ats';
 type Detail = ReturnType<typeof useApplicationDetail>;
@@ -71,7 +71,7 @@ export function ApplicationDetail() {
               className={app.outcome === o ? 'is-on' : ''}
               disabled={s.busy}
               onClick={() => s.setOutcome(o)}
-            >{o}</button>
+            >{o === 'oa' ? 'OA' : o}</button>
           ))}
         </div>
       </div>
