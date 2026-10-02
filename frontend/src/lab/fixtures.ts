@@ -257,6 +257,7 @@ export const LAB_APP: ApplicationResponse = {
   recruiterThinnestRequirement: 'Streaming / event pipelines — the JD asks for Kafka twice and the page answers with webhooks.',
   recruiterWeakestBulletId: 'b7',
   recruiterStale: true,
+  recruiterPending: false,
   pageCount: 2,
   pdfAvailable: true,
   tectonicLog: null,

@@ -1,0 +1,129 @@
+/* /lab/how — Caption and Tour variants. Builds on landing-v2.css (lv-*) and components/landing/steps.css. */
+
+.hw-cap, .hw-tour, .hw-spot {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --nav-h: 52px;
+}
+.hw-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ── Shared: progress + caption ── */
+.hw-progress { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+.hw-progress__seg {
+  height: 4px;
+  background: var(--soft);
+  position: relative;
+  overflow: hidden;
+}
+.hw-progress__seg::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 300ms var(--ease-out);
+}
+.hw-progress__seg[data-on]::after { transform: none; }
+
+.hw-caption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 16px 0 0;
+  animation: hw-cap-in 260ms var(--ease-out) both;
+}
+@keyframes hw-cap-in { from { opacity: 0; transform: translateY(6px); } }
+.hw-caption__num {
+  font-family: var(--serif);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 44px;
+  line-height: 0.9;
+  color: var(--acid);
+  -webkit-text-stroke: 1.5px var(--ink);
+}
+.hw-caption__title { font-size: clamp(26px, 3vw, 34px); margin: 0 0 6px; }
+.hw-caption__body { font-family: var(--mono); font-size: 13px; line-height: 1.65; color: var(--muted); margin: 0; max-width: 56ch; }
+
+/* ── 2 · CAPTION ── */
+.hw-cap { position: relative; }
+.hw-cap__sticky {
+  position: sticky;
+  top: calc(var(--nav-h) + 12px);
+  z-index: 2;
+  background: var(--paper);
+  max-width: 620px;
+  margin: 0 auto;
+  padding-bottom: 8px;
+}
+.hw-cap__spacers { list-style: none; margin: 0; padding: 0; }
+.hw-cap__spacers li { height: 70svh; }
+.hw-cap__spacers li:first-child { height: 40svh; }
+@media (min-width: 960px) {
+  .hw-cap .lv-stage, .hw-tour .lv-stage { height: 440px; max-width: none; margin: 0 8px 0 0; }
+}
+@media (max-width: 959px) {
+  .hw-caption { padding-top: 12px; gap: 12px; }
+  .hw-caption__num { font-size: 34px; }
+  .hw-caption__title { font-size: 24px; }
+  .hw-caption__body { font-size: 12px; }
+}
+
+/* ── 3 · TOUR ── */
+.hw-tour { max-width: 620px; margin: 0 auto; }
+.hw-tour__tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 3px solid var(--ink);
+  border-bottom: 0;
+}
+.hw-tab {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 12px 14px;
+  border: 0;
+  border-right: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.hw-tab:last-child { border-right: 0; }
+.hw-tab[aria-selected='true'] { background: var(--ink); color: var(--paper); }
+.hw-tab[data-done] { color: var(--ink); }
+.hw-tab:focus-visible { outline: 3px solid var(--acid); outline-offset: -3px; }
+.hw-tab__num { font-family: var(--mono); font-weight: 700; font-size: 11px; letter-spacing: 0.14em; }
+.hw-tab__label { font-family: var(--serif); font-weight: 900; font-style: italic; font-size: 18px; }
+@media (hover: hover) and (pointer: fine) {
+  .hw-tab:not([aria-selected='true']):hover { background: var(--paper-2); color: var(--ink); }
+}
+/* Progress along the tab's bottom edge: runs linearly while auto-playing. */
+.hw-tab__bar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 4px;
+  background: var(--acid);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.hw-tab__bar[data-mode='full'] { transform: none; }
+.hw-tab__bar[data-mode='run'] { animation: hw-run linear both; }
+@keyframes hw-run { from { transform: scaleX(0); } to { transform: none; } }
+@media (max-width: 520px) {
+  .hw-tab { flex-direction: column; gap: 2px; padding: 10px 8px 12px; }
+  .hw-tab__label { font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hw-caption { animation: none; }
+  .hw-tab__bar[data-mode='run'] { animation: none; transform: none; }
+}

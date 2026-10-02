@@ -1,0 +1,92 @@
+/* Broadsheet hero variant (lab only). Builds on components/landing/hero.css. */
+
+/* ── 3 · BROADSHEET ── */
+.hx-bs { padding-bottom: 0; }
+.hx-bs__dateline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+.hx-bs__dateline > :last-child { text-align: right; }
+@media (max-width: 700px) {
+  .hx-bs__dateline { grid-template-columns: 1fr 1fr; }
+  .hx-bs__center { display: none; }
+}
+.hx-bs__title {
+  font-size: clamp(76px, 19vw, 260px);
+  line-height: 0.85;
+  margin: 18px 0 14px;
+  white-space: nowrap;
+  letter-spacing: -0.04em;
+}
+.hx-bs__slash { font-size: 0.3em; vertical-align: 0.9em; }
+.hx-bs__deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: end;
+  padding: 18px 0 32px;
+  border-top: 3px solid var(--ink);
+}
+@media (min-width: 821px) { .hx-bs__deck { grid-template-columns: minmax(0, 1.4fr) auto; } }
+.hx-bs__sub { font-size: 20px; margin: 0; max-width: 40ch; }
+
+.hx-bs__strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 3px solid var(--ink);
+}
+@media (min-width: 821px) { .hx-bs__strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.hx-bs__col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 24px;
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  transition: background 240ms ease, color 240ms ease;
+}
+.hx-bs__col[data-on] { background: var(--ink); color: var(--paper); }
+.hx-bs__key { font-size: 10px; }
+.hx-bs__col[data-on] .hx-bs__key { color: var(--acid); }
+.hx-bs__num {
+  font-family: var(--serif);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(44px, 5vw, 64px);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.hx-bs__num small {
+  font-family: var(--mono);
+  font-style: normal;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+.hx-bs__cap { font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--muted); }
+.hx-bs__col[data-on] .hx-bs__cap { color: var(--soft); }
+.hx-bs__sweep {
+  position: absolute;
+  left: 0; right: 0; bottom: -3px;
+  height: 6px;
+  background: var(--acid);
+  border-top: 1.5px solid var(--ink);
+  transform-origin: left;
+  transition: transform 1000ms var(--hx-ease-in-out);
+}
+.hx-bs__foot { margin: 14px 0 48px; font-size: 10px; }
+
+/* Context below the fold, so the hero is judged against a real page. */
+.hx-next { padding-top: 56px; padding-bottom: 160px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hx-bs__sweep { transition: none; }
+}

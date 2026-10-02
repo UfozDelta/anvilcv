@@ -1,0 +1,184 @@
+/* /lab/pricing. Builds on landing.css (lp-*), landing-lab.css (nav, versus) and globals tokens. */
+
+.lx { --pr-ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+.pr-hero { padding-top: 48px; padding-bottom: 72px; }
+.pr-section { padding-bottom: 72px; }
+
+.pr-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 36px;
+  align-items: end;
+  margin-bottom: 48px;
+}
+@media (min-width: 861px) { .pr-head { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 60px; } }
+.pr-title { font-size: clamp(52px, 7.5vw, 104px); margin: 0; }
+
+/* ── Calculator ── */
+.pr-calc { border: 3px solid var(--ink); padding: 20px 22px; background: var(--paper-2); box-shadow: 8px 8px 0 var(--ink); }
+.pr-calc__row { display: flex; align-items: center; gap: 16px; margin: 12px 0 18px; }
+.pr-calc__num {
+  font-family: var(--serif);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 60px;
+  line-height: 0.9;
+  min-width: 2ch;
+  font-variant-numeric: tabular-nums;
+}
+.pr-calc__out { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding-top: 14px; border-top: 1px solid var(--ink); }
+.pr-calc__out dt { font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.pr-calc__out dd { margin: 4px 0 0; font-family: var(--serif); font-weight: 900; font-style: italic; font-size: 26px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.pr-calc__out dd.pr-calc__fit { font-family: var(--mono); font-style: normal; font-size: 12px; letter-spacing: 0.08em; line-height: 1.4; background: var(--acid); padding: 3px 6px; display: inline-block; }
+@media (max-width: 480px) {
+  .pr-calc__out { grid-template-columns: 1fr 1fr; }
+  .pr-calc__out > :last-child { grid-column: 1 / -1; }
+}
+
+.pr-range {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 10px;
+  border: 2px solid var(--ink);
+  background: linear-gradient(to right, var(--ink) var(--p), var(--paper) var(--p));
+  cursor: pointer;
+}
+.pr-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  background: var(--acid);
+  border: 3px solid var(--ink);
+  transition: transform 160ms var(--pr-ease-out);
+}
+.pr-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 0;
+  background: var(--acid);
+  border: 3px solid var(--ink);
+}
+.pr-range:active::-webkit-slider-thumb { transform: scale(1.15); }
+.pr-range:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+
+/* ── Paid plans: all full strength. The middle plan is the one we sell (dark, badged);
+   the calculator's fit gets an acid lift, nothing is greyed out. ── */
+.pr-tiers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+@media (min-width: 861px) { .pr-tiers { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; } }
+/* Stacked on phones: the plan we sell leads. */
+@media (max-width: 860px) { .pr-tier[data-featured] { order: -1; } }
+
+.pr-tier {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 26px 24px 24px;
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  transition: transform 250ms var(--pr-ease-out), box-shadow 250ms var(--pr-ease-out);
+}
+.pr-tier[data-featured] { background: var(--ink); color: var(--paper); }
+@media (min-width: 861px) { .pr-tier[data-featured] { margin: -14px 0; padding-top: 40px; padding-bottom: 38px; } }
+.pr-tier[data-fit] { transform: translate(-4px, -4px); box-shadow: 8px 8px 0 var(--acid), 8px 8px 0 3px var(--ink); }
+
+.pr-tier__badge {
+  position: absolute;
+  top: -13px;
+  right: 16px;
+  padding: 3px 8px;
+  background: var(--acid);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  animation: pr-pop 220ms var(--pr-ease-out) both;
+}
+@keyframes pr-pop { from { opacity: 0; transform: translateY(4px) scale(0.95); } }
+
+.pr-price { display: flex; align-items: baseline; gap: 4px; }
+.pr-price__cur { font-family: var(--mono); font-weight: 700; font-size: 22px; align-self: flex-start; margin-top: 10px; }
+.pr-price__num { font-size: 80px; line-height: 1; }
+.pr-price__per { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; color: var(--muted); margin-left: 6px; }
+.pr-tier[data-featured] .pr-price__per { color: var(--soft); }
+.pr-tier__line { font-family: var(--serif); font-style: italic; font-size: 22px; margin: 0; }
+.pr-tier__fit, .pr-free__fit { margin: 0 0 4px; font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; animation: pr-pop 220ms var(--pr-ease-out) both; }
+.pr-tier[data-featured] .pr-tier__fit { color: var(--acid); }
+
+.pr-tier__list { list-style: none; margin: 4px 0 16px; padding: 0; flex: 1; }
+.pr-tier__list li {
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 9px 0 9px 22px;
+  border-top: 1px solid var(--soft);
+  position: relative;
+}
+.pr-tier[data-featured] .pr-tier__list li { border-color: #333; }
+.pr-tier__list li::before { content: '→'; position: absolute; left: 0; font-weight: 700; }
+
+.pr-btn { justify-content: center; transition: background 60ms linear, color 60ms linear, transform 160ms var(--pr-ease-out); }
+.pr-btn:active { transform: scale(0.97); }
+.pr-tier[data-featured] .lp-btn--acid { border-color: var(--acid); }
+
+/* ── Free: one flat row under the paid plans ── */
+.pr-free {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: center;
+  margin-top: 32px;
+  padding: 18px 24px;
+  border: 3px solid var(--ink);
+  background: var(--paper-2);
+  transition: box-shadow 250ms var(--pr-ease-out), transform 250ms var(--pr-ease-out);
+}
+.pr-free[data-fit] { transform: translate(-4px, -4px); box-shadow: 8px 8px 0 var(--acid), 8px 8px 0 3px var(--ink); }
+.pr-free__price { display: flex; flex-direction: column; gap: 2px; }
+.pr-free__num { font-size: 52px; line-height: 0.9; }
+.pr-free__copy { font-family: var(--mono); font-size: 15px; line-height: 1.6; margin: 0; }
+@media (max-width: 720px) {
+  .pr-free { grid-template-columns: auto minmax(0, 1fr); gap: 16px 20px; }
+  .pr-free__btn { grid-column: 1 / -1; }
+  .pr-free__copy { font-size: 13px; }
+}
+
+/* ── FAQ ── */
+.pr-faq { border-top: 3px solid var(--ink); }
+.pr-faq__item { border-bottom: 1px solid var(--ink); }
+.pr-faq__item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pr-faq__item summary::-webkit-details-marker { display: none; }
+.pr-faq__item summary::after {
+  content: '+';
+  font-family: var(--mono);
+  transition: transform 200ms var(--pr-ease-out);
+}
+.pr-faq__item[open] summary::after { transform: rotate(45deg); }
+.pr-faq__item p { font-family: var(--mono); font-size: 14px; line-height: 1.7; color: var(--muted); margin: 0 0 18px; max-width: 70ch; }
+@media (hover: hover) and (pointer: fine) {
+  .pr-faq__item summary:hover { background: var(--paper-2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-tier, .pr-free { transition: none; }
+  .pr-tier[data-fit], .pr-free[data-fit] { transform: none; }
+  .pr-tier__badge, .pr-tier__fit, .pr-free__fit { animation: none; }
+}
+
+/* Phones: leave room under the footer so the Get started link isn't pinned to the browser's bottom bar. */
+@media (max-width: 760px) {
+  .pr-page { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+}

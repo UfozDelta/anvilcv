@@ -1,0 +1,228 @@
+/* SpotStage: text-light pinned stage for the Spotlight "How it works". */
+
+.ss {
+  position: relative;
+  height: 520px;
+  max-width: 520px;
+  margin-left: auto;
+  border: 3px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 10px 10px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+}
+@media (max-width: 959px) {
+  .ss { height: 360px; max-width: none; margin: 0 6px 0 0; box-shadow: 6px 6px 0 var(--ink); }
+}
+@media (max-width: 959px) and (max-height: 740px) { .ss { height: 320px; } }
+
+.ss-bar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border-bottom: 3px solid var(--ink);
+  background: var(--paper);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.ss-bar__status { background: var(--ink); color: var(--acid); padding: 2px 6px; animation: ss-pop 220ms var(--ease-out) both; }
+@keyframes ss-pop { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ── Spotlight zones: dim what this step isn't about. ── */
+.ss-zone { position: relative; opacity: 0.28; transition: opacity 250ms ease; }
+.ss[data-step='1'] .ss-zone[data-zone='1'],
+.ss[data-step='2'] .ss-zone[data-zone='2'],
+.ss[data-step='3'] .ss-zone[data-zone='3'],
+.ss[data-step='4'] .ss-zone[data-zone='4'] { opacity: 1; }
+/* While the keywords land, the tiles they hit stay readable too. */
+.ss[data-step='2'] .ss-bank { opacity: 0.55; }
+
+/* ── Job slot ── */
+.ss-job {
+  flex: none;
+  min-height: 56px;
+  padding: 12px 14px;
+  background: var(--ink);
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+.ss-job__empty {
+  align-self: flex-start;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #8a857e;
+  border: 1.5px dashed #5a5650;
+  padding: 8px 12px;
+}
+.ss-job__head { font-size: 12px; }
+.ss-job__head strong { font-family: var(--serif); font-style: italic; font-weight: 900; font-size: 18px; margin-right: 6px; }
+.ss-job__head span { color: #b8b2a8; }
+.ss-job__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ss-chip {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  background: var(--acid);
+  color: var(--ink);
+  animation: ss-chip-in 220ms var(--ease-out) both;
+}
+@keyframes ss-chip-in { from { opacity: 0; transform: scale(0.9); } }
+
+/* ── Bank: grid (steps 1–2) → ranked list + leftovers (step 3) ── */
+.ss-bank { flex: 1; min-height: 0; padding: 14px; display: flex; flex-direction: column; }
+.ss-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ss-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ss-tile__label { overflow: hidden; text-overflow: ellipsis; }
+.ss-tile[data-hit] { background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--acid); }
+.ss-tile__dot {
+  flex: none;
+  width: 8px; height: 8px;
+  margin-left: auto;
+  background: var(--acid);
+  border: 1.5px solid var(--ink);
+  animation: ss-chip-in 220ms var(--ease-out) 300ms both;
+}
+
+.ss-list { display: flex; flex-direction: column; gap: 4px; }
+.ss-tile--row { height: 30px; border-left: 5px solid var(--acid); }
+.ss-tile--row .ss-tile__label { flex: 0 0 38%; }
+.ss-tile__bar {
+  flex: 1;
+  height: 6px;
+  background: var(--ink);
+  transform-origin: left;
+  animation: ss-bar-in 500ms var(--ease-out) 250ms both;
+}
+@keyframes ss-bar-in { from { transform: scaleX(0); } }
+.ss-tile__num { width: 20px; text-align: right; font-size: 10px; font-variant-numeric: tabular-nums; }
+
+.ss-left__label { margin: 12px 0 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.ss-left { display: flex; flex-wrap: wrap; gap: 4px; }
+.ss-tile--dim { height: 24px; padding: 0 7px; font-size: 9.5px; color: var(--muted); border-color: var(--soft); }
+.ss-tile__cap { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--rust); }
+
+/* ── Page: slides up over the bank like a sheet ── */
+.ss-page {
+  position: absolute;
+  inset: 30px 0 0;
+  z-index: 4;
+  padding: 16px;
+  background: var(--paper-2);
+  transform: translateY(102%);
+  transition: transform 600ms var(--ease-drawer), opacity 250ms ease;
+}
+.ss-page[data-on] { transform: none; }
+.ss-doc {
+  height: 100%;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 20px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.ss-doc__head { padding-bottom: 10px; border-bottom: 2px solid var(--ink); }
+.ss-doc__name { font-family: var(--serif); font-weight: 900; font-style: italic; font-size: 26px; line-height: 1; }
+.ss-doc__role { margin-top: 6px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+/* Contact details as quiet placeholder bars: present, not read. */
+.ss-doc__contact { display: flex; gap: 8px; margin-top: 8px; }
+.ss-doc__contact span { height: 4px; width: 56px; background: var(--soft); }
+.ss-doc__contact span:nth-child(2) { width: 72px; }
+.ss-doc__contact span:nth-child(3) { width: 44px; }
+
+.ss-doc__sec { display: flex; flex-direction: column; gap: 5px; }
+.ss-doc__sec-title { font-size: 8.5px; font-weight: 700; letter-spacing: 0.2em; color: var(--muted); }
+.ss-doc__entry { display: flex; flex-direction: column; gap: 4px; }
+.ss-doc__entry + .ss-doc__entry { margin-top: 2px; }
+.ss-doc__org { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; }
+.ss-doc__org strong { font-family: var(--serif); font-style: italic; font-weight: 900; font-size: 13px; }
+.ss-doc__org span { font-size: 9px; color: var(--muted); }
+.ss-doc__line { display: grid; grid-template-columns: 6px auto 1fr; gap: 8px; align-items: center; font-size: 10.5px; padding-left: 2px; }
+.ss-doc__line > .ss-doc__fill { justify-self: start; }
+.ss-doc__dot { width: 4px; height: 4px; background: var(--ink); }
+.ss-doc__fill { height: 4px; background: var(--soft); }
+.ss-doc__skills { font-size: 9.5px; letter-spacing: 0.04em; color: var(--ink); }
+.ss-doc__foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--soft);
+  display: flex;
+  gap: 4px;
+}
+.ss-doc__foot span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 3px 7px;
+  border: 1.5px solid var(--ink);
+}
+.ss-doc__foot span:first-child { background: var(--acid); }
+
+@media (max-width: 959px) {
+  .ss-job { min-height: 48px; padding: 10px 12px; }
+  .ss-job__head strong { font-size: 15px; }
+  .ss-bank { padding: 10px; }
+  .ss-tile { height: 28px; font-size: 10px; padding: 0 7px; }
+  .ss-tile--row { height: 24px; }
+  .ss-list { gap: 3px; }
+  .ss-tile--dim { height: 20px; font-size: 9px; }
+  .ss-left__label { margin: 8px 0 4px; }
+  .ss-page { padding: 8px; }
+  .ss-doc { padding: 12px 14px 10px; gap: 6px; }
+  /* Phones: the skills line is the first thing to go; the footer facts stay. */
+  .ss-doc__sec--skills { display: none; }
+  .ss-doc { line-height: 1.25; }
+  .ss-doc__sec-title { font-size: 8px; }
+  .ss-doc__foot { padding-top: 6px; }
+  .ss-doc__foot span { padding: 2px 5px; font-size: 8.5px; }
+  .ss-doc__head { padding-bottom: 6px; }
+  .ss-doc__name { font-size: 20px; }
+  .ss-doc__contact { display: none; }
+  .ss-doc__sec, .ss-doc__entry { gap: 3px; }
+  .ss-doc__line, .ss-doc__org { font-size: 9.5px; }
+  .ss-doc__org strong { font-size: 11.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-bar__status, .ss-chip, .ss-tile__dot, .ss-tile__bar { animation: none; }
+  .ss-page { transition: opacity 200ms ease; }
+  .ss-page:not([data-on]) { opacity: 0; transform: none; }
+}
+@media (max-width: 959px) and (max-height: 740px) {
+  .ss-tile--row { height: 22px; }
+  .ss-tile { height: 26px; }
+  /* Leftovers become one row that fades out at the edge: still reads as "the rest". */
+  .ss-left__label { display: none; }
+  .ss-left { flex-wrap: nowrap; overflow: hidden; margin-top: 8px; mask-image: linear-gradient(to right, #000 75%, transparent); }
+  .ss-left .ss-tile { flex: none; }
+}
+@media (max-width: 959px) and (max-height: 740px) {
+  .ss-doc__role, .ss-doc__org span { display: none; }
+  .ss-doc__head { padding-bottom: 4px; }
+  .ss-doc__sec, .ss-doc__entry { gap: 2px; }
+  .ss-doc { gap: 5px; }
+}

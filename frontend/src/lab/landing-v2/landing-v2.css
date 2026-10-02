@@ -1,0 +1,214 @@
+/* /lab/landing-v2 — builds on landing.css (lp-*) and globals tokens. */
+
+.lv {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --nav-h: 52px;
+  /* clip, not hidden: hidden makes this a scroll box and breaks the sticky nav and stage. */
+  overflow-x: clip;
+}
+.lv a, .lv button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.lv mark { color: inherit; background: none; }
+
+/* ── Shared bits ── */
+.lv-btn { transition: background 60ms linear, color 60ms linear, transform 160ms var(--ease-out); }
+.lv-btn:active { transform: scale(0.97); }
+.lv-link {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 2px solid currentColor;
+  padding-bottom: 2px;
+  display: inline-block;
+  transition: transform 160ms var(--ease-out);
+}
+.lv-link:active { transform: scale(0.97); }
+.lv-link--dark { color: var(--paper); }
+@media (hover: hover) and (pointer: fine) {
+  .lv-link:hover { background: var(--acid); color: var(--ink); }
+}
+.lv-section { padding-top: 120px; padding-bottom: 24px; }
+.lv-head { display: grid; gap: 20px; margin-bottom: 40px; }
+@media (min-width: 900px) {
+  .lv-head { grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr); align-items: end; gap: 60px; }
+}
+.lv-h2 { font-size: clamp(44px, 6vw, 76px); margin: 0; }
+.lv-body { font-family: var(--mono); font-size: 14px; line-height: 1.75; color: var(--muted); max-width: 46ch; margin: 0; }
+
+/* Keyword marks: an acid underlay that scales in from the left. Missing ones get a
+   dashed rust underline instead, so the gap reads at a glance. */
+.lv-mark { position: relative; z-index: 0; padding: 0 1px; }
+.lv-mark::before {
+  content: '';
+  position: absolute;
+  inset: 0.08em -1px 0.02em;
+  z-index: -1;
+  background: var(--acid);
+  transform-origin: left;
+  animation: lv-mark-in 320ms var(--ease-out) var(--d, 0ms) both;
+}
+.lv-mark[data-miss]::before { background: none; border-bottom: 2px dashed var(--rust); }
+@keyframes lv-mark-in { from { transform: scaleX(0); } }
+
+/* ── Nav ── */
+.lv-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--ink); }
+.lv-nav__inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--nav-h); }
+.lv-nav__brand { font-family: var(--serif); font-weight: 900; font-style: italic; font-size: 20px; color: var(--ink); text-decoration: none; letter-spacing: -0.02em; }
+.lv-nav__brand span { font-family: var(--mono); font-style: normal; font-size: 13px; }
+.lv-nav__links { display: flex; align-items: center; gap: 18px; }
+.lv-nav__links a { font-family: var(--mono); font-weight: 700; font-size: 11px; letter-spacing: 0.18em; color: var(--ink); text-decoration: none; }
+.lv-nav__links .lv-nav__login { padding: 6px 10px; border: 2px solid var(--ink); }
+@media (hover: hover) and (pointer: fine) { .lv-nav__links a:hover { background: var(--acid); } }
+@media (max-width: 520px) {
+  .lv-nav__links { gap: 12px; }
+  .lv-nav__docs { display: none; }
+}
+
+/* ── Story: hero + how it works around one pinned stage ── */
+.lv-story {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'copy' 'pin' 'steps';
+  column-gap: 64px;
+  padding-top: 40px;
+}
+.lv-story__copy { grid-area: copy; padding-bottom: 32px; }
+.lv-story__pin { grid-area: pin; position: sticky; top: var(--nav-h); z-index: 2; background: var(--paper); padding: 10px 0; }
+.lv-story__steps { grid-area: steps; position: relative; padding-left: 28px; }
+@media (min-width: 960px) {
+  .lv-story {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    grid-template-areas: 'copy pin' 'steps pin';
+    grid-template-rows: auto 1fr;
+    padding-top: 0;
+  }
+  .lv-story__copy { min-height: calc(100svh - var(--nav-h)); display: flex; flex-direction: column; justify-content: center; padding: 40px 0; }
+  .lv-story__pin { align-self: start; top: calc(var(--nav-h) + max(24px, (100svh - var(--nav-h) - 560px) / 2)); padding: 0; background: none; }
+  .lv-story__steps { padding-bottom: 20vh; }
+}
+
+.lv-title { font-size: clamp(76px, 10vw, 132px); margin: 0 0 28px; }
+.lv-sub { font-size: 21px; margin: 0 0 32px; max-width: 30ch; }
+@media (min-width: 761px) { .lv-sub { font-size: 27px; line-height: 1.4; } }
+.lv-ctas { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.lv-stat { display: flex; align-items: baseline; gap: 10px; margin: 28px 0 0; }
+.lv-stat strong { font-family: var(--serif); font-weight: 900; font-style: italic; font-size: 26px; }
+.lv-scrollcue { margin: 40px 0 0; font-size: 10px; transition: opacity 200ms ease; }
+.lv-scrollcue[data-off] { opacity: 0; }
+@media (max-width: 959px) { .lv-scrollcue { display: none; } }
+
+/* ── Stage (pinned visual) ── */
+.lv-stage {
+  position: relative;
+  height: 420px;
+  border: 3px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 8px 8px 0 var(--ink);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-right: 8px;
+}
+@media (min-width: 960px) { .lv-stage { height: 560px; max-width: 540px; margin-left: auto; box-shadow: 10px 10px 0 var(--ink); } }
+.lv-stage__bar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  height: 30px;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 3px solid var(--ink);
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  position: relative;
+  z-index: 3;
+}
+.lv-stage__status { background: var(--ink); color: var(--acid); padding: 2px 6px; animation: lv-pop 220ms var(--ease-out) both; }
+@keyframes lv-pop { from { opacity: 0; transform: translateY(-4px); } }
+
+.lv-stage__jd { flex: none; background: var(--ink); color: #d4d4d4; padding: 10px 12px 12px; font-family: var(--mono); }
+.lv-stage__prompt { font-size: 9px; color: var(--acid); letter-spacing: 0.14em; }
+.lv-stage__jd-text { display: grid; margin: 4px 0 0; font-size: 10.5px; line-height: 1.55; }
+.lv-stage__jd-text > * { grid-area: 1 / 1; }
+.lv-stage__ghost { visibility: hidden; }
+.lv-stage__wait { color: #77726b; }
+.lv-stage__jd-live { animation: lv-wipe 600ms var(--ease-in-out) both; }
+.lv-stage__jd .lv-mark { color: var(--ink); }
+@keyframes lv-wipe { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+
+.lv-stage__bank { list-style: none; margin: 0; padding: 4px 0; flex: 1; min-height: 0; }
+.lv-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 64px;
+  gap: 8px;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--soft);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink);
+  background: var(--paper-2);
+  position: relative;
+}
+.lv-row__rank { font-weight: 700; font-size: 9px; color: var(--muted); }
+.lv-row__text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-row__score { display: flex; align-items: center; gap: 6px; }
+.lv-row__bar { flex: 1; height: 5px; background: var(--ink); transform-origin: left; transition: transform 500ms var(--ease-out); }
+.lv-row__num { width: 16px; text-align: right; font-weight: 700; font-size: 9px; font-variant-numeric: tabular-nums; }
+.lv-row[data-status='bank'], .lv-row[data-status='cap'] { color: var(--muted); }
+.lv-row[data-status='bank'] .lv-row__bar, .lv-row[data-status='cap'] .lv-row__bar { background: var(--soft); }
+.lv-row[data-status='page']::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--acid);
+  border-right: 1px solid var(--ink);
+}
+.lv-row[data-status='cap'] .lv-row__rank { color: var(--rust); }
+
+/* The page rises over the bank like a sheet, and drops away to reveal it. */
+.lv-stage__page {
+  position: absolute;
+  inset: 30px 0 0;
+  z-index: 2;
+  padding: 14px;
+  background: var(--paper-2);
+  overflow: hidden;
+  transform: translateY(102%);
+  transition: transform 600ms var(--ease-drawer);
+}
+.lv-stage__page[data-on] { transform: none; }
+.lv-stage .lv-page { font-size: 10px; min-height: 100%; }
+
+/* ── Résumé page ── */
+.lv-page {
+  position: relative;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 18px 18px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.lv-page__name { font-family: var(--serif); font-weight: 900; font-style: italic; font-size: 2.1em; letter-spacing: -0.02em; line-height: 1; }
+.lv-page__contact { font-size: 0.78em; letter-spacing: 0.06em; color: var(--muted); margin-top: 6px; }
+.lv-page__target { color: var(--ink); font-weight: 700; display: inline-block; animation: lv-pop 220ms var(--ease-out) both; }
+.lv-page__rule { border-top: 2px solid var(--ink); margin: 8px 0 4px; }
+.lv-page__section { font-size: 0.8em; font-weight: 700; letter-spacing: 0.2em; border-bottom: 1px solid var(--ink); padding-bottom: 2px; margin: 10px 0 6px; }
+.lv-page__entry { margin-bottom: 6px; }
+.lv-page__entry-head { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.lv-page__entry-head em { font-family: var(--serif); font-size: 1.05em; }
+.lv-page__entry-head span { margin-left: auto; color: var(--muted); font-size: 0.85em; }
+.lv-page__bullets { list-style: none; margin: 3px 0 0; padding: 0; }
+.lv-page__bullets li { position: relative; padding-left: 12px; margin-bottom: 3px; }
+.lv-page__bullets li::before { content: ''; position: absolute; left: 2px; top: 0.6em; width: 4px; height: 4px; background: var(--ink); }
