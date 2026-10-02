@@ -83,10 +83,6 @@ body::before {
   font-size: 11px;
 }
 
-.tabular {
-  font-variant-numeric: tabular-nums;
-}
-
 /* -------- Layout primitives -------- */
 
 .shell {
@@ -120,8 +116,7 @@ body::before {
 
 /* -------- Masthead -------- */
 
-/* Mobile-first: brand · meta · menu button on one line, nav hidden behind the button.
-   The min-width: 721px block at the end of this section restores the desktop bar. */
+/* Used by the /lab/masthead prototype only; the app header is components/ledger/AppNav. */
 .masthead {
   border-bottom: var(--rule-heavy);
   padding-block: 10px 8px;
@@ -140,22 +135,6 @@ body::before {
   letter-spacing: -0.03em;
   line-height: 0.9;
 }
-
-.masthead__date { display: none; }
-
-.masthead__burger {
-  min-width: 44px;
-  min-height: 44px;
-  border: var(--rule-thick);
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-.masthead__burger[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
 
 .masthead__rule {
   display: none;
@@ -225,7 +204,7 @@ body::before {
 }
 .masthead__settings-menu a:hover { background: var(--acid); opacity: 1; }
 
-/* Sub-nav under masthead — on phones a stacked list opened by .masthead__burger */
+/* Sub-nav under masthead (used by the /lab/masthead prototype) */
 .nav {
   display: none;
   flex-direction: column;
@@ -237,7 +216,6 @@ body::before {
   text-transform: uppercase;
   font-weight: 700;
 }
-.nav--open { display: flex; }
 .nav a {
   color: var(--ink);
   text-decoration: none;
@@ -262,8 +240,6 @@ body::before {
   }
   .masthead__brand { font-size: 26px; }
   .masthead__rule { display: block; }
-  .masthead__date { display: inline; }
-  .masthead__burger { display: none; }
 
   .nav {
     display: flex;
@@ -382,8 +358,7 @@ body::before {
 }
 
 .field__input,
-.field__textarea,
-.field__select {
+.field__textarea {
   width: 100%;
   font-family: var(--mono);
   font-size: 13px;
@@ -396,20 +371,13 @@ body::before {
 }
 
 .field__input:focus,
-.field__textarea:focus,
-.field__select:focus {
+.field__textarea:focus {
   background: var(--paper-2);
   border-color: var(--ink);
   box-shadow: inset 4px 0 0 0 var(--acid), 0 0 0 3px rgba(232, 254, 3, 0.35);
 }
 
 .field__textarea { resize: vertical; min-height: 160px; }
-
-.field__hint {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--muted);
-}
 
 /* -------- Tags -------- */
 
@@ -426,60 +394,6 @@ body::before {
   color: var(--ink);
   margin-right: 6px;
   margin-bottom: 4px;
-}
-
-.tag--filled { background: var(--ink); color: var(--paper); }
-.tag--acid { background: var(--acid); color: var(--ink); border-color: var(--ink); }
-.tag--rust { background: var(--rust); color: var(--paper); border-color: var(--rust); }
-
-/* -------- Tables / rows -------- */
-
-.list { border-top: var(--rule-thick); }
-
-.list__row {
-  display: grid;
-  grid-template-columns: 60px 1fr auto;
-  gap: 20px;
-  padding: 18px 0;
-  border-bottom: var(--rule-thin);
-  align-items: baseline;
-  text-decoration: none;
-  color: var(--ink);
-  position: relative;
-}
-
-.list__row:hover { background: var(--paper-2); }
-.list__row:hover .list__title { text-decoration: underline; text-underline-offset: 4px; }
-.list__row:hover .list__arrow { transform: translateX(4px); }
-
-.list__num {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  letter-spacing: 0.15em;
-}
-
-.list__title {
-  font-family: var(--serif);
-  font-style: normal;
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.01em;
-  margin: 0 0 4px;
-}
-
-.list__meta {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-}
-
-.list__arrow {
-  font-family: var(--mono);
-  font-size: 14px;
-  transition: transform 120ms ease-out;
 }
 
 /* -------- Bullet card (project bullets, ranked bullets) -------- */
@@ -503,45 +417,12 @@ body::before {
   user-select: none;
 }
 
-.bullet__rank--selected {
-  background: var(--acid);
-  color: var(--ink);
-  padding: 2px 8px;
-  margin-left: -8px;
-  width: max-content;
-}
-
 .bullet__text {
   font-size: 13.5px;
   line-height: 1.5;
 }
 
-.bullet__why {
-  margin-top: 6px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.6;
-}
-
 .bullet__tags { margin-top: 8px; }
-
-/* -------- Outcome pills -------- */
-
-.outcome {
-  display: inline-block;
-  padding: 4px 10px;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  border: var(--rule-thick);
-}
-.outcome--applied { background: var(--paper); }
-.outcome--interview { background: var(--acid); }
-.outcome--offer { background: var(--ink); color: var(--paper); }
-.outcome--rejected { background: var(--rust); color: var(--paper); border-color: var(--rust); }
 
 /* -------- Misc -------- */
 
@@ -573,17 +454,6 @@ body::before {
 }
 @keyframes blink { 50% { opacity: 0.2; } }
 
-.dropcap::first-letter {
-  font-family: var(--serif);
-  font-style: italic;
-  font-weight: 900;
-  float: left;
-  font-size: 4em;
-  line-height: 0.85;
-  margin-right: 8px;
-  margin-top: 4px;
-}
-
 a { color: var(--ink); }
 a:focus-visible, button:focus-visible {
   outline: 3px solid var(--acid);
@@ -607,10 +477,6 @@ a:focus-visible, button:focus-visible {
 
   .masthead__settings-btn { padding: 8px; }
 
-  .list__row { grid-template-columns: 1fr auto; gap: 12px; }
-  .list__num { display: none; }
-  .list__title { font-size: 17px; }
-
   .bullet { grid-template-columns: 40px 1fr; gap: 10px; }
 
   .section-mark { gap: 10px; }
@@ -619,8 +485,6 @@ a:focus-visible, button:focus-visible {
   .btn { padding: 12px 14px; letter-spacing: 0.12em; }
 
   /* 16px prevents iOS Safari zooming in on focus. */
-  .field__input, .field__textarea, .field__select { font-size: 16px; }
+  .field__input, .field__textarea { font-size: 16px; }
   .field__textarea { min-height: 120px; }
-
-  .dropcap::first-letter { font-size: 3em; }
 }
