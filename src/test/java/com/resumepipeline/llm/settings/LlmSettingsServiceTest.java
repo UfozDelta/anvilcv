@@ -32,7 +32,9 @@ class LlmSettingsServiceTest {
                 "yml-opencode-key", "https://yml.opencode/v1",
                 "yml-opencode-generate", "yml-opencode-match", "yml-opencode-cleanjd",
                 "yml-openai-key", "https://yml.openai/v1",
-                "yml-openai-generate", "yml-openai-match", "yml-openai-cleanjd");
+                "yml-openai-generate", "yml-openai-match", "yml-openai-cleanjd",
+                "yml-openrouter-key", "https://yml.openrouter/v1",
+                "yml-openrouter-generate", "yml-openrouter-match", "yml-openrouter-cleanjd");
     }
 
     private static LlmSettings emptyRow() {
@@ -73,6 +75,22 @@ class LlmSettingsServiceTest {
     }
 
     @Test
+    void openrouterSavesAndResolvesItsOwnColumns() {
+        LlmSettingsService service = serviceOver(emptyRow());
+
+        service.update(new LlmSettingsService.UpdateRequest("openrouter", null, null, null,
+                new LlmSettingsService.ProviderUpdate("or-key", null, "deepseek/deepseek-v4.1-flash", null, null)),
+                "admin");
+
+        LlmSettingsService.Resolved r = service.current().active();
+        assertEquals("openrouter", r.provider());
+        assertEquals("or-key", r.apiKey());
+        assertEquals("deepseek/deepseek-v4.1-flash", r.generateModel());
+        assertEquals("yml-openrouter-match", r.matchModel());
+        assertEquals("https://yml.openrouter/v1", r.baseUrl());
+    }
+
+    @Test
     void unknownProviderDegradesToGemini() {
         LlmSettings row = emptyRow();
         row.setProvider("not-a-provider");
@@ -87,7 +105,7 @@ class LlmSettingsServiceTest {
         LlmSettingsService service = serviceOver(row);
 
         service.update(new LlmSettingsService.UpdateRequest("openai", null, null,
-                new LlmSettingsService.ProviderUpdate("  ", null, "gpt-x", null, null)), "admin");
+                new LlmSettingsService.ProviderUpdate("  ", null, "gpt-x", null, null), null), "admin");
 
         LlmSettingsService.Resolved r = service.current().active();
         assertEquals("original-key", r.apiKey());
@@ -118,6 +136,7 @@ class LlmSettingsServiceTest {
         LlmSettingsService service = new LlmSettingsService(repo, new SecretCipher(""),
                 "gemini",
                 "yml-gemini-key", "g", "m", "c",
+                "", "u", "g", "m", "c",
                 "", "u", "g", "m", "c",
                 "", "u", "g", "m", "c");
 

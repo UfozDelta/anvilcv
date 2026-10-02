@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -44,7 +45,17 @@ public abstract class BaseLlmClient implements LlmClient {
                                        double temperature, ProgressLog progress,
                                        TokenAccumulator tokens, boolean stream, String label);
 
-    /** Short provider tag for the LLM_CALL event log line — "gemini", "openai", "opencode". */
+    /**
+     * Call labels that run with model thinking off where the provider supports it: only the
+     * calls the user waits on before the PDF. Hidden thinking tokens are generated before any
+     * output, so on these they dominated wall time (5-bullet rank prompt: ~3x faster off).
+     * Everything else keeps thinking: the recruiter pass now runs after the PDF is returned,
+     * and bullet generation is a one-off bank build where reasoning helps it meet the length,
+     * opener and no-fabrication rules — misses there cost recovery calls, not just quality.
+     */
+    protected static final Set<String> NO_THINKING_LABELS = Set.of("Ranking", "Fit score");
+
+    /** Short provider tag for the LLM_CALL event log line — "gemini", "openai", "opencode", "openrouter". */
     protected abstract String providerName();
 
     // Transient-failure safety net around callJson: one retry after a short pause. Deliberately
@@ -778,6 +789,38 @@ public abstract class BaseLlmClient implements LlmClient {
         }
     }
 
+    @Override
+    public JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+        progress.emit("Calling LLM to extract role, company and keywords...");
+        String cappedJd = capJd(rawJd);
+        String prompt = """
+                Extract structured fields from this job description.
+                  - company: the hiring company name.
+                  - role: the job title.
+                  - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
+
+                JD:
+                %s
+                """.formatted(cappedJd);
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "company",  SchemaSpec.string(),
+                "role",     SchemaSpec.string(),
+                "keywords", SchemaSpec.array(SchemaSpec.string())
+        )), List.of("company", "role", "keywords"));
+
+        String json = callJsonWithRetry(cleanJdModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, false, "JD extract");
+        try {
+            JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
+            List<String> kws = env.keywords == null ? List.of() : env.keywords;
+            progress.emit("Extracted: role=" + env.role + ", company=" + env.company
+                    + ", " + kws.size() + " keywords: " + String.join(", ", kws));
+            return new JdCleanResult(cappedJd, env.company, env.role, kws);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM extractJd response: " + json, e);
+        }
+    }
+
     // -------- rankBullets --------
 
     @Override
@@ -809,7 +852,8 @@ public abstract class BaseLlmClient implements LlmClient {
                 You are an expert resume writer. Rank EVERY bullet below against the job description.
 
                 Rank ALL %d bullets from rank 1 (best fit) to %d (worst). Use integers, no ties.
-                For each bullet give a one-sentence "why" tying it to specific JD requirements.
+                For each bullet give a "why" of at most 20 words: why it fits (the specific JD
+                requirement it meets) and why not (the gap that kept it from ranking higher).
 
                 Produce atsMatched (keywords from the JD that appear in the top 8 bullets)
                 and atsMissing (JD keywords NOT covered).

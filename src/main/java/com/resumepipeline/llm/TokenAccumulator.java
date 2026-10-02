@@ -56,6 +56,20 @@ public class TokenAccumulator {
         return lastCall;
     }
 
+    /**
+     * Like {@link #add(String, int, int)}, but with the provider's own billed cost for the
+     * call (OpenRouter's usage.cost) instead of pricing the tokens at the Gemini rates above.
+     */
+    public CallTokens add(String model, int prompt, int candidates, BigDecimal actualCostUsd) {
+        if (prompt >= 0) promptTokens.addAndGet(prompt);
+        if (candidates >= 0) candidatesTokens.addAndGet(candidates);
+        lastCall = new CallTokens(prompt, candidates);
+        synchronized (costLock) {
+            costUsd = costUsd.add(actualCostUsd);
+        }
+        return lastCall;
+    }
+
     /** In/out tokens from the most recent {@link #add}, for the LLM_CALL event log line. */
     public CallTokens lastCall()     { return lastCall; }
     public int getPromptTokens()     { return promptTokens.get(); }

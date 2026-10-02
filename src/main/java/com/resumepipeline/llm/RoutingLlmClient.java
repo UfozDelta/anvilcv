@@ -48,6 +48,11 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
+    public JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+        return current().extractJd(rawJd, progress, tokens);
+    }
+
+    @Override
     public RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens) {
         return current().rankBullets(req, progress, tokens);
     }
@@ -109,6 +114,8 @@ public class RoutingLlmClient implements LlmClient {
     public static LlmClient build(LlmSettingsService.Resolved r, GenerationConfigService configService) {
         return switch (r.provider()) {
             case "opencode" -> new OpenCodeLlmClient(
+                    r.baseUrl(), r.apiKey(), r.generateModel(), r.matchModel(), r.cleanJdModel(), configService);
+            case "openrouter" -> new OpenRouterLlmClient(
                     r.baseUrl(), r.apiKey(), r.generateModel(), r.matchModel(), r.cleanJdModel(), configService);
             case "openai" -> new OpenAiLlmClient(
                     r.baseUrl(), r.apiKey(), r.generateModel(), r.matchModel(), r.cleanJdModel(), configService);

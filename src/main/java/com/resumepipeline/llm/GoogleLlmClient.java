@@ -5,6 +5,8 @@ import com.google.genai.ResponseStream;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Schema;
+import com.google.genai.types.ThinkingConfig;
+import com.google.genai.types.ThinkingLevel;
 import com.google.genai.types.Type;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.obs.Mdc;
@@ -15,7 +17,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -70,10 +74,44 @@ public class GoogleLlmClient extends BaseLlmClient {
     protected String callJson(String model, String prompt, SchemaSpec spec, double temperature,
                               ProgressLog progress, TokenAccumulator tokens, boolean stream, String label) {
         Schema schema = toGoogleSchema(spec);
-        if (stream) {
-            return callStreaming(model, prompt, schema, temperature, label, progress, tokens);
+        try {
+            return stream ? callStreaming(model, prompt, schema, temperature, label, progress, tokens)
+                          : call(model, prompt, schema, temperature, tokens, label);
+        } catch (RuntimeException e) {
+            // Some Gemini 3 models reject MINIMAL; learn that once per model and retry at LOW.
+            if (String.valueOf(e.getMessage()).contains("MINIMAL is not supported") && noMinimal.add(model)) {
+                log.info("Model {} rejects thinking level MINIMAL, using LOW", model);
+                return stream ? callStreaming(model, prompt, schema, temperature, label, progress, tokens)
+                              : call(model, prompt, schema, temperature, tokens, label);
+            }
+            throw e;
         }
-        return call(model, prompt, schema, temperature, tokens);
+    }
+
+    // Models that answered "MINIMAL is not supported" — not knowable up front from the name.
+    private final Set<String> noMinimal = ConcurrentHashMap.newKeySet();
+
+    /**
+     * JSON config for one call, with thinking turned down for {@link #NO_THINKING_LABELS}.
+     * 2.5 Flash takes thinkingBudget=0 (2.5 Pro rejects it, so it is left alone). Gemini 3 and
+     * the -latest aliases reject a zero budget and take thinkingLevel instead: MINIMAL where
+     * the model allows it, else LOW. Measured on a 5-bullet rank prompt: 3.5 Flash 6.5s
+     * default vs 2.0s minimal; 3.5 Flash-Lite 6.9s vs 1.7s.
+     */
+    private GenerateContentConfig config(String model, Schema schema, double temperature, String label) {
+        GenerateContentConfig.Builder b = GenerateContentConfig.builder()
+                .responseMimeType("application/json")
+                .responseSchema(schema)
+                .temperature((float) temperature);
+        if (NO_THINKING_LABELS.contains(label)) {
+            if (model.startsWith("gemini-2.5-flash")) {
+                b.thinkingConfig(ThinkingConfig.builder().thinkingBudget(0).build());
+            } else if (model.startsWith("gemini-") && !model.startsWith("gemini-1") && !model.startsWith("gemini-2")) {
+                ThinkingLevel.Known level = noMinimal.contains(model) ? ThinkingLevel.Known.LOW : ThinkingLevel.Known.MINIMAL;
+                b.thinkingConfig(ThinkingConfig.builder().thinkingLevel(new ThinkingLevel(level)).build());
+            }
+        }
+        return b.build();
     }
 
     private Schema toGoogleSchema(SchemaSpec spec) {
@@ -89,12 +127,9 @@ public class GoogleLlmClient extends BaseLlmClient {
         };
     }
 
-    private String call(String model, String prompt, Schema schema, double temperature, TokenAccumulator tokens) {
-        GenerateContentConfig config = GenerateContentConfig.builder()
-                .responseMimeType("application/json")
-                .responseSchema(schema)
-                .temperature((float) temperature)
-                .build();
+    private String call(String model, String prompt, Schema schema, double temperature, TokenAccumulator tokens,
+                        String label) {
+        GenerateContentConfig config = config(model, schema, temperature, label);
         // Run on a separate thread so we can enforce a hard 2-minute timeout.
         // Without this, a stalled LLM response blocks the virtual thread forever.
         try {
@@ -127,11 +162,7 @@ public class GoogleLlmClient extends BaseLlmClient {
 
     private String callStreaming(String model, String prompt, Schema schema,
                                  double temperature, String label, ProgressLog progress, TokenAccumulator tokens) {
-        GenerateContentConfig config = GenerateContentConfig.builder()
-                .responseMimeType("application/json")
-                .responseSchema(schema)
-                .temperature((float) temperature)
-                .build();
+        GenerateContentConfig config = config(model, schema, temperature, label);
         try {
             PipelineTimer tLlm = PipelineTimer.start("LLM stream " + model + " (promptLen=" + prompt.length() + ")");
             int[] promptOut = {0, 0};

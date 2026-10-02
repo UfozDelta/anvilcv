@@ -125,6 +125,10 @@ public class Application {
     @Column(name = "recruiter_stale", nullable = false)
     private boolean recruiterStale = false;
 
+    /** Post-create recruiter pass still running. Not persisted - see ApplicationService.scoring. */
+    @Transient
+    private boolean recruiterPending;
+
     /** Pages in the compiled PDF, from tectonic's log. Null when unknown. */
     @Column(name = "page_count")
     private Integer pageCount;
@@ -229,6 +233,8 @@ public class Application {
     public void setRecruiterWeakestBulletId(UUID id) { this.recruiterWeakestBulletId = id; }
     public boolean isRecruiterStale() { return recruiterStale; }
     public void setRecruiterStale(boolean recruiterStale) { this.recruiterStale = recruiterStale; }
+    public boolean isRecruiterPending() { return recruiterPending; }
+    public void setRecruiterPending(boolean recruiterPending) { this.recruiterPending = recruiterPending; }
     public Integer getPageCount() { return pageCount; }
     public void setPageCount(Integer pageCount) { this.pageCount = pageCount; }
     public byte[] getTexBlob() { return texBlob; }

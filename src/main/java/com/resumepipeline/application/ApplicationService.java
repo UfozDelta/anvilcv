@@ -46,6 +46,9 @@ public class ApplicationService {
     private final LlmUsageService llmUsageService;
     private final SkillRowMeasurer skillRowMeasurer;
     private final ObjectMapper mapper = new ObjectMapper();
+    // Applications whose post-create recruiter pass is still running. In memory on purpose: a
+    // restart mid-pass just leaves the page unscored, which the Re-score button already covers.
+    private final Set<UUID> scoring = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private static final Map<String, String> SKILL_LABELS = Map.of(
             "languages",  "Languages",
@@ -80,8 +83,26 @@ public class ApplicationService {
     }
 
     public Application get(UUID userId, UUID id) {
-        return repo.findByUserIdAndId(userId, id)
+        Application a = repo.findByUserIdAndId(userId, id)
                 .orElseThrow(() -> new IllegalArgumentException("Application not found: " + id));
+        a.setRecruiterPending(scoring.contains(id));
+        return a;
+    }
+
+    /** Runs the recruiter pass on a just-created application without holding back its PDF. */
+    private void scoreInBackground(UUID userId, Application saved) {
+        UUID id = saved.getId();
+        scoring.add(id);
+        saved.setRecruiterPending(true);
+        CompletableFuture.runAsync(Mdc.wrap(() -> {
+            try {
+                rescore(userId, id, ProgressLog.noOp());
+            } catch (RuntimeException e) {
+                log.warn("Background recruiter pass failed for {}: {}", shortId(id), e.getMessage());
+            } finally {
+                scoring.remove(id);
+            }
+        }), PARALLEL_EXECUTOR);
     }
 
     public void delete(UUID userId, UUID id) {
@@ -108,10 +129,13 @@ public class ApplicationService {
         if ((jdText == null || jdText.isBlank()) && (jdUrl == null || jdUrl.isBlank())) {
             throw new IllegalArgumentException("Provide jdText or jdUrl");
         }
+        boolean structuredJd = false;
         if (jdUrl != null && !jdUrl.isBlank() && (jdText == null || jdText.isBlank())) {
             progress.emit("Fetching JD from URL: " + jdUrl);
             PipelineTimer tFetch = PipelineTimer.start("JD fetch");
-            jdText = jdFetcher.fetch(jdUrl);
+            JdFetcher.Fetched fetched = jdFetcher.fetch(jdUrl);
+            jdText = fetched.text();
+            structuredJd = fetched.structured();
             tFetch.stop(jdText.length() + " chars");
             progress.emit("Fetched JD (" + jdText.length() + " chars)");
         }
@@ -123,7 +147,12 @@ public class ApplicationService {
 
         // Stage: clean JD — strips boilerplate and extracts role/company/keywords
         PipelineTimer tClean = PipelineTimer.start("cleanJd");
-        LlmClient.JdCleanResult clean = llm.cleanJd(jdText, progress, tokens);
+        // A JSON-LD posting is already just the JD, so skip having the model re-write it out —
+        // only company/role/keywords are extracted. Scraped page text and pastes still get
+        // the full clean, since they can carry navigation and boilerplate.
+        LlmClient.JdCleanResult clean = structuredJd
+                ? llm.extractJd(jdText, progress, tokens)
+                : llm.cleanJd(jdText, progress, tokens);
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
@@ -268,31 +297,6 @@ public class ApplicationService {
                 + " db=" + filledSkills.get("databases").size()
                 + " devops=" + filledSkills.get("devops").size());
 
-        // Recruiter pass grades the page, so it needs exactly what lands on it — the post-select
-        // bullets, the filled skills and the selected courses, never the bank or the rank order.
-        // Fired here so its latency hides inside the LaTeX render + tectonic compile.
-        List<LlmClient.RenderedBullet> renderedBullets = selected.stream()
-                .map(b -> new LlmClient.RenderedBullet(
-                        b.getId().toString(), b.getText(),
-                        projectById.containsKey(b.getProjectId()) ? projectById.get(b.getProjectId()).getName() : ""))
-                .toList();
-        // orTimeout: callJsonWithRetry retries over a 120s provider timeout, so an unbounded
-        // join can add minutes AFTER the PDF is already compiled — the user would sit on a
-        // finished resume waiting for a badge. A timeout is treated as any other failure.
-        //
-        // 90s, not the 15s this shipped with. This is the largest generation in the pipeline —
-        // a verdict plus a written reason for every rendered bullet — and 15s killed it on
-        // every single run: observed 42.6s to a valid 4474-char response, against 48.2s for
-        // rank and 12.2s for fit on the same provider. Every application ever generated had a
-        // null recruiterScore because of it. Note orTimeout abandons the future without
-        // cancelling the HTTP call, so an over-tight bound still pays for the tokens and then
-        // discards the answer — the cap has to clear real p99 latency, not merely exist.
-        CompletableFuture<LlmClient.RecruiterResult> recruiterFuture = CompletableFuture.supplyAsync(Mdc.wrap(() ->
-                llm.reviewResume(new LlmClient.RecruiterRequest(clean.cleanJd(), clean.company(), clean.role(),
-                        clean.keywords(), roleEmphasis, renderedBullets, filledSkills, selectedCourses),
-                        progress, tokens)), PARALLEL_EXECUTOR)
-                .orTimeout(90, java.util.concurrent.TimeUnit.SECONDS);
-
         // ATS report, narrowed to what actually lands on the page.
         //
         // The LLM is asked for keywords appearing in "the top 8 bullets", but the rendered
@@ -347,19 +351,6 @@ public class ApplicationService {
         }
         tPdf.stop("success=" + r.success());
 
-        // Same policy as the fit score: a missing scorecard is a nuisance, a lost resume is a
-        // bug — so a failed, malformed or timed-out recruiter pass never fails the pipeline.
-        // The null check matters as much as the catch: a mocked/unstubbed client returns null
-        // from join() without ever throwing.
-        LlmClient.RecruiterResult recruiter = null;
-        try {
-            recruiter = recruiterFuture.join();
-        } catch (Exception e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            log.warn("Recruiter pass failed: {}", cause.getMessage());
-            progress.emit("Recruiter pass unavailable: " + cause.getMessage());
-        }
-
         // Estimate and truth side by side, so BulletTextRules.estimatedLines can be
         // recalibrated later against real compiles instead of guesses.
         log.info("Page budget: estimated {} lines (max {}), tectonic reported {} page(s)",
@@ -406,7 +397,6 @@ public class ApplicationService {
                 a.setFitDimensions("{}");
             }
         }
-        applyRecruiter(a, recruiter);
         a.setPageCount(r.success() ? r.pageCount() : null);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
@@ -451,6 +441,11 @@ public class ApplicationService {
         Application saved = repo.save(a);
         outcomeHistoryRepo.save(new OutcomeHistory(saved.getId(), saved.getOutcome()));
         llmUsageService.record(userId, "application_pipeline", tokens, saved.getId(), null);
+        // The recruiter pass (~40s, observed 42.6s) outlasts tectonic, so joining it held a
+        // finished PDF back. It now runs after the page is returned; the UI polls on
+        // recruiterPending until the score lands.
+        scoreInBackground(userId, saved);
+        progress.emit("Recruiter pass: scoring in the background.");
         log.info("APP_CREATE app={} jd_chars={} bullets={} cover={} ms={}",
                 shortId(saved.getId()), jdText.length(), selected.size(),
                 includeCoverLetter, a.getPipelineDurationMs());
@@ -571,6 +566,11 @@ public class ApplicationService {
         }
         tRescore.stop("scored=" + (recruiter != null));
 
+        // Reload: the pass takes ~40s and now also runs unprompted right after create, so the
+        // user may have edited the application meanwhile; saving the copy loaded above would
+        // trip @Version. A selection changed under us means the score describes an old page.
+        a = get(userId, applicationId);
+        if (!Arrays.equals(a.getSelectedBulletIds(), selectedIds)) recruiter = null;
         applyRecruiter(a, recruiter);
         Application saved = repo.save(a);
         llmUsageService.record(userId, "application_rescore", tokens, saved.getId(), null);

@@ -20,6 +20,7 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -127,6 +128,7 @@ class ApplicationServiceTest {
         UUID user;
         UUID proj;
         Bullet bullet;
+        volatile Application created;
 
         @BeforeEach
         void setup() {
@@ -135,7 +137,7 @@ class ApplicationServiceTest {
             bullet = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"backend"});
 
             Project project = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
-            when(llm.cleanJd(any(), any(), any()))
+            lenient().when(llm.cleanJd(any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java")));
             when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(bullet));
             when(projectRepo.findAllByUserIdOrderByCreatedAtDesc(user)).thenReturn(List.of(project));
@@ -148,12 +150,14 @@ class ApplicationServiceTest {
                     List.of("java"), List.of(), List.of(), Map.of()));
             when(llm.scoreFit(any(), any(), any())).thenReturn(new LlmClient.FitResult(
                     80, 70, 75, "Strong Fit", List.of("owns the stack"), List.of("no Terraform")));
-            when(llm.reviewResume(any(), any(), any())).thenReturn(new LlmClient.RecruiterResult(
-                    80, 60, 70, "Solid", bullet.getId().toString(), "Kubernetes at scale",
-                    List.of("no metrics", "no ownership"),
-                    List.of(new LlmClient.BulletVerdict(bullet.getId().toString(), "weak", "vague"))));
             when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\documentclass{article}");
-            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            // A real id: create hands it to the background recruiter pass.
+            when(repo.save(any())).thenAnswer(inv -> {
+                Application a = inv.getArgument(0);
+                if (a.getId() == null) ReflectionTestUtils.setField(a, "id", UUID.randomUUID());
+                created = a;   // set here, not from create()'s return: the background pass may look it up first
+                return a;
+            });
         }
 
         @Test
@@ -196,41 +200,34 @@ class ApplicationServiceTest {
         }
 
         @Test
-        void recruiterScorecardPersistsOnHappyPath() {
+        void createReturnsBeforeTheRecruiterPassThenScoresInBackground() throws Exception {
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(
                     new byte[]{1}, "Output written on in.pdf (1 page, 4096 bytes)."));
+            when(repo.findByUserIdAndId(eq(user), any())).thenAnswer(inv -> Optional.ofNullable(created));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(bullet));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(TestFixtures.project(proj, Project.Kind.PROJECT, "P")));
+            java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+            when(llm.reviewResume(any(), any(), any())).thenAnswer(inv -> {
+                release.await();
+                return new LlmClient.RecruiterResult(80, 60, 70, "Solid", bullet.getId().toString(),
+                        "Kubernetes at scale", List.of("no metrics"),
+                        List.of(new LlmClient.BulletVerdict(bullet.getId().toString(), "weak", "vague")));
+            });
 
-            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+            created = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
 
-            assertEquals(70, out.getRecruiterScore());
-            assertEquals("Solid", out.getRecruiterVerdict());
-            assertTrue(out.getRecruiterDimensions().contains("\"evidenceStrength\":80"));
-            assertTrue(out.getRecruiterBulletVerdicts().contains("\"verdict\":\"weak\""));
-            assertFalse(out.isRecruiterStale());
-            assertEquals(1, out.getPageCount());
-            assertArrayEquals(new String[]{"no metrics", "no ownership"}, out.getRecruiterWeaknesses());
-            assertEquals("Kubernetes at scale", out.getRecruiterThinnestRequirement());
-            assertEquals(bullet.getId(), out.getRecruiterWeakestBulletId());
-        }
+            // The PDF is back while the recruiter pass is still blocked.
+            assertArrayEquals(new byte[]{1}, created.getPdfBlob());
+            assertEquals(1, created.getPageCount());
+            assertTrue(created.isRecruiterPending());
+            assertNull(created.getRecruiterScore());
+            assertFalse(created.isRecruiterStale());
 
-        @Test
-        void recruiterFailureDoesNotFailThePipeline() {
-            when(llm.reviewResume(any(), any(), any())).thenThrow(new RuntimeException("recruiter model down"));
-            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{4, 5}, "log"));
-
-            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
-
-            assertArrayEquals(new byte[]{4, 5}, out.getPdfBlob());
-            assertNull(out.getRecruiterScore());
-            assertNull(out.getRecruiterVerdict());
-            assertEquals("{}", out.getRecruiterDimensions());
-            assertEquals("[]", out.getRecruiterBulletVerdicts());
-            assertEquals(0, out.getRecruiterWeaknesses().length);
-            assertNull(out.getRecruiterThinnestRequirement());
-            assertNull(out.getRecruiterWeakestBulletId());
-            // A failed pass is stale, not fresh. Left false, the UI drew a bare em dash with no
-            // alert tone - identical to a page that had simply never been scored.
-            assertTrue(out.isRecruiterStale());
+            release.countDown();
+            verify(repo, timeout(2000).times(2)).save(any());
+            assertEquals(70, created.getRecruiterScore());
+            assertFalse(created.isRecruiterStale());
+            assertEquals(bullet.getId(), created.getRecruiterWeakestBulletId());
         }
 
         @Test
@@ -272,12 +269,29 @@ class ApplicationServiceTest {
 
         @Test
         void fetchesJdFromUrlWhenTextAbsent() {
-            when(jdFetcher.fetch("https://jobs.example.com/1")).thenReturn("fetched jd body");
+            when(jdFetcher.fetch("https://jobs.example.com/1"))
+                    .thenReturn(new JdFetcher.Fetched("fetched jd body", false));
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
 
             service.create(user, null, "https://jobs.example.com/1", "backend", false, ProgressLog.noOp());
 
             verify(jdFetcher).fetch("https://jobs.example.com/1");
+            verify(llm).cleanJd(eq("fetched jd body"), any(), any());
+        }
+
+        @Test
+        void structuredJdSkipsTheFullCleanAndOnlyExtracts() {
+            when(jdFetcher.fetch("https://jobs.example.com/2"))
+                    .thenReturn(new JdFetcher.Fetched("json-ld jd body", true));
+            when(llm.extractJd(any(), any(), any()))
+                    .thenReturn(new LlmClient.JdCleanResult("json-ld jd body", "Acme", "Eng", List.of("java")));
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+
+            Application out = service.create(user, null, "https://jobs.example.com/2", "backend", false, ProgressLog.noOp());
+
+            verify(llm).extractJd(eq("json-ld jd body"), any(), any());
+            verify(llm, never()).cleanJd(any(), any(), any());
+            assertEquals("Acme", out.getCompany());
         }
     }
 
@@ -552,6 +566,30 @@ class ApplicationServiceTest {
 
             assertNull(out.getRecruiterScore());
             assertTrue(out.isRecruiterStale());   // button stays available
+        }
+
+        @Test
+        void rescoreLeavesThePageStaleWhenTheSelectionChangedDuringThePass() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            Application before = scoredApp(proj);
+            before.setSelectedBulletIds(new UUID[]{b.getId()});
+            Application after = scoredApp(proj);
+            after.setSelectedBulletIds(new UUID[]{UUID.randomUUID()});
+
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(before), Optional.of(after));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
+            when(llm.reviewResume(any(), any(), any())).thenReturn(new LlmClient.RecruiterResult(
+                    80, 60, 70, "Solid", null, "thin", List.of(), List.of()));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rescore(user, appId, ProgressLog.noOp());
+
+            assertSame(after, out);                // saved the fresh copy, not the stale one
+            assertNull(out.getRecruiterScore());   // score described the old page
+            assertTrue(out.isRecruiterStale());
         }
 
         @Test

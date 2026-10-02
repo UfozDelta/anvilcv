@@ -15,6 +15,13 @@ public interface LlmClient {
 
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
+    /**
+     * Like {@link #cleanJd} but the model only extracts company, role and keywords; the
+     * returned cleanJd is the (capped) input text as-is. For JD text that is already just the
+     * posting (JSON-LD), where re-writing it out costs output tokens and adds nothing.
+     */
+    JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
+
     RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens);
 
     /**

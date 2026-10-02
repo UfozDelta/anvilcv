@@ -23,7 +23,13 @@ public class JdFetcher {
             "Mozilla/5.0 (resume-pipeline; +https://github.com)";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public String fetch(String url) {
+    /**
+     * @param structured true when the text came from a schema.org JobPosting, i.e. it is
+     *                   already just the posting and needs no LLM cleanup.
+     */
+    public record Fetched(String text, boolean structured) {}
+
+    public Fetched fetch(String url) {
         long start = System.currentTimeMillis();
         try {
             Document doc = Jsoup.connect(url)
@@ -37,7 +43,8 @@ public class JdFetcher {
             // That structured description is cleaner and more reliable than scraping body text.
             String jsonLd = extractJobPostingDescription(doc);
             String result;
-            if (jsonLd != null && !jsonLd.isBlank()) {
+            boolean structured = jsonLd != null && !jsonLd.isBlank();
+            if (structured) {
                 result = jsonLd;
             } else {
                 doc.select("script, style, nav, footer, header, noscript").remove();
@@ -46,7 +53,7 @@ public class JdFetcher {
             }
             log.info("JD_FETCH host={} chars={} ms={}", safeHost(url), result.length(),
                     System.currentTimeMillis() - start);
-            return result;
+            return new Fetched(result, structured);
         } catch (IOException e) {
             throw new RuntimeException("Failed to fetch JD from " + url + ": " + e.getMessage(), e);
         }

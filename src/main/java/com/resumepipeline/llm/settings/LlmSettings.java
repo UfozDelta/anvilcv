@@ -38,6 +38,12 @@ public class LlmSettings {
     @Column(name = "openai_model_match")    private String openaiModelMatch;
     @Column(name = "openai_model_clean_jd") private String openaiModelCleanJd;
 
+    @Column(name = "openrouter_api_key_enc")    private String openrouterApiKeyEnc;
+    @Column(name = "openrouter_base_url")       private String openrouterBaseUrl;
+    @Column(name = "openrouter_model_generate") private String openrouterModelGenerate;
+    @Column(name = "openrouter_model_match")    private String openrouterModelMatch;
+    @Column(name = "openrouter_model_clean_jd") private String openrouterModelCleanJd;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
@@ -82,6 +88,17 @@ public class LlmSettings {
     public void setOpenaiModelMatch(String v) { this.openaiModelMatch = v; }
     public String getOpenaiModelCleanJd() { return openaiModelCleanJd; }
     public void setOpenaiModelCleanJd(String v) { this.openaiModelCleanJd = v; }
+
+    public String getOpenrouterApiKeyEnc() { return openrouterApiKeyEnc; }
+    public void setOpenrouterApiKeyEnc(String v) { this.openrouterApiKeyEnc = v; }
+    public String getOpenrouterBaseUrl() { return openrouterBaseUrl; }
+    public void setOpenrouterBaseUrl(String v) { this.openrouterBaseUrl = v; }
+    public String getOpenrouterModelGenerate() { return openrouterModelGenerate; }
+    public void setOpenrouterModelGenerate(String v) { this.openrouterModelGenerate = v; }
+    public String getOpenrouterModelMatch() { return openrouterModelMatch; }
+    public void setOpenrouterModelMatch(String v) { this.openrouterModelMatch = v; }
+    public String getOpenrouterModelCleanJd() { return openrouterModelCleanJd; }
+    public void setOpenrouterModelCleanJd(String v) { this.openrouterModelCleanJd = v; }
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant v) { this.updatedAt = v; }

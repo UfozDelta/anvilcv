@@ -29,6 +29,7 @@ public class LlmSettingsService {
     private final String ymlGeminiKey, ymlGeminiGenerate, ymlGeminiMatch, ymlGeminiCleanJd;
     private final String ymlOpencodeKey, ymlOpencodeBaseUrl, ymlOpencodeGenerate, ymlOpencodeMatch, ymlOpencodeCleanJd;
     private final String ymlOpenaiKey, ymlOpenaiBaseUrl, ymlOpenaiGenerate, ymlOpenaiMatch, ymlOpenaiCleanJd;
+    private final String ymlOpenrouterKey, ymlOpenrouterBaseUrl, ymlOpenrouterGenerate, ymlOpenrouterMatch, ymlOpenrouterCleanJd;
 
     public LlmSettingsService(
             LlmSettingsRepository repo,
@@ -47,7 +48,12 @@ public class LlmSettingsService {
             @Value("${llm.openai.base-url:https://api.openai.com/v1}") String ymlOpenaiBaseUrl,
             @Value("${llm.openai.model.generate:}") String ymlOpenaiGenerate,
             @Value("${llm.openai.model.match:}") String ymlOpenaiMatch,
-            @Value("${llm.openai.model.clean-jd:}") String ymlOpenaiCleanJd) {
+            @Value("${llm.openai.model.clean-jd:}") String ymlOpenaiCleanJd,
+            @Value("${llm.openrouter.api-key:}") String ymlOpenrouterKey,
+            @Value("${llm.openrouter.base-url:https://openrouter.ai/api/v1}") String ymlOpenrouterBaseUrl,
+            @Value("${llm.openrouter.model.generate:}") String ymlOpenrouterGenerate,
+            @Value("${llm.openrouter.model.match:}") String ymlOpenrouterMatch,
+            @Value("${llm.openrouter.model.clean-jd:}") String ymlOpenrouterCleanJd) {
         this.repo = repo;
         this.cipher = cipher;
         this.ymlProvider = ymlProvider;
@@ -65,6 +71,11 @@ public class LlmSettingsService {
         this.ymlOpenaiGenerate = ymlOpenaiGenerate;
         this.ymlOpenaiMatch = ymlOpenaiMatch;
         this.ymlOpenaiCleanJd = ymlOpenaiCleanJd;
+        this.ymlOpenrouterKey = ymlOpenrouterKey;
+        this.ymlOpenrouterBaseUrl = ymlOpenrouterBaseUrl;
+        this.ymlOpenrouterGenerate = ymlOpenrouterGenerate;
+        this.ymlOpenrouterMatch = ymlOpenrouterMatch;
+        this.ymlOpenrouterCleanJd = ymlOpenrouterCleanJd;
     }
 
     // --- types ---
@@ -78,14 +89,16 @@ public class LlmSettingsService {
 
     /** What the admin UI sees: models and base URLs in the clear, keys masked. */
     public record View(String provider, boolean secretKeyConfigured, Instant updatedAt, String updatedBy,
-                       ProviderView gemini, ProviderView opencode, ProviderView openai) {}
+                       ProviderView gemini, ProviderView opencode, ProviderView openai,
+                       ProviderView openrouter) {}
 
     public record ProviderView(String apiKeyMasked, boolean apiKeyFromDb, String baseUrl,
                                String generateModel, String matchModel, String cleanJdModel) {}
 
     /** PUT body. A null or blank {@code apiKey} means "keep the stored one", never "clear it". */
     public record UpdateRequest(String provider,
-                                ProviderUpdate gemini, ProviderUpdate opencode, ProviderUpdate openai) {}
+                                ProviderUpdate gemini, ProviderUpdate opencode, ProviderUpdate openai,
+                                ProviderUpdate openrouter) {}
 
     public record ProviderUpdate(String apiKey, String baseUrl,
                                  String generateModel, String matchModel, String cleanJdModel) {}
@@ -128,6 +141,12 @@ public class LlmSettingsService {
                     or(s.getOpenaiModelGenerate(), ymlOpenaiGenerate),
                     or(s.getOpenaiModelMatch(), ymlOpenaiMatch),
                     or(s.getOpenaiModelCleanJd(), ymlOpenaiCleanJd));
+            case "openrouter" -> new Resolved("openrouter",
+                    key(s.getOpenrouterApiKeyEnc(), ymlOpenrouterKey),
+                    or(s.getOpenrouterBaseUrl(), ymlOpenrouterBaseUrl),
+                    or(s.getOpenrouterModelGenerate(), ymlOpenrouterGenerate),
+                    or(s.getOpenrouterModelMatch(), ymlOpenrouterMatch),
+                    or(s.getOpenrouterModelCleanJd(), ymlOpenrouterCleanJd));
             // Gemini is the default, so an unrecognised value degrades to a working
             // provider instead of failing the whole pipeline at call time.
             default -> new Resolved("gemini",
@@ -160,7 +179,12 @@ public class LlmSettingsService {
                         or(s.getOpenaiBaseUrl(), ymlOpenaiBaseUrl),
                         or(s.getOpenaiModelGenerate(), ymlOpenaiGenerate),
                         or(s.getOpenaiModelMatch(), ymlOpenaiMatch),
-                        or(s.getOpenaiModelCleanJd(), ymlOpenaiCleanJd)));
+                        or(s.getOpenaiModelCleanJd(), ymlOpenaiCleanJd)),
+                new ProviderView(mask(s.getOpenrouterApiKeyEnc(), ymlOpenrouterKey), !blank(s.getOpenrouterApiKeyEnc()),
+                        or(s.getOpenrouterBaseUrl(), ymlOpenrouterBaseUrl),
+                        or(s.getOpenrouterModelGenerate(), ymlOpenrouterGenerate),
+                        or(s.getOpenrouterModelMatch(), ymlOpenrouterMatch),
+                        or(s.getOpenrouterModelCleanJd(), ymlOpenrouterCleanJd)));
     }
 
     // --- writes ---
@@ -193,6 +217,14 @@ public class LlmSettingsService {
             s.setOpenaiModelGenerate(trimToNull(o.generateModel()));
             s.setOpenaiModelMatch(trimToNull(o.matchModel()));
             s.setOpenaiModelCleanJd(trimToNull(o.cleanJdModel()));
+        }
+        if (req.openrouter() != null) {
+            ProviderUpdate o = req.openrouter();
+            if (!blank(o.apiKey())) s.setOpenrouterApiKeyEnc(cipher.encrypt(o.apiKey().trim()));
+            s.setOpenrouterBaseUrl(trimToNull(o.baseUrl()));
+            s.setOpenrouterModelGenerate(trimToNull(o.generateModel()));
+            s.setOpenrouterModelMatch(trimToNull(o.matchModel()));
+            s.setOpenrouterModelCleanJd(trimToNull(o.cleanJdModel()));
         }
 
         s.setUpdatedAt(Instant.now());

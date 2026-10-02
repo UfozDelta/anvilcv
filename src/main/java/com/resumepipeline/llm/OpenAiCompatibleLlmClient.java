@@ -79,6 +79,7 @@ public abstract class OpenAiCompatibleLlmClient extends BaseLlmClient {
                                 + "matching exactly this shape — no prose, no markdown fences:\n" + toJsonShape(schema)),
                 Map.of("role", "user", "content", prompt)
         ));
+        addProviderFields(body, label);
 
         progress.emit(label + ": waiting on " + model + "...");
         try {
@@ -98,9 +99,19 @@ public abstract class OpenAiCompatibleLlmClient extends BaseLlmClient {
             // plausible zero-token call.
             JsonNode usage = root.path("usage");
             if (tokens != null) {
-                tokens.add(model,
-                        usage.path("prompt_tokens").asInt(-1),
-                        usage.path("completion_tokens").asInt(-1));
+                // usage.cost is the provider's own billed USD for this call (OpenRouter
+                // reports it); preferred over pricing the tokens at our Gemini rate table.
+                JsonNode cost = usage.path("cost");
+                if (cost.isNumber()) {
+                    tokens.add(model,
+                            usage.path("prompt_tokens").asInt(-1),
+                            usage.path("completion_tokens").asInt(-1),
+                            cost.decimalValue());
+                } else {
+                    tokens.add(model,
+                            usage.path("prompt_tokens").asInt(-1),
+                            usage.path("completion_tokens").asInt(-1));
+                }
             }
             String json = extractJson(content.asText());
             log.debug("LLM {} raw: {}", model, resp);
@@ -113,6 +124,9 @@ public abstract class OpenAiCompatibleLlmClient extends BaseLlmClient {
             throw new RuntimeException("LLM call failed: " + e.getMessage(), e);
         }
     }
+
+    /** Provider-specific request fields, added after the standard body. No-op by default. */
+    protected void addProviderFields(Map<String, Object> body, String label) {}
 
     /** Strip markdown fences and surrounding prose so the reply parses as JSON. */
     private static String extractJson(String content) {
