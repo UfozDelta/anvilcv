@@ -113,4 +113,26 @@ class JobFeedServiceTest {
         assertThat(service.savedAmong(UUID.randomUUID(), List.of())).isEmpty();
         verify(repo, never()).savedIdsAmong(any(), any());
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void countsAreZeroSavedForGuests() {
+        when(repo.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(3L, 4L);
+
+        JobFeedService.JobCounts c = service.counts("intern", null, null);
+
+        assertThat(c).isEqualTo(new JobFeedService.JobCounts(3, 4, 0));
+        verify(repo, times(2)).count(any(org.springframework.data.jpa.domain.Specification.class));
+        verify(repo, never()).savedIds(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void countsIncludeSavedForSignedInUser() {
+        UUID user = UUID.randomUUID();
+        when(repo.savedIds(user)).thenReturn(List.of(UUID.randomUUID()));
+        when(repo.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(3L, 4L, 2L);
+
+        assertThat(service.counts(null, null, user)).isEqualTo(new JobFeedService.JobCounts(3, 4, 2));
+    }
 }

@@ -88,6 +88,22 @@ public class JobFeedService {
 
     /** {@code savedBy} non-null limits the list to postings that user saved. */
     public Page<JobPosting> list(String source, String q, String location, UUID savedBy, int page, int size) {
+        int clamped = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        return repo.findAll(spec(source, q, location, savedBy),
+                PageRequest.of(Math.max(0, page), clamped, Sort.by(Sort.Direction.DESC, "receivedAt")));
+    }
+
+    /** Per-source and saved totals under the same q/location filters as {@link #list}; saved is 0 for guests. */
+    public JobCounts counts(String q, String location, UUID userId) {
+        return new JobCounts(
+                repo.count(spec("linkedin", q, location, null)),
+                repo.count(spec("indeed", q, location, null)),
+                userId == null ? 0 : repo.count(spec(null, q, location, userId)));
+    }
+
+    public record JobCounts(long linkedin, long indeed, long saved) {}
+
+    private Specification<JobPosting> spec(String source, String q, String location, UUID savedBy) {
         Specification<JobPosting> spec = (root, query, cb) -> cb.conjunction();
         if (savedBy != null) {
             List<UUID> ids = repo.savedIds(savedBy);
@@ -107,8 +123,7 @@ public class JobFeedService {
             String like = "%" + location.toLowerCase(Locale.ROOT) + "%";
             spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("location")), like));
         }
-        int clamped = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
-        return repo.findAll(spec, PageRequest.of(Math.max(0, page), clamped, Sort.by(Sort.Direction.DESC, "receivedAt")));
+        return spec;
     }
 
     /** Which of {@code jobIds} the user has saved. */

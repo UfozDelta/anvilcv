@@ -46,7 +46,7 @@ public class JobFeedController {
         }
     }
 
-    public record JobListResponse(List<JobDto> jobs, long total) {}
+    public record JobListResponse(List<JobDto> jobs, long total, JobFeedService.JobCounts counts) {}
 
     /** Public; a signed-in caller also gets their saved flags and may filter on them. */
     @GetMapping("/public/jobs")
@@ -59,13 +59,14 @@ public class JobFeedController {
                                 Authentication auth) {
         // permitAll still runs the session, so a logged-in user arrives with their principal.
         UUID userId = auth != null && auth.getPrincipal() instanceof AppUserPrincipal principal ? principal.getUserId() : null;
-        if (saved && userId == null) return new JobListResponse(List.of(), 0);
+        JobFeedService.JobCounts counts = service.counts(q, location, userId);
+        if (saved && userId == null) return new JobListResponse(List.of(), 0, counts);
 
         Page<JobPosting> p = service.list(source, q, location, saved ? userId : null, page, size);
         Set<UUID> savedIds = userId == null ? Set.of()
                 : service.savedAmong(userId, p.map(JobPosting::getId).getContent());
         return new JobListResponse(p.map(j -> JobDto.of(j, savedIds.contains(j.getId()))).getContent(),
-                p.getTotalElements());
+                p.getTotalElements(), counts);
     }
 
     @PutMapping("/jobs/{id}/save")
