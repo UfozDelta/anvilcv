@@ -16,6 +16,7 @@ import static com.resumepipeline.api.WebTestSecurity.admin;
 import static com.resumepipeline.api.WebTestSecurity.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -52,6 +53,12 @@ class SecurityRulesTest {
                 .andExpect(status().isNotFound());
         mvc.perform(post("/api/public/jobs/webhook"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void savingAJobNeedsLogin() throws Exception {
+        mvc.perform(put("/api/jobs/" + UUID.randomUUID() + "/save"))
+                .andExpect(status().isUnauthorized());
     }
 
     // /api/admin/** used to be .authenticated(), so anyone who registered could read

@@ -2,25 +2,29 @@ package com.resumepipeline.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.resumepipeline.auth.AppUserPrincipal;
+import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.jobs.JobFeedService;
 import com.resumepipeline.jobs.JobPosting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * Public intern-job feed. The external Jobs API pushes {@code job.new} events to the
- * webhook (HMAC-signed); anyone can browse the list, and tailoring one needs a login.
+ * webhook (HMAC-signed); anyone can browse the list, and tailoring or saving one needs a login.
  */
 @RestController
-@RequestMapping("/api/public/jobs")
+@RequestMapping("/api")
 public class JobFeedController {
 
     private static final Logger log = LoggerFactory.getLogger(JobFeedController.class);
@@ -34,27 +38,49 @@ public class JobFeedController {
 
     public record JobDto(UUID id, String source, String title, String company, String location,
                          String posted, String spotted, String url, String companyUrl, String role,
-                         List<String> stack, Instant receivedAt) {
-        static JobDto of(JobPosting j) {
+                         List<String> stack, Instant receivedAt, boolean saved) {
+        static JobDto of(JobPosting j, boolean saved) {
             return new JobDto(j.getId(), j.getSource(), j.getTitle(), j.getCompany(), j.getLocation(),
                     j.getPosted(), j.getSpotted(), j.getUrl(), j.getCompanyUrl(), j.getRole(),
-                    List.of(j.getStack()), j.getReceivedAt());
+                    List.of(j.getStack()), j.getReceivedAt(), saved);
         }
     }
 
     public record JobListResponse(List<JobDto> jobs, long total) {}
 
-    @GetMapping
+    /** Public; a signed-in caller also gets their saved flags and may filter on them. */
+    @GetMapping("/public/jobs")
     public JobListResponse list(@RequestParam(required = false) String source,
                                 @RequestParam(required = false) String q,
                                 @RequestParam(required = false) String location,
+                                @RequestParam(defaultValue = "false") boolean saved,
                                 @RequestParam(defaultValue = "0") int page,
-                                @RequestParam(defaultValue = "50") int size) {
-        Page<JobPosting> p = service.list(source, q, location, page, size);
-        return new JobListResponse(p.map(JobDto::of).getContent(), p.getTotalElements());
+                                @RequestParam(defaultValue = "50") int size,
+                                Authentication auth) {
+        // permitAll still runs the session, so a logged-in user arrives with their principal.
+        UUID userId = auth != null && auth.getPrincipal() instanceof AppUserPrincipal principal ? principal.getUserId() : null;
+        if (saved && userId == null) return new JobListResponse(List.of(), 0);
+
+        Page<JobPosting> p = service.list(source, q, location, saved ? userId : null, page, size);
+        Set<UUID> savedIds = userId == null ? Set.of()
+                : service.savedAmong(userId, p.map(JobPosting::getId).getContent());
+        return new JobListResponse(p.map(j -> JobDto.of(j, savedIds.contains(j.getId()))).getContent(),
+                p.getTotalElements());
     }
 
-    @PostMapping("/webhook")
+    @PutMapping("/jobs/{id}/save")
+    public ResponseEntity<Void> save(@PathVariable UUID id, Authentication auth) {
+        service.save(AuthUtils.userId(auth), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/jobs/{id}/save")
+    public ResponseEntity<Void> unsave(@PathVariable UUID id, Authentication auth) {
+        service.unsave(AuthUtils.userId(auth), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/public/jobs/webhook")
     public ResponseEntity<Void> webhook(@RequestBody byte[] body,
                                         @RequestHeader(value = "X-Jobs-Signature", required = false) String signature)
             throws IOException {

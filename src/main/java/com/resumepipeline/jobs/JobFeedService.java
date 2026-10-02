@@ -7,16 +7,22 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * The shared job feed: verifies and stores postings pushed by the external Jobs API
@@ -80,8 +86,13 @@ public class JobFeedService {
         }
     }
 
-    public Page<JobPosting> list(String source, String q, String location, int page, int size) {
+    /** {@code savedBy} non-null limits the list to postings that user saved. */
+    public Page<JobPosting> list(String source, String q, String location, UUID savedBy, int page, int size) {
         Specification<JobPosting> spec = (root, query, cb) -> cb.conjunction();
+        if (savedBy != null) {
+            List<UUID> ids = repo.savedIds(savedBy);
+            spec = spec.and((root, query, cb) -> ids.isEmpty() ? cb.disjunction() : root.get("id").in(ids));
+        }
         if (source != null && !source.isBlank()) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("source"), source));
         }
@@ -98,6 +109,21 @@ public class JobFeedService {
         }
         int clamped = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         return repo.findAll(spec, PageRequest.of(Math.max(0, page), clamped, Sort.by(Sort.Direction.DESC, "receivedAt")));
+    }
+
+    /** Which of {@code jobIds} the user has saved. */
+    public Set<UUID> savedAmong(UUID userId, Collection<UUID> jobIds) {
+        if (jobIds.isEmpty()) return Set.of();
+        return new HashSet<>(repo.savedIdsAmong(userId, jobIds));
+    }
+
+    public void save(UUID userId, UUID jobId) {
+        if (!repo.existsById(jobId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job posting not found: " + jobId);
+        repo.save(userId, jobId);
+    }
+
+    public void unsave(UUID userId, UUID jobId) {
+        repo.unsave(userId, jobId);
     }
 
     private static String text(JsonNode node, String field) {

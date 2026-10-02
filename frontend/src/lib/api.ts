@@ -197,6 +197,8 @@ export interface JobPosting {
   role: string | null;
   stack: string[];
   receivedAt: string;
+  /** Always false for guests. */
+  saved: boolean;
 }
 
 export interface JobList { jobs: JobPosting[]; total: number }

@@ -5,11 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -87,5 +90,27 @@ class JobFeedServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.ingest(json("{\"source\":\"indeed\",\"url\":\"https://indeed.com/x\"}")))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void savingUnknownPostingIs404() {
+        UUID user = UUID.randomUUID(), job = UUID.randomUUID();
+        when(repo.existsById(job)).thenReturn(false);
+        assertThatThrownBy(() -> service.save(user, job)).isInstanceOf(ResponseStatusException.class);
+        verify(repo, never()).save(user, job);
+    }
+
+    @Test
+    void savesExistingPosting() {
+        UUID user = UUID.randomUUID(), job = UUID.randomUUID();
+        when(repo.existsById(job)).thenReturn(true);
+        service.save(user, job);
+        verify(repo).save(user, job);
+    }
+
+    @Test
+    void savedAmongSkipsQueryForEmptyPage() {
+        assertThat(service.savedAmong(UUID.randomUUID(), List.of())).isEmpty();
+        verify(repo, never()).savedIdsAmong(any(), any());
     }
 }

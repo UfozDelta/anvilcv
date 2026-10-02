@@ -13,10 +13,13 @@ const SOURCES = [
   { key: 'linkedin', label: 'LinkedIn' },
   { key: 'indeed', label: 'Indeed' },
 ];
+/** Not a source: a filter value meaning "my saved postings". Signed-in only. */
+const SAVED = 'saved';
 
 function query(source: string, q: string, location: string, page: number) {
   const p = new URLSearchParams({ page: String(page), size: String(PAGE_SIZE) });
-  if (source) p.set('source', source);
+  if (source === SAVED) p.set('saved', 'true');
+  else if (source) p.set('source', source);
   if (q.trim()) p.set('q', q.trim());
   if (location.trim()) p.set('location', location.trim());
   return `/api/public/jobs?${p}`;
@@ -92,6 +95,20 @@ export function Jobs() {
     else nav('/login', { state: { from: target } });
   }
 
+  async function toggleSave(j: JobPosting) {
+    if (!username) { nav('/login', { state: { from: '/jobs' } }); return; }
+    const saved = !j.saved;
+    const set = (v: boolean) => setJobs(js => js.map(x => (x.id === j.id ? { ...x, saved: v } : x)));
+    set(saved);
+    try {
+      if (saved) await api.put(`/api/jobs/${j.id}/save`);
+      else await api.del(`/api/jobs/${j.id}/save`);
+    } catch (e) {
+      set(!saved);
+      setErr(`Could not ${saved ? 'save' : 'unsave'}: ${(e as Error).message}`);
+    }
+  }
+
   return (
     <div className="shell">
       <Section num="00" title="Intern jobs" count={total} />
@@ -115,6 +132,9 @@ export function Jobs() {
               {s.label}
             </button>
           ))}
+          {username && (
+            <button className={source === SAVED ? 'is-on' : ''} onClick={() => setSource(SAVED)}>Saved</button>
+          )}
         </div>
       </div>
 
@@ -146,6 +166,9 @@ export function Jobs() {
               </div>
             </div>
             <div className="jobrow__actions">
+              <button className="btn btn--sm btn--ghost" onClick={() => toggleSave(j)} aria-pressed={j.saved}>
+                {j.saved ? '★ SAVED' : '☆ SAVE'}
+              </button>
               <a className="btn btn--sm btn--ghost" href={j.url} target="_blank" rel="noopener noreferrer">POSTING ↗</a>
               <button className="btn btn--sm btn--acid" onClick={() => tailor(j)}>TAILOR →</button>
             </div>
