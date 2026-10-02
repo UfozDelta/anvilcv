@@ -24,6 +24,63 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    iso: '2026-10-02',
+    title: 'Post-login home + app nav',
+    status: 'prototype',
+    summary: (
+      <>
+        After login you land on Projects, which opened on a bare search box with its actions
+        below the list, and an app nav that scrolled away, numbered nouns and offered log-out
+        twice. Same method as the landing: skills audit, then three directions each.
+      </>
+    ),
+    protos: [
+      { to: '/lab/app', name: 'Projects home', line: 'Ledger / Bench / Forge behind a picker (E toggles the empty state).' },
+      { to: '/lab/nav', name: 'App nav', line: 'Strip / Two-zone / Dock — sticky bar, one account menu, phone sheet or tab bar.' },
+      { to: '/lab/applications', name: 'Applications home', line: 'Ledger rows with fit/page bars and outcome tabs (E toggles the empty state).' },
+      { to: '/lab/experiences', name: 'Experiences home', line: 'Ledger rows: role, bullets bar, dates and tenure (E toggles the empty state).' },
+      { to: '/lab/new-application', name: 'New application', line: 'Job text + URL, emphasis chips and one progress line that runs on submit (R resets).' },
+      { to: '/lab/jobs', name: 'Jobs feed', line: 'Source tabs (All / LinkedIn / Indeed / Saved), one-line desc, save, View post and Tailor (E toggles the empty state).' },
+      { to: '/lab/profile', name: 'Profile', line: 'Ruled sections, label-left fields, expandable education, save bar on change (E toggles blank).' },
+      { to: '/lab/settings', name: 'Settings', line: 'Ruled sections, range sliders, chip groups, GitHub connect, save bar on change.' },
+      { to: '/lab/flow', name: 'Outcome flow', line: 'Stage funnel rows with bars, then the Sankey (E toggles the empty state).' },
+    ],
+    fixes: [
+      'Title, live count and one primary action lead the page; the empty state offers two ways in',
+      'Optimistic delete with Undo instead of a fake 450ms wait and a full-list reload',
+      'Menus close on outside tap and Escape, scale from their trigger; hover gated to fine pointers',
+    ],
+  },
+  {
+    iso: '2026-10-01',
+    title: 'Landing hero + pricing',
+    status: 'shipped',
+    summary: (
+      <>
+        The hero kept the Anvil // CV name but showed a static terminal; the product's best
+        visual sat below the fold. Three hero directions, all with a live demo, plus a first
+        pricing page. Shipped v3: Assembly hero, Spotlight "How it works", rerank demo, live job
+        feed, and pricing at a hidden ~$0.17/PDF base with Pro discounted (no billing wired yet).
+      </>
+    ),
+    shipped: [
+      { to: '/', label: 'Landing' },
+      { to: '/pricing', label: 'Pricing' },
+    ],
+    protos: [
+      { to: '/lab/landing-v3', name: 'Landing v3', line: 'v1 page + text-light Spotlight "How it works".' },
+      { to: '/lab/how', name: 'How it works', line: 'Spotlight / Caption / Tour — fixing "which side do I read?" in the pinned steps.' },
+      { to: '/lab/landing', name: 'Full landing page', line: 'Assembly hero + rerank demo, scroll-lit steps, ChatGPT-vs-Anvil, jobs teaser, pricing nudge.' },
+      { to: '/lab/landing-v2', name: 'Full landing page v2', line: 'Hero page pinned while the steps scroll past it; bank-to-page job switcher with ATS match; leaner flow.' },
+      { to: '/lab/hero', name: 'Landing hero', line: 'Assembly / Rerank / Broadsheet behind a picker (1–3, ←/→, R).' },
+    ],
+    fixes: [
+      'Live avg-seconds stat moves into the hero instead of the proof section',
+      'Second CTA to the public /jobs feed: a path in that needs no signup',
+      'Custom ease-out curves, scale(0.97) press feedback, hover gated to fine pointers',
+    ],
+  },
+  {
     iso: '2026-09-12',
     title: 'Masthead nav rework',
     status: 'prototype',
