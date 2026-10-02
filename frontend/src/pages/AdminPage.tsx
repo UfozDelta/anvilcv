@@ -5,7 +5,7 @@ import { formStyles as styles } from '../components/form/styles';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 
-type ProviderId = 'gemini' | 'opencode' | 'openai';
+type ProviderId = 'gemini' | 'opencode' | 'openai' | 'openrouter';
 
 interface ProviderView {
   apiKeyMasked: string | null;
@@ -24,6 +24,7 @@ interface SettingsView {
   gemini: ProviderView;
   opencode: ProviderView;
   openai: ProviderView;
+  openrouter: ProviderView;
 }
 
 interface MeasuredBullet {
@@ -55,7 +56,8 @@ interface TestResult {
 const PROVIDERS: { id: ProviderId; label: string; hasBaseUrl: boolean; hint: string }[] = [
   { id: 'gemini',   label: 'Gemini',       hasBaseUrl: false, hint: 'Google AI Studio key.' },
   { id: 'opencode', label: 'OpenCode Zen', hasBaseUrl: true,  hint: 'Model ids: GET /zen/v1/models — the API wins over the docs page.' },
-  { id: 'openai',   label: 'OpenAI-compatible', hasBaseUrl: true, hint: 'Also OpenRouter, Ollama, LM Studio — anything with /chat/completions.' },
+  { id: 'openai',   label: 'OpenAI-compatible', hasBaseUrl: true, hint: 'Ollama, LM Studio — anything with /chat/completions.' },
+  { id: 'openrouter', label: 'OpenRouter', hasBaseUrl: true, hint: 'Model ids are vendor/model slugs, e.g. deepseek/deepseek-v4.1-flash. Set US-only hosts in your OpenRouter account.' },
 ];
 
 /** Draft state per provider. apiKey is always blank on load: the server never sends one back. */
@@ -71,7 +73,7 @@ function toDraft(v: SettingsView): Draft {
     matchModel: p.matchModel ?? '',
     cleanJdModel: p.cleanJdModel ?? '',
   });
-  return { gemini: one(v.gemini), opencode: one(v.opencode), openai: one(v.openai) };
+  return { gemini: one(v.gemini), opencode: one(v.opencode), openai: one(v.openai), openrouter: one(v.openrouter) };
 }
 
 const mono = { fontFamily: 'var(--mono)' };
@@ -156,6 +158,7 @@ export function AdminPage() {
         gemini: draft.gemini,
         opencode: draft.opencode,
         openai: draft.openai,
+        openrouter: draft.openrouter,
       };
       load(await api.put<SettingsView>('/api/admin/llm', body));
       setSavedAt(new Date());
