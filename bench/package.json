@@ -1,0 +1,14 @@
+{
+  "name": "anvilcv-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "playwright install chromium",
+    "build": "node workday/build.ts",
+    "wd": "node --env-file-if-exists=.env workday/run.ts",
+    "score": "node workday/score.ts"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}

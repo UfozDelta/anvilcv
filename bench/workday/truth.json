@@ -1,0 +1,76 @@
+{
+  "name": { "first": "Jordan", "last": "Reyes" },
+  "email": "jordan.reyes.bench@example.com",
+  "phone": "(617) 555-0142",
+  "linkedin": "jordanreyes-bench",
+  "github": "jordanreyes-bench",
+  "education": [
+    {
+      "school": "Northeastern University",
+      "location": "Boston, MA",
+      "degree": "Bachelor of Science in Computer Science",
+      "degreeKeyword": "bachelor",
+      "field": "Computer Science",
+      "start": "2019-09",
+      "end": "2023-05",
+      "coursework": "Algorithms, Distributed Systems, Database Design, Operating Systems"
+    },
+    {
+      "school": "Bunker Hill Community College",
+      "location": "Boston, MA",
+      "degree": "Associate of Science in Mathematics",
+      "degreeKeyword": "associate",
+      "field": "Mathematics",
+      "start": "2017-09",
+      "end": "2019-05",
+      "coursework": ""
+    }
+  ],
+  "experience": [
+    {
+      "title": "Senior Backend Engineer",
+      "company": "Acme Robotics",
+      "location": "Boston, MA",
+      "start": "2023-06",
+      "end": "present",
+      "bullets": [
+        "Cut p99 checkout latency from 1.8s to 240ms by batching the read path.",
+        "Moved 64,000 nightly listings onto Postgres partitions, halving index bloat."
+      ]
+    },
+    {
+      "title": "Backend Engineer",
+      "company": "Tessellate Data",
+      "location": "Remote",
+      "start": "2021-07",
+      "end": "2023-06",
+      "bullets": [
+        "Built the ingest pipeline now carrying 12M events per day across six regions.",
+        "Replaced a cron-driven batch job with a Kafka consumer, cutting data lag from hours to seconds."
+      ]
+    },
+    {
+      "title": "Software Engineering Intern",
+      "company": "Lumen Health",
+      "location": "New York, NY",
+      "start": "2020-05",
+      "end": "2020-08",
+      "bullets": [
+        "Shipped a patient intake form in React used by 30 clinics.",
+        "Wrote integration tests that caught two HIPAA logging leaks before release."
+      ]
+    }
+  ],
+  "project": {
+    "name": "AnvilCV",
+    "tags": "Java, Spring Boot, React",
+    "bullets": ["Full-stack tool that tailors LaTeX resumes to job descriptions."]
+  },
+  "skills": {
+    "languages": "Java, Python, TypeScript, SQL",
+    "frameworks": "Spring Boot, React, FastAPI",
+    "databases": "PostgreSQL, Redis, pgvector",
+    "devops": "Docker, Kubernetes, GitHub Actions",
+    "interests": "Distributed systems, developer tooling"
+  }
+}
