@@ -15,7 +15,8 @@ public class ProjectDtos {
             @NotBlank String name,
             @NotBlank String description,
             String githubUrl,
-            String title, String company, String location, String dates
+            String title, String company, String location, String dates,
+            Boolean current
     ) {}
 
     public record UpdateProjectRequest(
@@ -31,7 +32,8 @@ public class ProjectDtos {
             String technicalDecisions,
             String userImpact,
             String securityPosture,
-            String title, String company, String location, String dates
+            String title, String company, String location, String dates,
+            Boolean current
     ) {}
 
     public record ProjectResponse(
@@ -54,9 +56,17 @@ public class ProjectDtos {
             String userImpact,
             String securityPosture,
             String title, String company, String location, String dates,
-            Instant createdAt
+            Instant createdAt,
+            Instant updatedAt,
+            long bulletCount,
+            boolean current
     ) {
+        /** For callers that don't have a bullet count at hand (a just-created project has none). */
         public static ProjectResponse from(Project p) {
+            return from(p, 0);
+        }
+
+        public static ProjectResponse from(Project p, long bulletCount) {
             return new ProjectResponse(
                     p.getId(), p.getKind(), p.getName(), p.getDescription(), p.getContextDescription(),
                     p.getGithubUrl(), p.getRepoContext() != null,
@@ -65,7 +75,7 @@ public class ProjectDtos {
                     p.getScaleImpact(), p.getHardestProblem(),
                     p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                     p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
-                    p.getCreatedAt());
+                    p.getCreatedAt(), p.getUpdatedAt(), bulletCount, p.isCurrent());
         }
     }
 }

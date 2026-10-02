@@ -84,11 +84,18 @@ public class Project {
     private String location;
     private String dates;
 
+    /** "I currently work here" (experiences). Drives the NOW badge and sorting; `dates` is still what the resume prints. */
+    @Column(name = "is_current", nullable = false)
+    private boolean current;
+
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false, insertable = false)
+    private Instant updatedAt;
 
     public Project() {}
 
@@ -152,7 +159,13 @@ public class Project {
     public void setCompany(String company) { this.company = company; }
     public String getLocation() { return location; }
     public void setLocation(String location) { this.location = location; }
+    public boolean isCurrent() { return current; }
+    public void setCurrent(boolean current) { this.current = current; }
     public String getDates() { return dates; }
     public void setDates(String dates) { this.dates = dates; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+
+    @PreUpdate
+    void touch() { updatedAt = Instant.now(); }
 }

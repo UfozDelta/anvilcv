@@ -50,6 +50,21 @@ class ProjectControllerTest {
     }
 
     @Test
+    void listReturnsBulletCountAndUpdatedAt() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
+        Project p = project(userId);
+        org.springframework.test.util.ReflectionTestUtils.setField(p, "id", id);
+        org.springframework.test.util.ReflectionTestUtils.setField(p, "updatedAt", java.time.Instant.parse("2026-01-02T03:04:05Z"));
+        when(projects.list(userId)).thenReturn(List.of(p));
+        when(projects.bulletCounts(any())).thenReturn(java.util.Map.of(id, 5L));
+
+        mvc.perform(get("/api/projects").with(user(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].bulletCount").value(5))
+                .andExpect(jsonPath("$[0].updatedAt").exists());
+    }
+
+    @Test
     void getNotFoundMapsTo404() throws Exception {
         UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
         when(projects.get(userId, id))
@@ -76,7 +91,7 @@ class ProjectControllerTest {
     @Test
     void createForwardsUserIdAndReturnsProject() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(projects.create(eq(userId), any(), eq("New"), eq("d"), any(), any(), any(), any(), any()))
+        when(projects.create(eq(userId), any(), eq("New"), eq("d"), any(), any(), any(), any(), any(), any()))
                 .thenReturn(project(userId));
         String body = "{\"name\":\"New\",\"description\":\"d\"}";
 
@@ -86,7 +101,22 @@ class ProjectControllerTest {
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(projects).create(eq(userId), any(), eq("New"), eq("d"), any(), any(), any(), any(), any());
+        verify(projects).create(eq(userId), any(), eq("New"), eq("d"), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createForwardsTheCurrentlyWorkHereFlag() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(projects.create(eq(userId), any(), eq("Role"), eq("d"), any(), any(), any(), any(), any(), eq(true)))
+                .thenReturn(project(userId));
+
+        mvc.perform(post("/api/projects")
+                        .with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"EXPERIENCE\",\"name\":\"Role\",\"description\":\"d\",\"current\":true}"))
+                .andExpect(status().isOk());
+
+        verify(projects).create(eq(userId), any(), eq("Role"), eq("d"), any(), any(), any(), any(), any(), eq(true));
     }
 
     @Test

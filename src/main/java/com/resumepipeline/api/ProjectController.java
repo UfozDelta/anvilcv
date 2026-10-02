@@ -47,12 +47,13 @@ public class ProjectController {
     public List<ProjectResponse> list(Authentication auth, @RequestParam(required = false) Project.Kind kind) {
         UUID userId = AuthUtils.userId(auth);
         var rows = kind == null ? projects.list(userId) : projects.listByKind(userId, kind);
-        return rows.stream().map(ProjectResponse::from).toList();
+        var counts = projects.bulletCounts(rows.stream().map(Project::getId).toList());
+        return rows.stream().map(p -> ProjectResponse.from(p, counts.getOrDefault(p.getId(), 0L))).toList();
     }
 
     @GetMapping("/{id}")
     public ProjectResponse get(Authentication auth, @PathVariable UUID id) {
-        return ProjectResponse.from(projects.get(AuthUtils.userId(auth), id));
+        return ProjectResponse.from(projects.get(AuthUtils.userId(auth), id), projects.bulletCount(id));
     }
 
     @PostMapping
@@ -61,17 +62,18 @@ public class ProjectController {
         Project p = projects.create(userId,
                 req.kind() == null ? Project.Kind.PROJECT : req.kind(),
                 req.name(), req.description(), req.githubUrl(),
-                req.title(), req.company(), req.location(), req.dates());
+                req.title(), req.company(), req.location(), req.dates(), req.current());
         return ProjectResponse.from(p);
     }
 
     @PutMapping("/{id}")
     public ProjectResponse update(Authentication auth, @PathVariable UUID id, @RequestBody UpdateProjectRequest req) {
-        return ProjectResponse.from(projects.update(AuthUtils.userId(auth), id,
+        Project saved = projects.update(AuthUtils.userId(auth), id,
                 req.name(), req.description(), req.contextDescription(), req.githubUrl(),
                 req.techStack(), req.yourRole(), req.ownership(), req.scaleImpact(), req.hardestProblem(),
                 req.technicalDecisions(), req.userImpact(), req.securityPosture(),
-                req.title(), req.company(), req.location(), req.dates()));
+                req.title(), req.company(), req.location(), req.dates(), req.current());
+        return ProjectResponse.from(saved, projects.bulletCount(id));
     }
 
     @DeleteMapping("/{id}")
@@ -81,7 +83,8 @@ public class ProjectController {
 
     @PostMapping("/{id}/duplicate")
     public ProjectResponse duplicate(Authentication auth, @PathVariable UUID id) {
-        return ProjectResponse.from(projects.duplicate(AuthUtils.userId(auth), id));
+        Project copy = projects.duplicate(AuthUtils.userId(auth), id);
+        return ProjectResponse.from(copy, projects.bulletCount(copy.getId()));
     }
 
     @PostMapping("/{id}/bullets/generate")

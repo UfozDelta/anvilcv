@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,6 +12,10 @@ public interface BulletRepository extends JpaRepository<Bullet, UUID> {
     List<Bullet> findByProjectIdOrderByCreatedAtAsc(UUID projectId);
     long countByProjectId(UUID projectId);
     void deleteByProjectId(UUID projectId);
+
+    /** One row per project that has bullets: [projectId, count]. Projects with none are absent. */
+    @Query("SELECT b.projectId, COUNT(b) FROM Bullet b WHERE b.projectId IN :projectIds GROUP BY b.projectId")
+    List<Object[]> countGroupedByProjectId(@Param("projectIds") Collection<UUID> projectIds);
 
     /**
      * Bullets belonging to projects owned by the given user that are eligible for a resume.
