@@ -45,52 +45,51 @@ export function RepoPicker({ projectId, onLinked, onCancel }: {
   }
 
   return (
-    <div className="panel panel--inset stack-sm">
-      <div className="row row--between row--centered">
-        <span className="label">LINK A GITHUB REPO</span>
-        {onCancel && <button className="btn btn--ghost btn--sm" onClick={onCancel}>✕ CANCEL</button>}
+    <div className="nf">
+      <div className="nf__head">
+        <h2 className="ap-label">Link a GitHub repo</h2>
+        {onCancel && <button type="button" className="ap-btn ap-btn--ghost nf__x" onClick={onCancel}>Cancel</button>}
       </div>
 
-      {err && <div className="err">{err}</div>}
+      {err && <div className="err ap-err" role="alert">{err}</div>}
       {!status && !err && <span className="spinner">LOADING</span>}
 
       {status && !status.configured && (
-        <div className="label muted">GitHub isn't set up on this server — see README › GitHub App.</div>
+        <p className="na-hint">GitHub isn't set up on this server — see README › GitHub App.</p>
       )}
 
       {status?.configured && !status.connected && (
-        <div className="row row--centered">
-          <span className="label muted" style={{ marginRight: 12 }}>Grant AnvilCV read-only access to the repos you pick.</span>
-          <a className="btn btn--acid btn--sm" href={`${API_BASE}/api/github/connect`}>CONNECT GITHUB</a>
+        <div className="st-gh">
+          <span className="st-gh__who">Grant AnvilCV read-only access to the repos you pick.</span>
+          <a className="ap-btn ap-btn--acid st-btn" href={`${API_BASE}/api/github/connect`}>Connect GitHub</a>
         </div>
       )}
 
       {repos && (
         <>
-          <input className="field__input" placeholder={`Filter ${repos.length} repos…`} value={q} onChange={e => setQ(e.target.value)} />
-          <div style={{ maxHeight: 320, overflowY: 'auto', borderTop: 'var(--rule-thin)' }}>
+          <label className="pf-field">
+            <span className="pf-field__k">Filter</span>
+            <span className="pf-field__v">
+              <input placeholder={`Filter ${repos.length} repos…`} value={q} onChange={e => setQ(e.target.value)} />
+            </span>
+          </label>
+          <div className="nf-repos">
             {shown.map(r => (
-              <button
-                key={r.fullName}
-                type="button"
-                onClick={() => link(r)}
-                disabled={busy !== null}
-                style={{ all: 'unset', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%', boxSizing: 'border-box', padding: '8px 4px', borderBottom: 'var(--rule-thin)' }}
-              >
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{r.fullName}</span>
-                  {r.description && <span className="muted" style={{ display: 'block', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</span>}
+              <button key={r.fullName} type="button" className="nf-repo" onClick={() => link(r)} disabled={busy !== null}>
+                <span className="nf-repo__name">
+                  <strong>{r.fullName}</strong>
+                  {r.description && <span className="ld-desc">{r.description}</span>}
                 </span>
-                <span className="label muted" style={{ flexShrink: 0 }}>
-                  {busy === r.fullName ? 'LINKING…' : r.isPrivate ? 'PRIVATE' : 'PUBLIC'}
+                <span className="nf-chip" data-private={r.isPrivate ? '' : undefined}>
+                  {busy === r.fullName ? 'Linking…' : r.isPrivate ? 'Private' : 'Public'}
                 </span>
               </button>
             ))}
             {shown.length === 0 && (
-              <div className="label muted" style={{ padding: 12 }}>
+              <p className="na-hint nf-repos__none">
                 No repos. Add some under{' '}
                 {status?.manageUrl ? <a href={status.manageUrl} target="_blank" rel="noreferrer">GitHub › app settings</a> : 'GitHub app settings'}.
-              </div>
+              </p>
             )}
           </div>
         </>

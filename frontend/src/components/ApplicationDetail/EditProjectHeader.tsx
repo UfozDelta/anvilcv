@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Project } from '../../lib/api';
+import { dropPresent, ensurePresent, looksCurrent } from '../../lib/dates';
 
 export function EditProjectHeader({ project, onSave, onCancel }: {
   project: Project;
@@ -13,10 +14,11 @@ export function EditProjectHeader({ project, onSave, onCancel }: {
   const [company, setCompany] = useState(project.company || '');
   const [location, setLocation] = useState(project.location || '');
   const [dates, setDates] = useState(project.dates || '');
+  const [current, setCurrent] = useState(!!project.current);
 
   function save() {
     onSave(isExperience
-      ? { title, company, location, dates }
+      ? { title, company, location, dates: current ? ensurePresent(dates) : dates, current }
       : { name, techStack, dates });
   }
 
@@ -27,7 +29,11 @@ export function EditProjectHeader({ project, onSave, onCancel }: {
           <input className="field__input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" />
           <input className="field__input" value={company} onChange={e => setCompany(e.target.value)} placeholder="Company" />
           <input className="field__input" value={location} onChange={e => setLocation(e.target.value)} placeholder="Location" />
-          <input className="field__input" value={dates} onChange={e => setDates(e.target.value)} placeholder="Dates" />
+          <input className="field__input" value={dates} onChange={e => { setDates(e.target.value); setCurrent(looksCurrent(e.target.value)); }} placeholder="Dates" />
+          <label className="na-check">
+            <input type="checkbox" checked={current} onChange={e => { setCurrent(e.target.checked); setDates(d => (e.target.checked ? ensurePresent(d) : dropPresent(d))); }} />
+            <span>I currently work here</span>
+          </label>
         </>
       ) : (
         <>

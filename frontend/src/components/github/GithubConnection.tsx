@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, API_BASE, type GithubStatus } from '../../lib/api';
 
-/** Settings panel: connect / disconnect the GitHub App. Reads ?github=connected|error from the OAuth bounce. */
+/** Settings section: connect / disconnect the GitHub App. Reads ?github=connected|error from the OAuth bounce. */
 export function GithubConnection() {
   const [status, setStatus] = useState<GithubStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const timer = useRef<number>();
   const flash = new URLSearchParams(window.location.search).get('github');
 
   async function load() {
@@ -12,37 +14,50 @@ export function GithubConnection() {
     catch (e: any) { setErr(e?.message || 'Could not load GitHub status'); }
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
+  // Two clicks, so a stray tap can't cut the link: the first arms it for a few seconds.
   async function disconnect() {
-    if (!confirm('Disconnect GitHub? Linked projects keep their context but can no longer read the repo.')) return;
-    await api.del('/api/github');
-    await load();
+    if (!confirming) {
+      setConfirming(true);
+      timer.current = window.setTimeout(() => setConfirming(false), 4000);
+      return;
+    }
+    window.clearTimeout(timer.current);
+    setConfirming(false);
+    try {
+      await api.del('/api/github');
+      await load();
+    } catch (e: any) { setErr(e?.message || 'Could not disconnect GitHub'); }
   }
 
-  const mono = { fontFamily: 'var(--mono)', fontSize: '0.75rem', color: 'var(--ink-3)', lineHeight: 1.6 } as const;
-
   return (
-    <div style={{ marginTop: 20 }}>
-      <span style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', fontWeight: 600 }}>GitHub</span>
-      <p style={{ ...mono, marginTop: 6 }}>
-        Read-only access to the repos you pick. AnvilCV explores them itself to fill project context
-        and trace every bullet back to the code it came from. No token is stored.
-      </p>
-      {flash === 'connected' && <div className="label" style={{ marginBottom: 8 }}>✓ GITHUB CONNECTED</div>}
-      {flash === 'error' && <div className="err" style={{ marginBottom: 8 }}>GitHub connection failed — try again.</div>}
-      {err && <div className="err">{err}</div>}
-
-      {status && !status.configured && <p style={mono}>Not set up on this server — see README › GitHub App.</p>}
-      {status?.configured && !status.connected && (
-        <a className="btn btn--acid" href={`${API_BASE}/api/github/connect`}>CONNECT GITHUB</a>
-      )}
-      {status?.connected && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={mono}>Connected as <strong>{status.account}</strong></span>
-          {status.manageUrl && <a className="btn btn--ghost btn--sm" href={status.manageUrl} target="_blank" rel="noreferrer">CHOOSE REPOS / UNINSTALL ↗</a>}
-          <button className="btn btn--ghost btn--sm" onClick={disconnect}>DISCONNECT</button>
+    <section className="pf-sec">
+      <h2 className="ap-label">GitHub</h2>
+      {flash === 'connected' && <p className="na-hint" role="status">GitHub connected.</p>}
+      {flash === 'error' && <div className="err ap-err" role="alert">GitHub connection failed — try again.</div>}
+      {err && <div className="err ap-err" role="alert">{err}</div>}
+      {status && !status.configured && <p className="na-hint">Not set up on this server — see README › GitHub App.</p>}
+      {status?.configured && (
+        <div className="st-gh">
+          {status.connected ? (
+            <>
+              <span className="st-gh__who"><span className="st-gh__dot" aria-hidden="true" />Connected as <strong>{status.account}</strong></span>
+              <span className="st-gh__btns">
+                {status.manageUrl && <a className="ap-btn ap-btn--ghost st-btn" href={status.manageUrl} target="_blank" rel="noreferrer">Choose repos ↗</a>}
+                <button type="button" className={`ap-btn ap-btn--ghost st-btn${confirming ? ' st-btn--danger' : ''}`} onClick={disconnect}>
+                  {confirming ? 'Confirm disconnect' : 'Disconnect'}
+                </button>
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="st-gh__who">Not connected</span>
+              <a className="ap-btn ap-btn--acid st-btn" href={`${API_BASE}/api/github/connect`}>Connect GitHub</a>
+            </>
+          )}
         </div>
       )}
-    </div>
+    </section>
   );
 }

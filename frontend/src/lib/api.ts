@@ -96,7 +96,13 @@ export interface Project {
   company?: string | null;
   location?: string | null;
   dates?: string | null;
+  /** "I currently work here" (experiences). */
+  current?: boolean;
   createdAt: string;
+  /** Last edit; absent on a just-created project (the API returns it only once the row is re-read). */
+  updatedAt?: string | null;
+  /** Bullets in this project's bank (the list endpoint counts them in one grouped query). */
+  bulletCount?: number;
 }
 
 export interface Bullet {
@@ -201,7 +207,10 @@ export interface JobPosting {
   saved: boolean;
 }
 
-export interface JobList { jobs: JobPosting[]; total: number }
+/** Totals under the current q/location filters; `saved` is 0 for guests. */
+export interface JobCounts { linkedin: number; indeed: number; saved: number }
+
+export interface JobList { jobs: JobPosting[]; total: number; counts?: JobCounts }
 
 export interface ApplicationSummary {
   id: string;
@@ -302,6 +311,8 @@ export interface ApplicationResponse {
   recruiterWeakestBulletId: string | null;
   /** True when the selection was hand-edited after the recruiter pass ran. */
   recruiterStale: boolean;
+  /** Recruiter pass still running in the background after create; poll until false. */
+  recruiterPending: boolean;
   /** Pages in the compiled PDF, from tectonic's log. Null when unknown. */
   pageCount: number | null;
   pdfAvailable: boolean;
@@ -309,5 +320,3 @@ export interface ApplicationResponse {
   outcome: string;
   createdAt: string;
 }
-  /** Recruiter pass still running in the background after create; poll until false. */
-  recruiterPending: boolean;

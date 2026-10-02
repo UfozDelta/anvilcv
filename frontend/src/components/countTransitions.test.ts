@@ -54,7 +54,7 @@ describe('forwardOnly', () => {
   });
 
   it('drops stages missing from RANK', () => {
-    expect(forwardOnly([{ from: 'applied', to: 'ghosted', count: 1 }])).toEqual([]);
+    expect(forwardOnly([{ from: 'applied', to: 'withdrawn', count: 1 }])).toEqual([]);
   });
 
   it('places oa between applied and interview', () => {

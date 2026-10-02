@@ -207,11 +207,11 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
               gap: 8,
             }}
           >
-            <button className="btn btn--ghost btn--sm" onClick={onClose}>
+            <button className="ap-btn ap-btn--ghost" onClick={onClose}>
               CLOSE
             </button>
             {done && doneId && doneLabel !== '' && (
-              <button className="btn btn--acid btn--sm" onClick={() => onDoneRef.current(doneId)}>
+              <button className="ap-btn ap-btn--acid" onClick={() => onDoneRef.current(doneId)}>
                 {doneLabel ?? 'VIEW APPLICATION →'}
               </button>
             )}

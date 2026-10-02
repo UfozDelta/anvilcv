@@ -19,13 +19,15 @@ const DEFAULTS: GenerationConfig = {
 export function useGenerationConfig() {
   const [cfg, setCfg] = useState<GenerationConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
+  // False when the load failed: cfg is then just DEFAULTS, and saving it would overwrite the real config.
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<GenerationConfig>('/api/config/generation')
-      .then(setCfg)
+      .then(c => { setCfg(c); setLoaded(true); })
       .catch(e => setErr(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -47,5 +49,5 @@ export function useGenerationConfig() {
     }
   }
 
-  return { cfg, set, loading, saving, savedAt, err, save };
+  return { cfg, set, loading, loaded, saving, savedAt, err, save };
 }
