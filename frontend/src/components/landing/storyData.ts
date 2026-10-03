@@ -91,8 +91,9 @@ export function rankBank(job: Job): RankedRow[] {
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// No lookbehind: Safari before 16.4 throws on it, which blanked the whole page.
 function termRegex(terms: string[]) {
-  return new RegExp(`(?<![\\w-])(${terms.map(esc).join('|')})(?![\\w-])`, 'gi');
+  return new RegExp(`(^|[^\\w-])(${terms.map(esc).join('|')})(?![\\w-])`, 'gi');
 }
 
 export type Seg = { t: string; kw?: string };
@@ -105,10 +106,10 @@ export function segments(text: string, keywords: Keyword[]): Seg[] {
   const out: Seg[] = [];
   let last = 0;
   for (const m of text.matchAll(re)) {
-    const i = m.index ?? 0;
+    const i = (m.index ?? 0) + m[1].length;
     if (i > last) out.push({ t: text.slice(last, i) });
-    out.push({ t: m[0], kw: byTerm.get(m[0].toLowerCase()) });
-    last = i + m[0].length;
+    out.push({ t: m[2], kw: byTerm.get(m[2].toLowerCase()) });
+    last = i + m[2].length;
   }
   if (last < text.length) out.push({ t: text.slice(last) });
   return out;

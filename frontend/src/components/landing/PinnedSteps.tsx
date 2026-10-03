@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import './steps.css';
+import { useAvgSec } from './useAvgSec';
 
 export const STEPS = [
   { title: 'Bank it once', body: 'Every role and project you have done, six to twelve bullets each. AI drafts them, you edit. The last time you write a bullet from scratch.' },
@@ -16,6 +17,7 @@ export const STEPS = [
  */
 export function PinnedSteps({ Stage }: { Stage: (p: { step: number }) => React.ReactNode }) {
   const [step, setStep] = useState(1);
+  const sec = useAvgSec();
   const stepsRef = useRef<HTMLOListElement>(null);
   const { scrollYProgress } = useScroll({ target: stepsRef, offset: ['start 62%', 'end 62%'] });
   // Full transform string: the shorthand runs on the main thread and drops frames.
@@ -48,7 +50,7 @@ export function PinnedSteps({ Stage }: { Stage: (p: { step: number }) => React.R
           {STEPS.map((s, i) => (
             <li key={s.title} data-i={i} className="lv-step" data-on={step === i + 1 || undefined} data-done={step > i + 1 || undefined}>
               <span className="lv-step__num">{String(i + 1).padStart(2, '0')}</span>
-              <h3 className="lp-display lv-step__title">{s.title}</h3>
+              <h3 className="lp-display lv-step__title">{s.title.replace('~17', `~${sec}`)}</h3>
               <p className="lv-step__body">{s.body}</p>
             </li>
           ))}

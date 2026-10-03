@@ -20,6 +20,21 @@ const DEFAULT_W = 560, DEFAULT_H = 240, NODE_W = 14;
 export interface Transition { from: string; to: string; count: number }
 
 /**
+ * An application's outcomes in the order they were set, with corrections undone: moving it back
+ * to an earlier stage (interview, then applied again) means the later stage didn't stick, so it
+ * stops counting as reached. Repeats collapse; stages outside RANK are kept as they come.
+ */
+export function normalizePath(outcomes: string[]): string[] {
+  const path: string[] = [];
+  for (const o of outcomes) {
+    const rank = RANK.indexOf(o);
+    if (rank !== -1) while (path.length && RANK.indexOf(path[path.length - 1]) >= rank) path.pop();
+    path.push(o);
+  }
+  return path;
+}
+
+/**
  * Tally stage-to-stage moves across every application's history. Rows are grouped
  * by application, consecutive duplicates collapsed (re-marking the same outcome is
  * not a transition), then each adjacent pair counted once.
@@ -32,7 +47,7 @@ export function countTransitions(history: OutcomeHistoryEntry[]): Transition[] {
   }
   const counts = new Map<string, number>();
   for (const rows of byApp.values()) {
-    const seq = rows.map(r => r.outcome).filter((o, i, arr) => i === 0 || arr[i - 1] !== o);
+    const seq = normalizePath(rows.map(r => r.outcome));
     for (let i = 0; i < seq.length - 1; i++) {
       const key = `${seq[i]}->${seq[i + 1]}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);

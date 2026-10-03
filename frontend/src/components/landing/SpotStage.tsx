@@ -1,3 +1,4 @@
+import { useAvgSec } from './useAvgSec';
 import { LayoutGroup, motion } from 'framer-motion';
 import { BANK, ENTRIES, JOBS, coveredKeywords, rankBank, segments } from './storyData';
 import { usePrefersReducedMotion } from './useHeroLoop';
@@ -32,6 +33,7 @@ const MOVE = { type: 'spring', duration: 0.55, bounce: 0 } as const;
  * The region the active step is about stays lit; the step number sits in the top bar.
  */
 export function SpotStage({ step }: { step: number }) {
+  const sec = useAvgSec();
   const reduced = usePrefersReducedMotion();
   const ranked = step >= 3;
 
@@ -137,7 +139,7 @@ export function SpotStage({ step }: { step: number }) {
             <div className="ss-doc__skills">{COVERED.join(' · ')}</div>
           </section>
           <footer className="ss-doc__foot">
-            <span>1 PAGE</span><span>~17s</span><span>+ COVER LETTER</span>
+            <span>1 PAGE</span><span>~{sec}s</span><span>+ COVER LETTER</span>
           </footer>
         </div>
       </div>

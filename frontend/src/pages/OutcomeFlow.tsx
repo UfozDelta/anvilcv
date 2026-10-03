@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, type ApplicationSummary, type OutcomeHistoryEntry } from '../lib/api';
 import { BulletBar, EmptyState, PageTitle } from '../components/ledger/shared';
 import { usePrefersReducedMotion } from '../components/landing/useHeroLoop';
-import { OutcomeSankey, RANK } from '../components/OutcomeSankey';
+import { OutcomeSankey, RANK, normalizePath } from '../components/OutcomeSankey';
 
 const STAGE_LABEL: Record<string, string> = { applied: 'Applied', oa: 'Online assessment', interview: 'Interview', offer: 'Offer', rejected: 'Rejected', ghosted: 'Ghosted' };
 /** Two ways it ends badly: they said no, or they said nothing. */
@@ -38,7 +38,7 @@ function WideSankey({ history, selected, onSelect }: { history: OutcomeHistoryEn
   );
 }
 
-/** Per application: the outcomes it went through, oldest first, so the last one is where it ended. */
+/** Per application: the outcomes it went through, oldest first, corrections undone, so the last one is where it stands. */
 function paths(history: OutcomeHistoryEntry[]) {
   const by = new Map<string, OutcomeHistoryEntry[]>();
   for (const h of history) {
@@ -46,7 +46,7 @@ function paths(history: OutcomeHistoryEntry[]) {
     by.get(h.applicationId)!.push(h);
   }
   const out = new Map<string, string[]>();
-  for (const [id, rows] of by) out.set(id, [...rows].sort((a, b) => a.changedAt.localeCompare(b.changedAt)).map((r) => r.outcome));
+  for (const [id, rows] of by) out.set(id, normalizePath([...rows].sort((a, b) => a.changedAt.localeCompare(b.changedAt)).map((r) => r.outcome)));
   return out;
 }
 

@@ -7,15 +7,10 @@ import { HowItWorks } from '../components/landing/HowItWorks';
 import { RerankPanel } from '../components/landing/RerankPanel';
 import { Ticker } from '../components/landing/Ticker';
 import { SectionMark, SiteFooter, TopNav } from '../components/landing/SiteNav';
-import { AVG_SEC } from '../components/landing/heroData';
+import { useAvgSec } from '../components/landing/useAvgSec';
 import '../styles/landing.css';
 import '../components/landing/hero.css';
 import '../components/landing/landing-page.css';
-
-interface PublicStats {
-  avgPipelineDurationSec: number | null;
-  sampleSize: number | null;
-}
 
 const VERSUS: [string, string, string][] = [
   ['Your work', 'Re-pasted every session', 'Saved once, reused for every job'],
@@ -32,15 +27,12 @@ const TICKER_ITEMS = 12;
  * pass alternatives to compare in place.
  */
 export function Landing({ How = HowItWorks }: { How?: React.ComponentType }) {
-  const [avgSec, setAvgSec] = useState(AVG_SEC);
+  const avgSec = useAvgSec();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
 
-  // Both are best-effort: the page renders with the fixed claim and no jobs on failure.
+  // Best-effort: the page renders with no jobs on failure.
   useEffect(() => {
     let alive = true;
-    api.get<PublicStats>('/api/public/stats')
-      .then((s) => { if (alive && s.avgPipelineDurationSec != null) setAvgSec(s.avgPipelineDurationSec); })
-      .catch(() => {});
     api.get<JobList>(`/api/public/jobs?page=0&size=${TICKER_ITEMS}`)
       .then((r) => { if (alive) setJobs(r.jobs); })
       .catch(() => {});
@@ -49,7 +41,7 @@ export function Landing({ How = HowItWorks }: { How?: React.ComponentType }) {
 
   const cards = jobs.slice(0, FEED_CARDS);
   const ticker = jobs.filter((j) => j.title).map((j) => (j.company ? `${j.title} · ${j.company}` : j.title!));
-  const secs = Math.round(avgSec);
+  const secs = avgSec;
 
   return (
     <div className="lp-root lx">

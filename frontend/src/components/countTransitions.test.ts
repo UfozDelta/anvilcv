@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { OutcomeHistoryEntry } from '../lib/api';
-import { countTransitions, forwardOnly } from './OutcomeSankey';
+import { countTransitions, forwardOnly, normalizePath } from './OutcomeSankey';
 
 function row(applicationId: string, outcome: string, changedAt: string): OutcomeHistoryEntry {
   return { applicationId, outcome, changedAt };
@@ -66,5 +66,31 @@ describe('forwardOnly', () => {
       { from: 'applied', to: 'oa', count: 1 },
       { from: 'oa', to: 'interview', count: 1 },
     ]);
+  });
+});
+
+describe('normalizePath', () => {
+  it('undoes a stage that was reverted', () => {
+    expect(normalizePath(['applied', 'interview', 'applied'])).toEqual(['applied']);
+    expect(normalizePath(['applied', 'oa', 'interview', 'oa'])).toEqual(['applied', 'oa']);
+  });
+  it('lets a later stage replace a mistaken outcome', () => {
+    expect(normalizePath(['applied', 'rejected', 'interview'])).toEqual(['applied', 'interview']);
+    expect(normalizePath(['applied', 'ghosted', 'oa'])).toEqual(['applied', 'oa']);
+  });
+  it('collapses repeats and keeps a normal progression', () => {
+    expect(normalizePath(['applied', 'applied', 'oa', 'interview', 'offer'])).toEqual(['applied', 'oa', 'interview', 'offer']);
+  });
+  it('keeps stages outside RANK', () => {
+    expect(normalizePath(['applied', 'withdrawn', 'interview'])).toEqual(['applied', 'withdrawn', 'interview']);
+  });
+});
+
+describe('countTransitions with a reverted stage', () => {
+  it("doesn't count a stage that was set and then undone", () => {
+    const edges = countTransitions([
+      row('a', 'applied', '2026-01-01'), row('a', 'interview', '2026-01-02'), row('a', 'applied', '2026-01-03'),
+    ]);
+    expect(edges).toEqual([]);
   });
 });

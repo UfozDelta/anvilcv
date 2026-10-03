@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SiteFooter, TopNav } from '../components/landing/SiteNav';
+import { useAvgSec } from '../components/landing/useAvgSec';
 import '../styles/landing.css';
 import '../components/landing/landing-page.css';
 import '../styles/pricing.css';
@@ -32,11 +33,11 @@ const FREE_PDFS = 3;
 const MANUAL_MIN = 45; // rough minutes to hand-tailor one résumé
 const WEEKS_PER_MONTH = 30 / 7; // a 30-day month, so 5 a day = 150
 
-const COMPARE: [string, string, string][] = [
+const compare = (sec: number): [string, string, string][] => [
   ['Your work', 'Saved once, reused for every job', 'Re-pasted every session'],
   ['Choosing bullets', 'Every bullet scored against the job', 'Whatever the prompt keeps'],
   ['ATS keywords', 'Matched and missing, before you apply', 'You guess'],
-  ['Time per résumé', '~17 seconds', '20+ minutes'],
+  ['Time per résumé', `~${sec} seconds`, '20+ minutes'],
 ];
 
 const FAQ = [
@@ -53,6 +54,7 @@ function fitFor(perMonth: number): Plan {
 
 /** Public pricing. No billing is wired yet: every plan's button goes to sign-up. */
 export function Pricing() {
+  const avgSec = useAvgSec();
   const [perWeek, setPerWeek] = useState(25);
   const perMonth = Math.max(1, Math.round(perWeek * WEEKS_PER_MONTH));
   const freeFits = perMonth <= FREE_PDFS;
@@ -144,7 +146,7 @@ export function Pricing() {
             <span className="lp-display lx-vs__brand">Anvil <span>//</span> CV</span>
             <span className="lp-label lp-muted">CHATGPT + WORD</span>
           </div>
-          {COMPARE.map(([what, us, them]) => (
+          {compare(avgSec).map(([what, us, them]) => (
             <div key={what} className="lx-vs__row">
               <span className="lp-label">{what}</span>
               <span className="lx-vs__us">{us}</span>
