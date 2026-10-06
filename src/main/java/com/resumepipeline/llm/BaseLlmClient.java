@@ -235,7 +235,7 @@ public abstract class BaseLlmClient implements LlmClient {
             default    -> "";
         };
         String verbInstruction = switch (cfg.getActionVerbStyle()) {
-            case LEADERSHIP -> "Prefer leadership verbs: Led, Owned, Directed, Coordinated, Mentored, Drove, Championed.";
+            case LEADERSHIP -> "Prefer leadership verbs (Led, Owned, Directed, Coordinated, Mentored, Drove) wherever the source material shows that role.";
             case IMPACT     -> "Prefer impact verbs: Accelerated, Reduced, Eliminated, Boosted, Saved, Cut, Scaled.";
             default         -> "";
         };
@@ -277,12 +277,16 @@ public abstract class BaseLlmClient implements LlmClient {
                 Y is a real number from the source material or a counted fact — when none exists,
                 write X + Z and stop. A tight bullet without Y beats one padded with a vague outcome.
 
-                Strong verbs only — open each bullet with one of:
-                  Built · Designed · Shipped · Engineered · Owned · Led · Authored ·
-                  Implemented · Architected · Stood up · Migrated · Hardened · Integrated.
+                Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
+                Shipped · Engineered · Implemented · Migrated · Automated · Hardened · Integrated.
+                Give every bullet in this batch a different opening verb — and do not reuse the
+                opener of an ALREADY COVERED bullet below when another fits.
+                Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
+                only when the source material says so. Never upgrade a contribution into leadership.
 
                 Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
-                "Contributed to", "Collaborated on" — these are passive and weak.
+                "Contributed to", "Collaborated on" — these are passive and weak. Also avoid the
+                clichés "Spearheaded", "Leveraged" and "Utilized".
 
                 EVERY bullet ends with a period.
 
@@ -444,7 +448,7 @@ public abstract class BaseLlmClient implements LlmClient {
      * Appended to the generation prompt for the recovery pass, so the model keeps every rule
      * and the source context from the first call and only gains the repair instructions.
      */
-    private static String recoveryNote(List<Reject> repairable, List<GeneratedBullet> kept,
+    static String recoveryNote(List<Reject> repairable, List<GeneratedBullet> kept,
                                        int newNeeded, GenerationConfig cfg) {
         StringBuilder sb = new StringBuilder(
                 "\n─────────────────────────────────────────────────────────────\n## RECOVERY PASS\n\n");
@@ -465,10 +469,13 @@ public abstract class BaseLlmClient implements LlmClient {
             sb.append("\n");
         }
         if (!weakOpener.isEmpty()) {
+            // No Led/Owned/Architected here: these bullets opened with "Contributed to" or
+            // "Helped with", and swapping that for a leadership verb inflates the claim.
             sb.append("Each bullet below opens with a weak or passive phrase. Replace ONLY the opening so it\n")
-              .append("starts with a strong action verb (Built, Designed, Shipped, Engineered, Owned, Led,\n")
-              .append("Authored, Implemented, Architected, Migrated, Hardened, Integrated). Keep the facts,\n")
-              .append("metrics, technologies and length as they are — this is a verb fix, not a rewrite.\n\n");
+              .append("starts with a strong action verb (Built, Designed, Shipped, Engineered, Implemented,\n")
+              .append("Migrated, Integrated). Keep the level of ownership the original states — never turn a\n")
+              .append("contribution into leadership. Keep the facts, metrics, technologies and length as\n")
+              .append("they are — this is a verb fix, not a rewrite.\n\n");
             for (String t : weakOpener) sb.append("  - ").append(t).append("\n");
             sb.append("\n");
         }
@@ -479,7 +486,7 @@ public abstract class BaseLlmClient implements LlmClient {
               .append("write fewer — never invent work to reach a count.\n\n");
         }
         if (!kept.isEmpty()) {
-            sb.append("Already accepted — do not repeat or rewrite these:\n");
+            sb.append("Already accepted — do not repeat or rewrite these, or reuse their opening verbs:\n");
             for (GeneratedBullet g : kept) sb.append("  - ").append(g.text()).append("\n");
             sb.append("\n");
         }
@@ -618,10 +625,10 @@ public abstract class BaseLlmClient implements LlmClient {
     }
 
     /** Why a repairable bullet was rejected — decides which instruction the recovery pass gets. */
-    private enum RejectReason { LENGTH, OPENER }
+    enum RejectReason { LENGTH, OPENER }
 
     /** A rejected bullet the recovery pass can plausibly fix, with the reason it was cut. */
-    private record Reject(String text, RejectReason reason) {}
+    record Reject(String text, RejectReason reason) {}
 
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private FilterResult callAndFilter(String prompt, SchemaSpec schema,
@@ -862,6 +869,13 @@ public abstract class BaseLlmClient implements LlmClient {
                 Rank ALL %d bullets from rank 1 (best fit) to %d (worst). Use integers, no ties.
                 For each bullet give a "why" of at most 20 words: why it fits (the specific JD
                 requirement it meets) and why not (the gap that kept it from ranking higher).
+
+                Rank by, in order:
+                  1. Match to a requirement the JD actually states — a responsibility or must-have,
+                     not merely a keyword the bullet happens to share.
+                  2. Evidence — concrete scope, a number or an outcome beats a bullet that only
+                     names the technology.
+                  3. Framing that fits the role emphasis below.
 
                 Produce atsMatched (keywords from the JD that appear in the top 8 bullets)
                 and atsMissing (JD keywords NOT covered).
