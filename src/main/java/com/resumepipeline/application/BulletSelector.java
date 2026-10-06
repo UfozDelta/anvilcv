@@ -495,6 +495,23 @@ public final class BulletSelector {
     }
 
     /**
+     * Stable reorder putting the skills a JD keyword names first (alias-aware, via
+     * {@link KeywordScorer#mentions}), the rest after in their existing order. Only reorders
+     * the user's own skills -- never adds one -- so a keyword-matched skill wins the limited
+     * row width over an unmatched one.
+     */
+    public static List<String> keywordFirst(List<String> items, Collection<String> keywords) {
+        List<String> hits = new ArrayList<>();
+        List<String> rest = new ArrayList<>();
+        for (String item : items) {
+            boolean hit = keywords != null && keywords.stream().anyMatch(k -> KeywordScorer.mentions(item, k));
+            (hit ? hits : rest).add(item);
+        }
+        hits.addAll(rest);
+        return hits;
+    }
+
+    /**
      * Remove the lowest-ranked bullet of the project holding the most slots, freeing one for a
      * diversity pick. {@code selected} is in rank order, so the last entry for a project is its
      * weakest. Projects down to their final bullet are never raided — evicting those would undo
