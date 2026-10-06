@@ -161,6 +161,7 @@
 .la-tabs button:last-child { border-right: 0; }
 .la-tabs button[aria-pressed='true'] { background: var(--ink); color: var(--acid); }
 .la-tabs button:focus-visible { outline: 3px solid var(--acid); outline-offset: -3px; }
+.ap-tools .la-tabs { margin-bottom: 0; width: auto; }
 .la-tabs__n { font: 700 12px var(--mono); letter-spacing: 0; font-variant-numeric: tabular-nums; }
 @media (hover: hover) and (pointer: fine) { .la-tabs button[aria-pressed='false']:hover { background: var(--acid); } }
 

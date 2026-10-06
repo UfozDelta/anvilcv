@@ -2,6 +2,7 @@ package com.resumepipeline.jobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.*;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -10,12 +11,16 @@ import org.springframework.web.server.ResponseStatusException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class JobFeedServiceTest {
@@ -119,7 +124,7 @@ class JobFeedServiceTest {
     void countsAreZeroSavedForGuests() {
         when(repo.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(3L, 4L);
 
-        JobFeedService.JobCounts c = service.counts("intern", null, null);
+        JobFeedService.JobCounts c = service.counts(new JobFeedService.JobFilter("intern", null, false, null), null);
 
         assertThat(c).isEqualTo(new JobFeedService.JobCounts(3, 4, 0));
         verify(repo, times(2)).count(any(org.springframework.data.jpa.domain.Specification.class));
@@ -133,6 +138,61 @@ class JobFeedServiceTest {
         when(repo.savedIds(user)).thenReturn(List.of(UUID.randomUUID()));
         when(repo.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(3L, 4L, 2L);
 
-        assertThat(service.counts(null, null, user)).isEqualTo(new JobFeedService.JobCounts(3, 4, 2));
+        assertThat(service.counts(new JobFeedService.JobFilter(null, null, false, null), user)).isEqualTo(new JobFeedService.JobCounts(3, 4, 2));
+    }
+
+    // The repo is mocked, so these check which predicates a filter builds rather than the SQL result.
+
+    @SuppressWarnings("unchecked")
+    private static Root<JobPosting> root(CriteriaBuilder cb) {
+        Root<JobPosting> root = mock(Root.class);
+        when(root.get(anyString())).thenReturn(mock(Path.class));
+        when(cb.lower(any())).thenReturn(mock(Expression.class));
+        return root;
+    }
+
+    @Test
+    void remoteAloneMatchesOnlyRemoteLocations() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter(null, null, true, null), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb).like(any(), eq("%remote%"));
+        verify(cb, never()).or(any(Predicate.class), any(Predicate.class));
+    }
+
+    @Test
+    void remoteWidensLocationInsteadOfNarrowingIt() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter(null, "NYC", true, null), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb).like(any(), eq("%nyc%"));
+        verify(cb).like(any(), eq("%remote%"));
+        verify(cb).or(any(), any());
+    }
+
+    @Test
+    void daysKeepsRecentlyReceivedPostings() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        Root<JobPosting> root = root(cb);
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, 7), null)
+                .toPredicate(root, mock(CriteriaQuery.class), cb);
+
+        ArgumentCaptor<Instant> since = ArgumentCaptor.forClass(Instant.class);
+        verify(root).get("receivedAt");
+        verify(cb).greaterThanOrEqualTo(any(Expression.class), since.capture());
+        assertThat(since.getValue()).isBetween(Instant.now().minus(Duration.ofDays(7)).minusSeconds(5),
+                Instant.now().minus(Duration.ofDays(7)));
+    }
+
+    @Test
+    void zeroDaysAndNoRemoteAddNoPredicates() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, 0), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb, never()).like(any(), anyString());
+        verify(cb, never()).greaterThanOrEqualTo(any(Expression.class), any(Instant.class));
     }
 }

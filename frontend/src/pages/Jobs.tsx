@@ -15,13 +15,24 @@ const SOURCES = [
 ];
 /** Not a source: a filter value meaning "my saved postings". Signed-in only. */
 const SAVED = 'saved';
+/** Filters on when the posting reached us; `posted` is free text from the source. */
+const ADDED = [
+  { key: '', label: 'Added: any time' },
+  { key: '1', label: 'Added: 24h' },
+  { key: '7', label: 'Added: 7 days' },
+  { key: '30', label: 'Added: 30 days' },
+];
 
-function query(source: string, q: string, location: string, page: number) {
+interface Filters { q: string; location: string; remote: boolean; days: string }
+
+function query(source: string, { q, location, remote, days }: Filters, page: number) {
   const p = new URLSearchParams({ page: String(page), size: String(PAGE_SIZE) });
   if (source === SAVED) p.set('saved', 'true');
   else if (source) p.set('source', source);
   if (q.trim()) p.set('q', q.trim());
   if (location.trim()) p.set('location', location.trim());
+  if (remote) p.set('remote', 'true');
+  if (days) p.set('days', days);
   return `/api/public/jobs?${p}`;
 }
 
@@ -35,18 +46,21 @@ export function Jobs() {
   const [source, setSource] = useState('');
   const [q, setQ] = useState('');
   const [location, setLocation] = useState('');
+  const [remote, setRemote] = useState(false);
+  const [days, setDays] = useState('');
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<JobCounts | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Bumped by every load(); a poll or load-more that started under an older value is stale and ignored.
   const gen = useRef(0);
+  const filters: Filters = { q, location, remote, days };
 
   const load = useCallback(async () => {
     const mine = ++gen.current;
     setLoading(true);
     setErr(null);
     try {
-      const r = await api.get<JobList>(query(source, q, location, 0));
+      const r = await api.get<JobList>(query(source, filters, 0));
       if (mine !== gen.current) return;
       setJobs(r.jobs);
       setTotal(r.total);
@@ -57,7 +71,7 @@ export function Jobs() {
     } finally {
       if (mine === gen.current) setLoading(false);
     }
-  }, [source, q, location]);
+  }, [source, q, location, remote, days]);
 
   // Debounced so typing in the search box doesn't fire a request per keystroke.
   useEffect(() => {
@@ -70,7 +84,7 @@ export function Jobs() {
     const t = setInterval(async () => {
       const mine = gen.current;
       try {
-        const r = await api.get<JobList>(query(source, q, location, 0));
+        const r = await api.get<JobList>(query(source, filters, 0));
         if (mine !== gen.current) return;
         setJobs(js => {
           const seen = new Set(js.map(j => j.id));
@@ -82,12 +96,12 @@ export function Jobs() {
       } catch { /* next tick retries */ }
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [source, q, location]);
+  }, [source, q, location, remote, days]);
 
   async function loadMore() {
     const mine = gen.current;
     try {
-      const r = await api.get<JobList>(query(source, q, location, page + 1));
+      const r = await api.get<JobList>(query(source, filters, page + 1));
       if (mine !== gen.current) return;
       setJobs(js => {
         const seen = new Set(js.map(j => j.id));
@@ -120,7 +134,7 @@ export function Jobs() {
     }
   }
 
-  /** Tab counts follow the q/location filters; hidden until the API has sent them. */
+  /** Tab counts follow the search filters; hidden until the API has sent them. */
   function tabCount(key: string): number | null {
     if (!counts) return null;
     if (key === '') return counts.linkedin + counts.indeed;
@@ -129,7 +143,7 @@ export function Jobs() {
   }
 
   const none = !loading && jobs.length === 0;
-  const filtered = !!(source || q.trim() || location.trim());
+  const filtered = !!(source || q.trim() || location.trim() || remote || days);
 
   return (
     <div className="shell ap-page">
@@ -150,6 +164,12 @@ export function Jobs() {
       <div className="ap-tools">
         <input className="ap-search" placeholder="Title or company" aria-label="Search jobs" value={q} onChange={e => setQ(e.target.value)} />
         <input className="ap-search" placeholder="Location" aria-label="Location" value={location} onChange={e => setLocation(e.target.value)} />
+        <div className="la-tabs" role="group" aria-label="Remote">
+          <button type="button" aria-pressed={remote} title="With a location: that place or remote" onClick={() => setRemote(r => !r)}>+ Remote</button>
+        </div>
+        <select className="la-sort" value={days} aria-label="Added within" onChange={e => setDays(e.target.value)}>
+          {ADDED.map(a => <option key={a.key || 'any'} value={a.key}>{a.label}</option>)}
+        </select>
       </div>
 
       {err && <div className="err ap-err" role="alert">{err}</div>}
@@ -159,8 +179,8 @@ export function Jobs() {
       {none && (filtered
         ? (
           <div className="ap-nomatch">
-            {source === SAVED && !q.trim() && !location.trim() ? 'Nothing saved yet. Tap ☆ on a posting.' : 'No jobs match.'}{' '}
-            <button type="button" onClick={() => { setQ(''); setLocation(''); setSource(''); }}>Clear</button>
+            {source === SAVED && !q.trim() && !location.trim() && !remote && !days ? 'Nothing saved yet. Tap ☆ on a posting.' : 'No jobs match.'}{' '}
+            <button type="button" onClick={() => { setQ(''); setLocation(''); setRemote(false); setDays(''); setSource(''); }}>Clear</button>
           </div>
         )
         : <EmptyState title="No postings yet." sub="New roles arrive here as they are posted." />)}
