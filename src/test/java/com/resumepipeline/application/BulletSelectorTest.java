@@ -666,4 +666,23 @@ class BulletSelectorTest {
             assertEquals(List.of("Java"), BulletSelector.paddingCandidates(null, List.of("Java")));
         }
     }
+
+    @Nested
+    class KeywordFirst {
+
+        @Test
+        void movesKeywordMatchesFrontStably() {
+            List<String> items = List.of("Python", "Go", "PostgreSQL", "Rust", "Kubernetes");
+            List<String> out = BulletSelector.keywordFirst(items, List.of("k8s", "Postgres"));
+            assertEquals(List.of("PostgreSQL", "Kubernetes", "Python", "Go", "Rust"), out);
+        }
+
+        @Test
+        void neverAddsOrDropsItems() {
+            List<String> items = List.of("Java", "JavaScript");
+            assertEquals(List.of("JavaScript", "Java"), BulletSelector.keywordFirst(items, List.of("JavaScript")));
+            assertEquals(items, BulletSelector.keywordFirst(items, List.of("Terraform")));
+            assertEquals(items, BulletSelector.keywordFirst(items, null));
+        }
+    }
 }

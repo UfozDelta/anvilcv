@@ -308,7 +308,7 @@ public class ApplicationService {
                 "devops",     splitCsv(profile.getSkillsDevops())
         );
         Map<String, List<String>> floorFilledSkills = BulletSelector.fillSkills(rank.selectedSkills(), rawSkills);
-        Map<String, List<String>> filledSkills = stretchSkillsToWidth(floorFilledSkills, rawSkills);
+        Map<String, List<String>> filledSkills = stretchSkillsToWidth(floorFilledSkills, rawSkills, clean.keywords());
         progress.emit("Skills filled: languages=" + filledSkills.get("languages").size()
                 + " fw=" + filledSkills.get("frameworks").size()
                 + " db=" + filledSkills.get("databases").size()
@@ -872,12 +872,19 @@ public class ApplicationService {
      * <p>One compile covers every category and every candidate count at once. A compile failure
      * (or any category with no headroom to grow) falls back to {@code floorFilled} unchanged —
      * a resume with a shorter-than-ideal skills row is fine; losing the render is not.
+     *
+     * <p>The pool is ordered {@link BulletSelector#keywordFirst} against the JD keywords, so the
+     * winning prefix carries the keyword-matched skills first.
      */
     private Map<String, List<String>> stretchSkillsToWidth(Map<String, List<String>> floorFilled,
-                                                            Map<String, List<String>> rawSkills) {
+                                                            Map<String, List<String>> rawSkills,
+                                                            List<String> keywords) {
         Map<String, List<String>> candidates = new LinkedHashMap<>();
         for (String key : BulletSelector.SKILL_KEYS) {
-            candidates.put(key, BulletSelector.paddingCandidates(floorFilled.get(key), rawSkills.get(key)));
+            // Keyword-first across the whole pool, so a JD-matched profile skill outranks an
+            // unmatched LLM pick for the row's limited width, and leads the rendered row.
+            candidates.put(key, BulletSelector.keywordFirst(
+                    BulletSelector.paddingCandidates(floorFilled.get(key), rawSkills.get(key)), keywords));
         }
 
         Map<String, SkillRowMeasurer.Row> rows = new LinkedHashMap<>();
