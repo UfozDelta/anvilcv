@@ -13,20 +13,34 @@ public class ResumeParserService {
 
     private static final Pattern EXPERIENCE_HEADER = Pattern.compile(
             "^(WORK\\s+EXPERIENCE|WORK\\s+HISTORY|PROFESSIONAL\\s+EXPERIENCE|" +
-            "PROFESSIONAL\\s+BACKGROUND|RELEVANT\\s+EXPERIENCE|EMPLOYMENT|EXPERIENCE)\\s*$",
+            "PROFESSIONAL\\s+BACKGROUND|RELEVANT\\s+EXPERIENCE|RESEARCH\\s+EXPERIENCE|" +
+            "LEADERSHIP\\s+EXPERIENCE|INTERNSHIPS?|EMPLOYMENT|EXPERIENCE):?\\s*$",
             Pattern.CASE_INSENSITIVE
     );
 
     private static final Pattern PROJECT_HEADER = Pattern.compile(
             "^(PROJECTS?|PERSONAL\\s+PROJECTS?|SIDE\\s+PROJECTS?|SELECTED\\s+PROJECTS?|" +
-            "TECHNICAL\\s+PROJECTS?|KEY\\s+PROJECTS?)\\s*$",
+            "TECHNICAL\\s+PROJECTS?|KEY\\s+PROJECTS?|ACADEMIC\\s+PROJECTS?|RELEVANT\\s+PROJECTS?|" +
+            "RESEARCH\\s+PROJECTS?):?\\s*$",
             Pattern.CASE_INSENSITIVE
     );
 
-    // Bullet line prefixes produced by PDF text extraction
+    // Bullet line prefixes produced by PDF text extraction.  is the Symbol-font bullet
+    // Word-made PDFs extract as; "o " is Word's sub-bullet. Without them every bullet of such
+    // a resume read as a header line and became an entry of its own.
     private static final Pattern BULLET_LINE = Pattern.compile(
-            "^[•\\-\\*◦▪▸►✦✓·]\\s*"
+            "^(?:[•\\-\\*◦▪▸►✦✓·●○■‣➢➤❖–]|o(?=\\s))\\s*"
     );
+
+    // A date that marks an entry header: month + year, M/YYYY, or a year range. Stricter than
+    // DATE_PATTERN on purpose — its bare-year arm reads "serving 2000 users" as a date.
+    private static final Pattern HEADER_DATE = Pattern.compile(
+            "(?i)\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{4}" +
+            "|\\b\\d{1,2}/\\d{4}|\\b\\d{4}\\s*[-–—]\\s*(?:\\d{4}|present|current|now)\\b"
+    );
+
+    /** A bullet line at least this long that stops mid-sentence was wrapped by the PDF. */
+    private static final int WRAP_MIN_CHARS = 70;
 
     // Date range pattern — month+year, year-year, year-present, bare year
     private static final Pattern DATE_PATTERN = Pattern.compile(
@@ -74,18 +88,66 @@ public class ResumeParserService {
             String trimmed = line.trim();
             if (isSectionHeader(trimmed)) {
                 if (currentHeader != null) {
-                    sections.put(currentHeader, new ArrayList<>(currentBody));
+                    // Merge, not put: a second "Experience" block must not erase the first.
+                    sections.computeIfAbsent(currentHeader, k -> new ArrayList<>())
+                            .addAll(joinWrappedLines(currentBody));
                 }
-                currentHeader = trimmed.toUpperCase();
+                currentHeader = trimmed.replaceFirst(":$", "").toUpperCase();
                 currentBody.clear();
             } else if (currentHeader != null) {
                 currentBody.add(trimmed);
             }
         }
         if (currentHeader != null && !currentBody.isEmpty()) {
-            sections.put(currentHeader, currentBody);
+            sections.computeIfAbsent(currentHeader, k -> new ArrayList<>())
+                    .addAll(joinWrappedLines(currentBody));
         }
         return sections;
+    }
+
+    /**
+     * Re-joins bullets that PDF extraction split across lines. The wrapped tail carries no
+     * bullet glyph, so it used to read as a header line and open an entry of its own — a
+     * garbage project named "and Redis, cutting latency." plus a truncated real bullet.
+     *
+     * <p>A non-bullet line is a tail when the line above it belongs to a bullet, runs near
+     * full width ({@link #WRAP_MIN_CHARS}) and stops mid-sentence (no . ! ?), and the line
+     * itself carries no header cue (a date, a " -- " or " | " separator). A glyph alone on
+     * its line is joined to the text that follows it.
+     */
+    private List<String> joinWrappedLines(List<String> lines) {
+        List<String> out = new ArrayList<>();
+        String lastBulletLine = null;   // previous raw line, when it belonged to a bullet
+        boolean pendingGlyph = false;
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+            boolean bullet = BULLET_LINE.matcher(line).find();
+            if (pendingGlyph) {
+                out.set(out.size() - 1, out.get(out.size() - 1) + " " + stripBulletPrefix(line));
+                pendingGlyph = false;
+                lastBulletLine = line;
+            } else if (bullet && stripBulletPrefix(line).isEmpty()) {
+                out.add(line);
+                pendingGlyph = true;
+            } else if (!bullet && lastBulletLine != null && isWrapTail(lastBulletLine, line)) {
+                out.set(out.size() - 1, out.get(out.size() - 1) + " " + line);
+                lastBulletLine = line;
+            } else {
+                out.add(line);
+                lastBulletLine = bullet ? line : null;
+            }
+        }
+        return out;
+    }
+
+    private boolean isWrapTail(String previous, String line) {
+        String prev = previous.strip();
+        if (prev.length() < WRAP_MIN_CHARS) return false;
+        char end = prev.charAt(prev.length() - 1);
+        if (end == '.' || end == '!' || end == '?') return false;
+        return !HEADER_DATE.matcher(line).find()
+                && !PROJECT_SEPARATOR.matcher(line).find()
+                && !line.contains(" | ");
     }
 
     private boolean isSectionHeader(String line) {
@@ -224,8 +286,10 @@ public class ResumeParserService {
             if (name.isBlank()) continue;
 
             String description = String.join("\n", bulletLines).strip();
+            // Kept as a trailing line: the description is the generation source, and this is
+            // the one place the resume names the project's technologies.
             if (techStack != null && !techStack.isBlank()) {
-                description = (description.isBlank() ? "" : description).strip();
+                description = (description + "\nTech stack: " + techStack).strip();
             }
 
             result.add(new ParsedProject(name, description, dates.isBlank() ? null : dates));
