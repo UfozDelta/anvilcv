@@ -251,6 +251,20 @@ class ApplicationServiceTest {
         }
 
         @Test
+        void unknownOverrideBecomesGeneralistInStoreAndPrompt() {
+            crossLensPair();
+            when(llm.cleanJd(any(), any(), any())).thenReturn(
+                    new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
+
+            Application out = service.create(user, "jd text", null, "ml", false, ProgressLog.noOp());
+
+            ArgumentCaptor<LlmClient.RankRequest> cap = ArgumentCaptor.forClass(LlmClient.RankRequest.class);
+            verify(llm).rankBullets(cap.capture(), any(), any());
+            assertEquals("generalist", cap.getValue().roleEmphasis());
+            assertEquals("generalist", out.getRoleEmphasis());
+        }
+
+        @Test
         void createReturnsBeforeTheRecruiterPassThenScoresInBackground() throws Exception {
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(
                     new byte[]{1}, "Output written on in.pdf (1 page, 4096 bytes)."));
