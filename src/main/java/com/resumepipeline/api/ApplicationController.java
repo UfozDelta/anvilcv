@@ -5,6 +5,8 @@ import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationService;
 import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.obs.Mdc;
+import com.resumepipeline.profile.Profile;
+import com.resumepipeline.profile.ProfileRepository;
 import com.resumepipeline.progress.ProgressLog;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -18,7 +20,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,12 +36,14 @@ public class ApplicationController {
 
     private final ApplicationService service;
     private final JobProgressStore jobStore;
+    private final ProfileRepository profiles;
 
     private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
-    public ApplicationController(ApplicationService service, JobProgressStore jobStore) {
+    public ApplicationController(ApplicationService service, JobProgressStore jobStore, ProfileRepository profiles) {
         this.service = service;
         this.jobStore = jobStore;
+        this.profiles = profiles;
     }
 
     @GetMapping
@@ -203,8 +210,7 @@ public class ApplicationController {
         }
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_PDF);
-        String fname = "resume-" + (a.getCompany() == null ? "app" : a.getCompany().replaceAll("\\W+", "_")) + ".pdf";
-        h.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fname + "\"");
+        h.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + baseFilename(auth, a) + ".pdf\"");
         return new ResponseEntity<>(a.getPdfBlob(), h, 200);
     }
 
@@ -216,7 +222,7 @@ public class ApplicationController {
         }
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.parseMediaType("application/x-tex"));
-        h.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + baseFilename(a) + ".tex\"");
+        h.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + baseFilename(auth, a) + ".tex\"");
         return new ResponseEntity<>(a.getTexBlob(), h, 200);
     }
 
@@ -225,7 +231,36 @@ public class ApplicationController {
         return service.get(AuthUtils.userId(auth), id).getCoverLetter();
     }
 
-    private static String baseFilename(Application a) {
-        return "resume-" + (a.getCompany() == null ? "app" : a.getCompany().replaceAll("\\W+", "_"));
+    /** Read-only lookup: a download must not create a profile as a side effect. */
+    private String baseFilename(Authentication auth, Application a) {
+        String name = profiles.findByUserId(AuthUtils.userId(auth)).map(Profile::getName).orElse(null);
+        return resumeBase(name, a.getRole(), a.getCompany());
+    }
+
+    private static final Set<String> NAME_SUFFIXES = Set.of("jr", "sr", "ii", "iii", "iv");
+
+    /** {Last}_{Role}_resume, ASCII-safe; role falls back to company, missing parts are dropped. */
+    static String resumeBase(String name, String role, String company) {
+        String last = "";
+        if (name != null) {
+            String[] tokens = name.trim().split("\\s+");
+            for (int i = tokens.length - 1; i >= 0; i--) {
+                if (!NAME_SUFFIXES.contains(tokens[i].replace(".", "").toLowerCase())) { last = tokens[i]; break; }
+            }
+        }
+        String what = role != null && !role.isBlank() ? role : company;
+        List<String> parts = new ArrayList<>();
+        for (String part : new String[]{safe(last, 30), safe(what, 40), "resume"}) {
+            if (!part.isEmpty()) parts.add(part);
+        }
+        return String.join("_", parts);
+    }
+
+    private static String safe(String s, int max) {
+        if (s == null) return "";
+        String ascii = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        String out = ascii.replaceAll("[^A-Za-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        if (out.length() > max) out = out.substring(0, max).replaceAll("_+$", "");
+        return out;
     }
 }

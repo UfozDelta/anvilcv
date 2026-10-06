@@ -22,7 +22,7 @@ const SKILLS = [
   { key: 'frameworks', label: 'Frameworks', hint: 'React, Next.js, …' },
   { key: 'databases', label: 'Databases & AI', hint: 'PostgreSQL, RAG, …' },
   { key: 'devops', label: 'DevOps & tools', hint: 'Docker, CI/CD, …' },
-  { key: 'interests', label: 'Interests', hint: 'Hackathons, Chess, …' },
+  { key: 'interests', label: 'AI & integrations', hint: 'LLM APIs, MCP, Zapier, …' },
 ] as const;
 type SkillKey = (typeof SKILLS)[number]['key'];
 

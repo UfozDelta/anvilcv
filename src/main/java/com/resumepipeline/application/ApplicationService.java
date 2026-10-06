@@ -226,7 +226,7 @@ public class ApplicationService {
                 .distinct()
                 .toList();
 
-        // Collect the 4 selectable skill categories (interests excluded — personal, not JD-matchable).
+        // Collect the 4 selectable skill categories (AI & integrations row excluded — rendered as entered).
         List<LlmClient.SkillCategory> skillCategories = buildSkillCategories(profile);
 
         // Fit score runs against the whole profile and project history, so it does not depend
