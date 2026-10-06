@@ -4,6 +4,7 @@ import { Section } from '../components/Section';
 import { formStyles as styles } from '../components/form/styles';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import { BulletEvalSection } from '../components/admin/BulletEvalSection';
 
 type ProviderId = 'gemini' | 'opencode' | 'openai' | 'openrouter';
 
@@ -377,6 +378,8 @@ export function AdminPage() {
           {logs && logs.length > 0 ? logs.join('\n') : (logs ? 'No matching lines.' : 'Loading…')}
         </pre>
       </div>
+
+      <BulletEvalSection />
     </div>
   );
 }

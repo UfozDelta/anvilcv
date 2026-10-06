@@ -171,7 +171,6 @@ public class ApplicationService {
         Set<String> kwLower = clean.keywords().stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
-        java.util.function.ToLongFunction<Bullet> keywordScore = KeywordScorer.score(kwLower);
 
         // Lens: an explicit roleEmphasis overrides; otherwise the one inferred from the JD.
         // Empty lens list = generalist, which leaves the keyword order untouched.
@@ -179,22 +178,7 @@ public class ApplicationService {
         List<String> lenses = overridden ? CategoryLenses.validate(List.of(roleEmphasis)) : clean.lenses();
         final String emphasis = overridden ? roleEmphasis : CategoryLenses.label(lenses);
         progress.emit("Lens: " + emphasis + (overridden ? " (manual)" : " (from JD)"));
-        // Keyword score stays primary; the lens breaks ties between cross-lens framings of the
-        // same work, so collapseVariants keeps the framing that matches the role.
-        java.util.function.ToDoubleFunction<Bullet> lensedScore = b -> {
-            double w = CategoryLenses.weight(lenses, b.getCategory());
-            return keywordScore.applyAsLong(b) * (1 + CategoryLenses.BIAS * w) + 0.1 * w;
-        };
-        List<Bullet> candidates = allBullets.stream()
-                .collect(Collectors.groupingBy(Bullet::getProjectId))
-                .values().stream()
-                .flatMap(group -> collapseVariants(group.stream()
-                        .sorted(Comparator.comparingDouble(lensedScore).reversed())
-                        .toList()).stream()
-                        .limit(4))
-                .sorted(Comparator.comparingDouble(lensedScore).reversed())
-                .limit(25)
-                .toList();
+        List<Bullet> candidates = preFilter(allBullets, kwLower, lenses);
 
         progress.emit("Pre-filter: " + allBullets.size() + " total bullets → top " + candidates.size()
                 + " by tag overlap with JD keywords (" + clean.keywords().size() + " keywords)"
@@ -925,6 +909,31 @@ public class ApplicationService {
      * here and it is what decides which framing survives. {@code BulletSelector} still runs its
      * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
      */
+    /**
+     * The deterministic half of selection: what the ranking LLM gets to choose from. Top 4 per
+     * project by lensed keyword score (variants collapsed), then global top 25. Public so the
+     * admin bullet eval can replay it on a candidate bank without an LLM call.
+     */
+    public static List<Bullet> preFilter(List<Bullet> allBullets, Set<String> kwLower, List<String> lenses) {
+        java.util.function.ToLongFunction<Bullet> keywordScore = KeywordScorer.score(kwLower);
+        // Keyword score stays primary; the lens breaks ties between cross-lens framings of the
+        // same work, so collapseVariants keeps the framing that matches the role.
+        java.util.function.ToDoubleFunction<Bullet> lensedScore = b -> {
+            double w = CategoryLenses.weight(lenses, b.getCategory());
+            return keywordScore.applyAsLong(b) * (1 + CategoryLenses.BIAS * w) + 0.1 * w;
+        };
+        return allBullets.stream()
+                .collect(Collectors.groupingBy(Bullet::getProjectId))
+                .values().stream()
+                .flatMap(group -> collapseVariants(group.stream()
+                        .sorted(Comparator.comparingDouble(lensedScore).reversed())
+                        .toList()).stream()
+                        .limit(4))
+                .sorted(Comparator.comparingDouble(lensedScore).reversed())
+                .limit(25)
+                .toList();
+    }
+
     private static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
         List<Bullet> kept = new ArrayList<>();
         List<String> keptTexts = new ArrayList<>();
