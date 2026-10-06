@@ -2,6 +2,8 @@ package com.resumepipeline.api;
 
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationService;
+import com.resumepipeline.profile.Profile;
+import com.resumepipeline.profile.ProfileRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -11,10 +13,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.resumepipeline.api.WebTestSecurity.user;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -27,6 +31,7 @@ class ApplicationControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean ApplicationService service;
     @MockitoBean JobProgressStore jobStore;
+    @MockitoBean ProfileRepository profiles;
 
     @Test
     void listForwardsOutcomeFilter() throws Exception {
@@ -83,6 +88,33 @@ class ApplicationControllerTest {
 
         mvc.perform(get("/api/applications/{id}/pdf", id).with(user(userId)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void pdfFilenameIsLastNameRoleResume() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
+        Application a = new Application();
+        a.setRole("Senior Backend Engineer");
+        a.setPdfBlob(new byte[]{1});
+        when(service.get(userId, id)).thenReturn(a);
+        Profile p = new Profile();
+        p.setName("Jordan Reyes");
+        when(profiles.findByUserId(userId)).thenReturn(Optional.of(p));
+
+        mvc.perform(get("/api/applications/{id}/pdf", id).with(user(userId)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        "inline; filename=\"Reyes_Senior_Backend_Engineer_resume.pdf\""));
+    }
+
+    @Test
+    void resumeBaseHandlesSuffixesUnicodeAndFallbacks() {
+        assertThat(ApplicationController.resumeBase("José Muñoz Jr.", "C++ / Go Dev", "Acme"))
+                .isEqualTo("Munoz_C_Go_Dev_resume");
+        assertThat(ApplicationController.resumeBase("Jordan Reyes", " ", "Acme, Inc."))
+                .isEqualTo("Reyes_Acme_Inc_resume");
+        assertThat(ApplicationController.resumeBase("", null, null)).isEqualTo("resume");
+        assertThat(ApplicationController.resumeBase(null, "SWE \"Intern\"", null)).isEqualTo("SWE_Intern_resume");
     }
 
     @Test
