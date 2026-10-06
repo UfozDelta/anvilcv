@@ -89,6 +89,7 @@ export function ApplicationDetail() {
           </div>
           <div className="stat__caption">
             {over ? `${s.selectedLines - s.MAX_TOTAL_LINES} lines over — cut something.` : 'Fits on one page.'}
+            {s.selectedAwkward > 0 && ` ${s.selectedAwkward} bullet${s.selectedAwkward > 1 ? 's wrap' : ' wraps'} awkwardly.`}
           </div>
         </div>
 
