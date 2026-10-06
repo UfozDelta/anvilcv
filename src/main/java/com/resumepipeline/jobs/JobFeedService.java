@@ -15,6 +15,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -86,24 +88,31 @@ public class JobFeedService {
         }
     }
 
+    /**
+     * Search filters shared by {@link #list} and {@link #counts}. {@code remote} widens the location
+     * match to also take remote postings (alone it means remote only); {@code days} keeps postings
+     * received in the last that many days.
+     */
+    public record JobFilter(String q, String location, boolean remote, Integer days) {}
+
     /** {@code savedBy} non-null limits the list to postings that user saved. */
-    public Page<JobPosting> list(String source, String q, String location, UUID savedBy, int page, int size) {
+    public Page<JobPosting> list(String source, JobFilter f, UUID savedBy, int page, int size) {
         int clamped = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
-        return repo.findAll(spec(source, q, location, savedBy),
+        return repo.findAll(spec(source, f, savedBy),
                 PageRequest.of(Math.max(0, page), clamped, Sort.by(Sort.Direction.DESC, "receivedAt")));
     }
 
-    /** Per-source and saved totals under the same q/location filters as {@link #list}; saved is 0 for guests. */
-    public JobCounts counts(String q, String location, UUID userId) {
+    /** Per-source and saved totals under the same filters as {@link #list}; saved is 0 for guests. */
+    public JobCounts counts(JobFilter f, UUID userId) {
         return new JobCounts(
-                repo.count(spec("linkedin", q, location, null)),
-                repo.count(spec("indeed", q, location, null)),
-                userId == null ? 0 : repo.count(spec(null, q, location, userId)));
+                repo.count(spec("linkedin", f, null)),
+                repo.count(spec("indeed", f, null)),
+                userId == null ? 0 : repo.count(spec(null, f, userId)));
     }
 
     public record JobCounts(long linkedin, long indeed, long saved) {}
 
-    private Specification<JobPosting> spec(String source, String q, String location, UUID savedBy) {
+    Specification<JobPosting> spec(String source, JobFilter f, UUID savedBy) {
         Specification<JobPosting> spec = (root, query, cb) -> cb.conjunction();
         if (savedBy != null) {
             List<UUID> ids = repo.savedIds(savedBy);
@@ -112,6 +121,7 @@ public class JobFeedService {
         if (source != null && !source.isBlank()) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("source"), source));
         }
+        String q = f.q();
         if (q != null && !q.isBlank()) {
             String like = "%" + q.toLowerCase(Locale.ROOT) + "%";
             spec = spec.and((root, query, cb) -> cb.or(
@@ -119,9 +129,20 @@ public class JobFeedService {
                     cb.like(cb.lower(root.get("company")), like),
                     cb.like(cb.lower(root.get("role")), like)));
         }
-        if (location != null && !location.isBlank()) {
-            String like = "%" + location.toLowerCase(Locale.ROOT) + "%";
-            spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("location")), like));
+        String location = f.location();
+        boolean hasLocation = location != null && !location.isBlank();
+        if (hasLocation || f.remote()) {
+            String like = hasLocation ? "%" + location.toLowerCase(Locale.ROOT) + "%" : null;
+            spec = spec.and((root, query, cb) -> {
+                var loc = cb.lower(root.<String>get("location"));
+                if (!f.remote()) return cb.like(loc, like);
+                var remote = cb.like(loc, "%remote%");
+                return hasLocation ? cb.or(cb.like(loc, like), remote) : remote;
+            });
+        }
+        if (f.days() != null && f.days() > 0) {
+            Instant since = Instant.now().minus(f.days(), ChronoUnit.DAYS);
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("receivedAt"), since));
         }
         return spec;
     }

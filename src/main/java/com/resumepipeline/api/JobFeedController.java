@@ -53,16 +53,19 @@ public class JobFeedController {
     public JobListResponse list(@RequestParam(required = false) String source,
                                 @RequestParam(required = false) String q,
                                 @RequestParam(required = false) String location,
+                                @RequestParam(defaultValue = "false") boolean remote,
+                                @RequestParam(required = false) Integer days,
                                 @RequestParam(defaultValue = "false") boolean saved,
                                 @RequestParam(defaultValue = "0") int page,
                                 @RequestParam(defaultValue = "50") int size,
                                 Authentication auth) {
         // permitAll still runs the session, so a logged-in user arrives with their principal.
         UUID userId = auth != null && auth.getPrincipal() instanceof AppUserPrincipal principal ? principal.getUserId() : null;
-        JobFeedService.JobCounts counts = service.counts(q, location, userId);
+        JobFeedService.JobFilter filter = new JobFeedService.JobFilter(q, location, remote, days);
+        JobFeedService.JobCounts counts = service.counts(filter, userId);
         if (saved && userId == null) return new JobListResponse(List.of(), 0, counts);
 
-        Page<JobPosting> p = service.list(source, q, location, saved ? userId : null, page, size);
+        Page<JobPosting> p = service.list(source, filter, saved ? userId : null, page, size);
         Set<UUID> savedIds = userId == null ? Set.of()
                 : service.savedAmong(userId, p.map(JobPosting::getId).getContent());
         return new JobListResponse(p.map(j -> JobDto.of(j, savedIds.contains(j.getId()))).getContent(),

@@ -207,7 +207,7 @@ export interface JobPosting {
   saved: boolean;
 }
 
-/** Totals under the current q/location filters; `saved` is 0 for guests. */
+/** Totals under the current search filters; `saved` is 0 for guests. */
 export interface JobCounts { linkedin: number; indeed: number; saved: number }
 
 export interface JobList { jobs: JobPosting[]; total: number; counts?: JobCounts }
