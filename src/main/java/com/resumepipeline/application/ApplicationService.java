@@ -177,9 +177,12 @@ public class ApplicationService {
         // Empty lens list = generalist, which leaves the keyword order untouched.
         boolean overridden = roleEmphasis != null && !roleEmphasis.isBlank();
         List<String> lenses = overridden ? CategoryLenses.validate(List.of(roleEmphasis)) : clean.lenses();
-        final String emphasis = overridden ? roleEmphasis : CategoryLenses.label(lenses);
+        // Label from the validated lenses, so an unknown override ("ml") becomes "generalist"
+        // instead of stored and prompted as free text the bias never applied.
+        final String emphasis = CategoryLenses.label(lenses);
         progress.emit("Lens: " + emphasis + (overridden ? " (manual)" : " (from JD)"));
-        // Keyword score stays primary; the lens breaks ties between cross-lens framings of the
+        // Keyword score stays primary; the lens boosts in-lens bullets by up to BIAS (so a close
+        // off-lens bullet can be outranked) and breaks ties between cross-lens framings of the
         // same work, so collapseVariants keeps the framing that matches the role.
         java.util.function.ToDoubleFunction<Bullet> lensedScore = b -> {
             double w = CategoryLenses.weight(lenses, b.getCategory());
