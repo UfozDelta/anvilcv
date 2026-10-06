@@ -442,6 +442,8 @@
   color: var(--muted);
 }
 
+.brow__note { font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+
 .brow__text { font-size: 13.5px; line-height: 1.5; }
 .brow__text b { background: var(--acid); padding: 0 2px; font-weight: 700; }
 

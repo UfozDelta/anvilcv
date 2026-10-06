@@ -30,7 +30,9 @@ export function ApplicationDetail() {
 
   const app = s.app;
   const ogSelection = new Set(app.selectedBulletIds);
-  const dirty = !setsEqual(s.selectedIds, ogSelection);
+  const selectionDirty = !setsEqual(s.selectedIds, ogSelection);
+  // Either the selection changed or on-page text did — both mean the PDF no longer matches.
+  const dirty = selectionDirty || s.textStale;
   const verdicts = Object.fromEntries(
     app.recruiterBulletVerdicts.map(v => [v.bulletId, v]),
   ) as Record<string, BulletVerdict>;
@@ -162,6 +164,7 @@ export function ApplicationDetail() {
                   cfg={s.cfg}
                   locked={s.lockedIds.has(r.bulletId)}
                   isNew={s.justAddedIds.has(r.bulletId)}
+                  unranked={!s.rankedIds.has(r.bulletId)}
                   onToggleSelect={() => s.toggleBullet(r.bulletId)}
                   onToggleWhy={() => s.toggleWhy(r.bulletId)}
                   onEdit={() => s.setEditingId(r.bulletId)}
@@ -198,6 +201,9 @@ export function ApplicationDetail() {
                     editingProjectId={s.editingProjectId}
                     lockedIds={s.lockedIds}
                     newIds={s.justAddedIds}
+                    rankedIds={s.rankedIds}
+                    bankOpen={s.bankOpen.has(g.key)}
+                    onToggleBank={() => s.toggleBank(g.key)}
                     onToggleOpen={() => s.toggleGroup(g.key)}
                     onRefit={pid => s.startRefit(pid)}
                     onToggleSelect={s.toggleBullet}
@@ -222,7 +228,7 @@ export function ApplicationDetail() {
               <div className="actionbar__line">
                 <span>{s.selectedLines} of {s.MAX_TOTAL_LINES} lines used</span>
                 <span className={`savestate ${dirty ? 'savestate--dirty' : 'savestate--clean'}`}>
-                  {dirty ? 'Unsaved changes' : 'Saved'}
+                  {selectionDirty ? 'Unsaved changes' : s.textStale ? 'PDF out of date' : 'Saved'}
                 </span>
               </div>
               <div className="meter meter--thick">
@@ -288,7 +294,7 @@ export function ApplicationDetail() {
           submitUrl={`/api/applications/${app.id}/rerender/submit`}
           submitBody={{ selectedBulletIds: Array.from(s.selectedIds) }}
           pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
-          onDone={async () => { await s.load(); s.setPdfVersion(v => v + 1); s.setRerenderStreaming(false); }}
+          onDone={async () => { await s.load(); s.setPdfVersion(v => v + 1); s.setTextStale(false); s.setRerenderStreaming(false); }}
           onClose={() => s.setRerenderStreaming(false)}
           title="RE-RENDERING PDF..."
           doneLabel="DONE →"

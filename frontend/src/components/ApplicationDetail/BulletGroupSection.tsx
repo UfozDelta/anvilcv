@@ -1,10 +1,10 @@
-import type { Bullet, BulletVerdict, GenerationConfig, Project } from '../../lib/api';
-import type { BulletGroup } from '../../lib/groupBullets';
+import type { Bullet, BulletVerdict, GenerationConfig, Project, RankedBullet } from '../../lib/api';
+import { bankRows, type BulletGroup } from '../../lib/groupBullets';
 import { estimatedLines } from '../../lib/bulletLength';
 import { RankedBulletRow } from './RankedBulletRow';
 import { EditProjectHeader } from './EditProjectHeader';
 
-export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, refitBusy, editingId, cfg, editingProjectId, lockedIds, newIds, onToggleOpen, onRefit, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock }: {
+export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, refitBusy, editingId, cfg, editingProjectId, lockedIds, newIds, rankedIds, bankOpen, onToggleBank, onToggleOpen, onRefit, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock }: {
   g: BulletGroup;
   open: boolean;
   selectedIds: Set<string>;
@@ -20,6 +20,9 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   editingProjectId: string | null;
   lockedIds: Set<string>;
   newIds?: Set<string>;
+  rankedIds: Set<string>;
+  bankOpen: boolean;
+  onToggleBank: () => void;
   onToggleOpen: () => void;
   onRefit: (projectId: string) => void;
   onToggleSelect: (bulletId: string) => void;
@@ -37,7 +40,34 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   const selected = g.items.filter(r => selectedIds.has(r.bulletId));
   // Rendered-line share this group contributes to the one-page budget.
   const lines = selected.reduce((n, r) => n + estimatedLines(bullets[r.bulletId]?.text ?? ''), 0);
+  // The rest of this entry's bank, for picking by hand beyond the ranked shortlist. Picking one
+  // moves it into g.items (it becomes a selected orphan row), so it leaves this list.
+  const extra = g.project ? bankRows(g.project.id, bullets, new Set(g.items.map(r => r.bulletId))) : [];
   const headerEditing = g.project && editingProjectId === g.project.id;
+  const row = (r: RankedBullet) => (
+    <RankedBulletRow
+      key={r.bulletId}
+      r={r}
+      bullet={bullets[r.bulletId]}
+      isSelected={selectedIds.has(r.bulletId)}
+      whyOpen={expandedWhys.has(r.bulletId)}
+      verdict={verdicts[r.bulletId]}
+      editing={editingId === r.bulletId}
+      cfg={cfg}
+      locked={lockedIds.has(r.bulletId)}
+      isNew={newIds?.has(r.bulletId)}
+      unranked={!rankedIds.has(r.bulletId)}
+      onToggleSelect={() => onToggleSelect(r.bulletId)}
+      onToggleWhy={() => onToggleWhy(r.bulletId)}
+      onEdit={() => onEdit(r.bulletId)}
+      onCancelEdit={onCancelEdit}
+      onSaveBullet={(text, tags) => {
+        const b = bullets[r.bulletId];
+        if (b) onSaveBullet(b, text, tags);
+      }}
+      onToggleLock={() => onToggleLock(r.bulletId)}
+    />
+  );
   return (
     <div style={{ marginBottom: 14 }}>
       {headerEditing && g.project ? (
@@ -99,29 +129,13 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
           </div>
         </div>
       )}
-      {open && g.items.map(r => (
-        <RankedBulletRow
-          key={r.bulletId}
-          r={r}
-          bullet={bullets[r.bulletId]}
-          isSelected={selectedIds.has(r.bulletId)}
-          whyOpen={expandedWhys.has(r.bulletId)}
-          verdict={verdicts[r.bulletId]}
-          editing={editingId === r.bulletId}
-          cfg={cfg}
-          locked={lockedIds.has(r.bulletId)}
-          isNew={newIds?.has(r.bulletId)}
-          onToggleSelect={() => onToggleSelect(r.bulletId)}
-          onToggleWhy={() => onToggleWhy(r.bulletId)}
-          onEdit={() => onEdit(r.bulletId)}
-          onCancelEdit={onCancelEdit}
-          onSaveBullet={(text, tags) => {
-            const b = bullets[r.bulletId];
-            if (b) onSaveBullet(b, text, tags);
-          }}
-          onToggleLock={() => onToggleLock(r.bulletId)}
-        />
-      ))}
+      {open && g.items.map(row)}
+      {open && extra.length > 0 && (
+        <button type="button" className={`minibtn ${bankOpen ? 'is-on' : ''}`} style={{ marginTop: 6 }} onClick={onToggleBank}>
+          {bankOpen ? 'Hide bank' : `+ ${extra.length} more from bank`}
+        </button>
+      )}
+      {open && bankOpen && extra.map(row)}
     </div>
   );
 }

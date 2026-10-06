@@ -44,6 +44,11 @@ export function useApplicationDetail(id: string | undefined) {
   const preview = useBulletPreview();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  /** Groups whose "more from bank" rows are open. */
+  const [bankOpen, setBankOpen] = useState<Set<string>>(new Set());
+  /** An on-page bullet or heading was edited since the last render, so the PDF shows old text.
+   *  In-memory only: a reload forgets it. */
+  const [textStale, setTextStale] = useState(false);
   const { cfg } = useGenerationConfig();
 
   async function load() {
@@ -126,6 +131,12 @@ export function useApplicationDetail(id: string | undefined) {
     return [...parsed, ...orphans];
   }, [app, selectedIds, bullets]);
 
+  /** Ids the LLM actually ranked — everything else on screen is a manual pick from the bank. */
+  const rankedIds = useMemo(
+    () => new Set(parseRanking(app?.bulletRanking).map(r => r.bulletId)),
+    [app?.bulletRanking],
+  );
+
   const bulletsReady = Object.keys(bullets).length > 0 && Object.keys(projectById).length > 0;
 
   // Group the rank-sorted ranking by owning project, split into Experience/Projects
@@ -150,6 +161,14 @@ export function useApplicationDetail(id: string | undefined) {
       const updated = await api.patch<ApplicationResponse>(`/api/applications/${app.id}`, { outcome: o });
       setApp(updated);
     } finally { setBusy(false); }
+  }
+
+  function toggleBank(key: string) {
+    setBankOpen(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   }
 
   function toggleBullet(bid: string) {
@@ -184,6 +203,11 @@ export function useApplicationDetail(id: string | undefined) {
     const updated = await api.put<Bullet>(`/api/bullets/${b.id}`, { text, tags });
     setBullets(prev => ({ ...prev, [b.id]: updated }));
     setEditingId(null);
+    if (selectedIds.has(b.id) && app) {
+      setTextStale(true);
+      // The backend just flagged this page's scorecard stale; show it without resetting the selection.
+      api.get<ApplicationResponse>(`/api/applications/${app.id}`).then(setApp).catch(() => {});
+    }
   }
 
   /** Same endpoint the Project page uses. Sends the full current project merged with the
@@ -193,6 +217,7 @@ export function useApplicationDetail(id: string | undefined) {
     const updated = await api.put<Project>(`/api/projects/${project.id}`, { ...project, ...patch });
     setProjectById(prev => ({ ...prev, [project.id]: updated }));
     setEditingProjectId(null);
+    if ([...selectedIds].some(bid => bullets[bid]?.projectId === project.id)) setTextStale(true);
   }
 
   /** Locks are saved immediately (not batched with the PDF selection), since REFIT SELECTION
@@ -232,6 +257,7 @@ export function useApplicationDetail(id: string | undefined) {
   async function finishRefit() {
     const a = await load();
     setPdfVersion(v => v + 1);
+    setTextStale(false);
     if (a) {
       setJustAddedIds(new Set(a.selectedBulletIds.filter(bid => !preRefitSelection.current.has(bid))));
     }
@@ -251,6 +277,7 @@ export function useApplicationDetail(id: string | undefined) {
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,
     selectedLines, MAX_TOTAL_LINES,
+    rankedIds, bankOpen, toggleBank, textStale, setTextStale,
     TOP_N,
   };
 }
