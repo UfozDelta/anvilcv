@@ -79,7 +79,7 @@ public class SmokeController {
             Map.entry("SKILLS_FRAMEWORKS", "Spring Boot, React, Next.js, Node.js, PyTorch"),
             Map.entry("SKILLS_DATABASES",  "PostgreSQL, Redis, ChromaDB, RAG"),
             Map.entry("SKILLS_DEVOPS",     "Docker, Git, GitHub Actions, CI/CD"),
-            Map.entry("SKILLS_INTERESTS",  "Competitive Programming, Open Source, Chess")
+            Map.entry("SKILLS_INTERESTS",  "OpenAI API, LangChain, MCP, Stripe Webhooks")
         ));
 
         PdfCompiler.Result r = compiler.compile(tex);

@@ -201,7 +201,7 @@ export const PROFILE = {
     frameworks: 'Spring Boot, React, gRPC',
     databases: 'PostgreSQL, Redis, pgvector, RAG',
     devops: 'Docker, Kubernetes, GitHub Actions, Terraform',
-    interests: 'Chess, Hackathons',
+    interests: 'OpenAI API, LangChain, Stripe webhooks',
   },
 };
 

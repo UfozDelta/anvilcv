@@ -44,6 +44,7 @@ public class Profile {
     @Column(name = "skills_frameworks", nullable = false) private String skillsFrameworks = "";
     @Column(name = "skills_databases",  nullable = false) private String skillsDatabases  = "";
     @Column(name = "skills_devops",     nullable = false) private String skillsDevops     = "";
+    // Legacy name: rendered as "AI & Integrations" (column/field kept to avoid a migration).
     @Column(name = "skills_interests",  nullable = false) private String skillsInterests  = "";
 
     @Column(name = "updated_at", nullable = false)

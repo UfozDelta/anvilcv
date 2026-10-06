@@ -43,7 +43,7 @@ const SKILLS: { key: SkillKey; label: string; hint: string }[] = [
   { key: 'skillsFrameworks', label: 'Frameworks', hint: 'React, Next.js, …' },
   { key: 'skillsDatabases', label: 'Databases & AI', hint: 'PostgreSQL, RAG, …' },
   { key: 'skillsDevops', label: 'DevOps & tools', hint: 'Docker, CI/CD, …' },
-  { key: 'skillsInterests', label: 'Interests', hint: 'Hackathons, Chess, …' },
+  { key: 'skillsInterests', label: 'AI & integrations', hint: 'LLM APIs, MCP, Zapier, …' },
 ];
 
 function Row({ label, prefix, children }: { label: string; prefix?: string; children: React.ReactNode }) {
