@@ -3,7 +3,7 @@ import { estimatedLines } from '../../lib/bulletLength';
 import { RichText } from '../RichText';
 import { EditBullet } from '../ProjectDetail/EditBullet';
 
-export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, locked, isNew, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet, onToggleLock }: {
+export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, locked, isNew, unranked, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet, onToggleLock }: {
   r: RankedBullet;
   bullet: Bullet | undefined;
   isSelected: boolean;
@@ -13,6 +13,8 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
   cfg: GenerationConfig;
   locked: boolean;
   isNew?: boolean;
+  /** Not in the LLM ranking — a manual pick from the bank, so its rank number means nothing. */
+  unranked?: boolean;
   onToggleSelect: () => void;
   onToggleWhy: () => void;
   onEdit: () => void;
@@ -21,7 +23,12 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
   onToggleLock: () => void;
 }) {
   if (editing && bullet) {
-    return <EditBullet bullet={bullet} cfg={cfg} onCancel={onCancelEdit} onSave={onSaveBullet} />;
+    return (
+      <div>
+        <div className="brow__note">Saves to your bullet bank. Other applications pick it up on their next rebuild.</div>
+        <EditBullet bullet={bullet} cfg={cfg} onCancel={onCancelEdit} onSave={onSaveBullet} />
+      </div>
+    );
   }
   // What this bullet costs against the one-page budget, shown on the row that spends it.
   const cost = estimatedLines(bullet?.text ?? '');
@@ -37,7 +44,7 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
         <span className={`brow__state ${isSelected ? 'brow__state--in' : 'brow__state--out'}`}>
           {isSelected ? '✓ IN' : 'OUT'}
         </span>
-        <span className="brow__rank">rank {r.rank} · {cost}L</span>
+        <span className="brow__rank">{unranked ? 'bank' : `rank ${r.rank}`} · {cost}L</span>
       </button>
 
       <div>
@@ -54,6 +61,9 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
             <span className={`vchip vchip--${verdict.verdict}`} title={verdict.reason}>
               {verdict.verdict}
             </span>
+          )}
+          {bullet?.status === 'PENDING' && (
+            <span className="vchip vchip--weak" title="Not reviewed yet in the bullet bank">pending</span>
           )}
           {bullet?.tags.map(t => <span key={t} className="kw">{t}</span>)}
 

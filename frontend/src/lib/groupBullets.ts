@@ -45,3 +45,18 @@ export function groupRankedByProject(
   }
   return { experience, projects };
 }
+
+/**
+ * Bank bullets of one project that have no row yet: the ones a manual pick can add beyond the
+ * LLM-ranked shortlist. REJECTED bullets never go on a page (same filter as the backend's
+ * selectable bank). Rank is unused for these rows.
+ */
+export function bankRows(
+  projectId: string,
+  bullets: Record<string, Bullet>,
+  shown: Set<string>,
+): RankedBullet[] {
+  return Object.values(bullets)
+    .filter(b => b.projectId === projectId && b.status !== 'REJECTED' && !shown.has(b.id))
+    .map(b => ({ bulletId: b.id, rank: 0, why: '' }));
+}

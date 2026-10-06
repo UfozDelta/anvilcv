@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Bullet, Project, RankedBullet } from './api';
-import { groupRankedByProject } from './groupBullets';
+import { bankRows, groupRankedByProject } from './groupBullets';
 
 // ---- test data builders ----
 
@@ -106,5 +106,16 @@ describe('groupRankedByProject', () => {
     expect(out.projects).toHaveLength(1);
     expect(out.projects[0].key).toBe('__other__');
     expect(out.projects[0].items).toHaveLength(2);
+  });
+});
+
+describe('bankRows', () => {
+  it('returns the project\'s bank bullets that have no row yet, skipping REJECTED', () => {
+    const rejected = { ...bullet('a3', 'pA'), status: 'REJECTED' as const };
+    const { bullets } = maps([bullet('a1', 'pA'), bullet('a2', 'pA'), rejected, bullet('b1', 'pB')], []);
+
+    const out = bankRows('pA', bullets, new Set(['a1']));
+
+    expect(out.map(r => r.bulletId)).toEqual(['a2']);
   });
 });
