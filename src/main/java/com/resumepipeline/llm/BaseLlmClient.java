@@ -764,26 +764,30 @@ public abstract class BaseLlmClient implements LlmClient {
                   - company: the hiring company name.
                   - role: the job title.
                   - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
+                  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: %s. Empty array if the role is general or unclear.
 
                 Raw JD:
                 %s
-                """.formatted(rawJd);
+                """.formatted(CategoryLenses.slugList(), rawJd);
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "cleanJd",  SchemaSpec.string(),
                 "company",  SchemaSpec.string(),
                 "role",     SchemaSpec.string(),
-                "keywords", SchemaSpec.array(SchemaSpec.string())
-        )), List.of("cleanJd", "company", "role", "keywords"));
+                "keywords", SchemaSpec.array(SchemaSpec.string()),
+                "lenses",   SchemaSpec.array(SchemaSpec.string())
+        )), List.of("cleanJd", "company", "role", "keywords", "lenses"));
 
         String json = callJsonWithRetry(cleanJdModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, false, "JD clean");
         try {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
             List<String> kws = env.keywords == null ? List.of() : env.keywords;
             // Emit what we extracted so the user can see the parsed role/company immediately.
+            List<String> lenses = CategoryLenses.validate(env.lenses);
             progress.emit("Extracted: role=" + env.role + ", company=" + env.company
+                    + ", lens=" + CategoryLenses.label(lenses)
                     + ", " + kws.size() + " keywords: " + String.join(", ", kws));
-            return new JdCleanResult(env.cleanJd, env.company, env.role, kws);
+            return new JdCleanResult(env.cleanJd, env.company, env.role, kws, lenses);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse LLM cleanJd response: " + json, e);
         }
@@ -798,24 +802,28 @@ public abstract class BaseLlmClient implements LlmClient {
                   - company: the hiring company name.
                   - role: the job title.
                   - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
+                  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: %s. Empty array if the role is general or unclear.
 
                 JD:
                 %s
-                """.formatted(cappedJd);
+                """.formatted(CategoryLenses.slugList(), cappedJd);
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "company",  SchemaSpec.string(),
                 "role",     SchemaSpec.string(),
-                "keywords", SchemaSpec.array(SchemaSpec.string())
-        )), List.of("company", "role", "keywords"));
+                "keywords", SchemaSpec.array(SchemaSpec.string()),
+                "lenses",   SchemaSpec.array(SchemaSpec.string())
+        )), List.of("company", "role", "keywords", "lenses"));
 
         String json = callJsonWithRetry(cleanJdModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, false, "JD extract");
         try {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
             List<String> kws = env.keywords == null ? List.of() : env.keywords;
+            List<String> lenses = CategoryLenses.validate(env.lenses);
             progress.emit("Extracted: role=" + env.role + ", company=" + env.company
+                    + ", lens=" + CategoryLenses.label(lenses)
                     + ", " + kws.size() + " keywords: " + String.join(", ", kws));
-            return new JdCleanResult(cappedJd, env.company, env.role, kws);
+            return new JdCleanResult(cappedJd, env.company, env.role, kws, lenses);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse LLM extractJd response: " + json, e);
         }
@@ -1494,6 +1502,7 @@ public abstract class BaseLlmClient implements LlmClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class JdCleanEnvelope {
         public String cleanJd; public String company; public String role; public List<String> keywords;
+        public List<String> lenses;
     }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class RankEnvelope {

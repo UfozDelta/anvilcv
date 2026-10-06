@@ -6,6 +6,7 @@ import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.jd.JdFetcher;
 import com.resumepipeline.llm.BulletTextRules;
+import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
@@ -171,14 +172,27 @@ public class ApplicationService {
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
         java.util.function.ToLongFunction<Bullet> keywordScore = KeywordScorer.score(kwLower);
+
+        // Lens: an explicit roleEmphasis overrides; otherwise the one inferred from the JD.
+        // Empty lens list = generalist, which leaves the keyword order untouched.
+        boolean overridden = roleEmphasis != null && !roleEmphasis.isBlank();
+        List<String> lenses = overridden ? CategoryLenses.validate(List.of(roleEmphasis)) : clean.lenses();
+        final String emphasis = overridden ? roleEmphasis : CategoryLenses.label(lenses);
+        progress.emit("Lens: " + emphasis + (overridden ? " (manual)" : " (from JD)"));
+        // Keyword score stays primary; the lens breaks ties between cross-lens framings of the
+        // same work, so collapseVariants keeps the framing that matches the role.
+        java.util.function.ToDoubleFunction<Bullet> lensedScore = b -> {
+            double w = CategoryLenses.weight(lenses, b.getCategory());
+            return keywordScore.applyAsLong(b) * (1 + CategoryLenses.BIAS * w) + 0.1 * w;
+        };
         List<Bullet> candidates = allBullets.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId))
                 .values().stream()
                 .flatMap(group -> collapseVariants(group.stream()
-                        .sorted(Comparator.comparingLong(keywordScore).reversed())
+                        .sorted(Comparator.comparingDouble(lensedScore).reversed())
                         .toList()).stream()
                         .limit(4))
-                .sorted(Comparator.comparingLong(keywordScore).reversed())
+                .sorted(Comparator.comparingDouble(lensedScore).reversed())
                 .limit(25)
                 .toList();
 
@@ -220,12 +234,12 @@ public class ApplicationService {
                 .toList();
         CompletableFuture<LlmClient.FitResult> fitFuture = CompletableFuture.supplyAsync(Mdc.wrap(() ->
                 llm.scoreFit(new LlmClient.FitRequest(clean.cleanJd(), clean.company(), clean.role(),
-                        clean.keywords(), roleEmphasis, skillCategories, projectSummaries), progress, tokens)),
+                        clean.keywords(), emphasis, skillCategories, projectSummaries), progress, tokens)),
                 PARALLEL_EXECUTOR);
 
         LlmClient.RankRequest rankReq = new LlmClient.RankRequest(
                 clean.cleanJd(), clean.company(), clean.role(),
-                clean.keywords(), roleEmphasis, bulletsForMatch, allCourses, skillCategories);
+                clean.keywords(), emphasis, bulletsForMatch, allCourses, skillCategories);
 
         PipelineTimer tRank = PipelineTimer.start("rank (" + candidates.size() + " bullets)");
         LlmClient.RankResult rank = llm.rankBullets(rankReq, progress, tokens);
@@ -335,7 +349,7 @@ public class ApplicationService {
                 .supplyAsync(Mdc.wrap(() -> compiler.compile(tex)), PARALLEL_EXECUTOR);
         CompletableFuture<String> coverLetterFuture = includeCoverLetter
                 ? CompletableFuture.supplyAsync(Mdc.wrap(() -> llm.coverLetter(
-                        new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), roleEmphasis, selectedTexts),
+                        new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), emphasis, selectedTexts),
                         progress, tokens)), PARALLEL_EXECUTOR)
                 : CompletableFuture.completedFuture(null);
 
@@ -366,7 +380,7 @@ public class ApplicationService {
         a.setUserId(userId);
         a.setJdText(jdText);
         a.setJdUrl(jdUrl);
-        a.setRoleEmphasis(roleEmphasis);
+        a.setRoleEmphasis(emphasis);
         a.setCompany(clean.company());
         a.setRole(clean.role());
         a.setCoverLetter(coverLetterText);

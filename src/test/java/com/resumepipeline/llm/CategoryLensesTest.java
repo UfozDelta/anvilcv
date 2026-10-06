@@ -42,6 +42,23 @@ class CategoryLensesTest {
     }
 
     @Test
+    void validateKeepsKnownSlugsDedupedAndCapsAtTwo() {
+        assertEquals(java.util.List.of("backend", "data"),
+                CategoryLenses.validate(java.util.Arrays.asList("Backend", "bogus", null, "backend", "data", "devops")));
+        assertEquals(java.util.List.of(), CategoryLenses.validate(null));
+    }
+
+    @Test
+    void weightAndLabel() {
+        assertEquals(1.0, CategoryLenses.weight(java.util.List.of("backend"), "backend"));
+        assertEquals(0.7, CategoryLenses.weight(java.util.List.of("backend", "data"), "backend"));
+        assertEquals(0.3, CategoryLenses.weight(java.util.List.of("backend", "data"), "data"));
+        assertEquals(0.0, CategoryLenses.weight(java.util.List.of("backend"), null));
+        assertEquals("backend+data", CategoryLenses.label(java.util.List.of("backend", "data")));
+        assertEquals("generalist", CategoryLenses.label(java.util.List.of()));
+    }
+
+    @Test
     void lensesNameNoVendorTheSourceMustSupply() {
         // The lens says what to look FOR. Naming specific products here pushes the model to claim
         // them on projects that never used them, and BulletTextRules.fabricatedNumbers only

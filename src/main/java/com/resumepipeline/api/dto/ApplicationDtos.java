@@ -22,7 +22,7 @@ public class ApplicationDtos {
     public record CreateApplicationRequest(
             String jdText,
             String jdUrl,
-            @NotBlank String roleEmphasis,
+            String roleEmphasis,   // optional manual override; null/blank = infer the lens from the JD
             boolean includeCoverLetter
     ) {}
 

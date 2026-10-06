@@ -120,7 +120,12 @@ public interface LlmClient {
     record BulletToRefit(String id, String text) {}
     record RefitResult(List<BulletToRefit> bullets) {}
 
-    record JdCleanResult(String cleanJd, String company, String role, List<String> keywords) {}
+    /** {@code lenses}: up to 2 {@link CategoryLenses} slugs the JD leans toward, best first; empty = generalist. */
+    record JdCleanResult(String cleanJd, String company, String role, List<String> keywords, List<String> lenses) {
+        public JdCleanResult(String cleanJd, String company, String role, List<String> keywords) {
+            this(cleanJd, company, role, keywords, List.of());
+        }
+    }
 
     record RankRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis, List<BulletForMatch> bullets, List<String> courses, List<SkillCategory> skillCategories) {}
     record CoverLetterRequest(String cleanJd, String company, String role, String roleEmphasis, List<String> topBulletTexts) {}

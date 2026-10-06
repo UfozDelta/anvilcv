@@ -3,16 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PageTitle } from '../components/ledger/shared';
 import { EventStream } from '../components/EventStream';
-import { CATEGORIES } from '../lib/api';
-
-// Derived from CATEGORIES so the emphasis slugs stay identical to the lens slugs the bank was
-// generated under — roleEmphasis can only pick between framings that already exist, so an
-// emphasis with no matching lens ("ml" when the lens is "ai-ml") had nothing to select.
-// "generalist" is the deliberate extra: no lens, meaning no angle preference.
-const EMPHASES = [
-  ...CATEGORIES.map(c => ({ value: c.slug, label: c.label })),
-  { value: 'generalist', label: 'Generalist' },
-];
 
 const looksLikeUrl = (s: string) => /^https?:\/\/\S+\.\S+/i.test(s.trim());
 
@@ -22,7 +12,6 @@ export function NewApplication() {
   // Prefilled when arriving from a posting's Tailor button on /jobs.
   const [params] = useSearchParams();
   const [jdUrl, setJdUrl] = useState(params.get('jdUrl') ?? '');
-  const [roleEmphasis, setRoleEmphasis] = useState('backend');
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -71,15 +60,6 @@ export function NewApplication() {
           )}
         </fieldset>
 
-        <fieldset className="na-sec" disabled={streaming}>
-          <legend className="ap-label">Emphasis</legend>
-          <div className="na-lenses" role="group" aria-label="Role emphasis">
-            {EMPHASES.map(o => (
-              <button key={o.value} type="button" aria-pressed={roleEmphasis === o.value} onClick={() => setRoleEmphasis(o.value)}>{o.label}</button>
-            ))}
-          </div>
-        </fieldset>
-
         <div className="na-submit">
           <label className="na-check">
             <input type="checkbox" checked={includeCoverLetter} disabled={streaming} onChange={e => setIncludeCoverLetter(e.target.checked)} />
@@ -95,7 +75,6 @@ export function NewApplication() {
           submitBody={{
             jdText: jdText.trim() || undefined,
             jdUrl: jdUrl.trim() || undefined,
-            roleEmphasis,
             includeCoverLetter,
           }}
           pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}

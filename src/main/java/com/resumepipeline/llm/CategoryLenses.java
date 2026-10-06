@@ -1,6 +1,7 @@
 package com.resumepipeline.llm;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -89,6 +90,40 @@ public final class CategoryLenses {
     public static String lensFor(String category) {
         if (category == null || category.isBlank()) return null;
         return LENSES.get(category);
+    }
+
+    public static final String GENERALIST = "generalist";
+
+    /** Bias strength in the application pre-filter: a bullet in the top lens scores up to 30% higher. */
+    public static final double BIAS = 0.3;
+
+    /** Keeps known slugs only, de-duplicated, at most 2, best first. Null-safe. */
+    public static List<String> validate(List<String> raw) {
+        if (raw == null) return List.of();
+        return raw.stream()
+                .filter(s -> s != null && LENSES.containsKey(s.trim().toLowerCase()))
+                .map(s -> s.trim().toLowerCase())
+                .distinct()
+                .limit(2)
+                .toList();
+    }
+
+    /** Weight of {@code category} in an ordered lens list: sole lens 1.0, else 0.7 / 0.3, absent 0. */
+    public static double weight(List<String> lenses, String category) {
+        if (category == null) return 0;
+        int i = lenses.indexOf(category);
+        if (i < 0) return 0;
+        return lenses.size() == 1 ? 1.0 : (i == 0 ? 0.7 : 0.3);
+    }
+
+    /** Human/prompt label: "backend+data", or "generalist" when no lens applies. */
+    public static String label(List<String> lenses) {
+        return lenses.isEmpty() ? GENERALIST : String.join("+", lenses);
+    }
+
+    /** Prompt-schema hint listing the slugs the JD parse may choose from. */
+    public static String slugList() {
+        return String.join(", ", LENSES.keySet());
     }
 
     private CategoryLenses() {}

@@ -51,16 +51,14 @@ class ApplicationControllerTest {
     }
 
     @Test
-    void submitRejectsBlankRoleEmphasisWith400() throws Exception {
+    void submitWithoutRoleEmphasisReturns202() throws Exception {
         UUID userId = UUID.randomUUID();
 
         mvc.perform(post("/api/applications/submit")
                         .with(user(userId)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"jdText\":\"x\",\"roleEmphasis\":\"\"}"))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(service);
+                        .content("{\"jdText\":\"x\"}"))
+                .andExpect(status().isAccepted());
     }
 
     @Test

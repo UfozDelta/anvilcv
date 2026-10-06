@@ -199,6 +199,57 @@ class ApplicationServiceTest {
             assertEquals(0, out.getFitStrengths().length);
         }
 
+        /** Two identical-prose framings of one project, categories security vs backend, equal keyword score. */
+        private Bullet[] crossLensPair() {
+            Bullet security = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"java"});
+            Bullet backend = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"java"});
+            security.setText("Built the auth service handling login for all tenants");
+            backend.setText("Built the auth service handling login for all tenants");
+            security.setCategory("security");
+            backend.setCategory("backend");
+            when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(security, backend));
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            return new Bullet[]{security, backend};
+        }
+
+        private String rankedIds() {
+            ArgumentCaptor<LlmClient.RankRequest> cap = ArgumentCaptor.forClass(LlmClient.RankRequest.class);
+            verify(llm).rankBullets(cap.capture(), any(), any());
+            return cap.getValue().bullets().stream().map(LlmClient.BulletForMatch::bulletId).toList().toString();
+        }
+
+        @Test
+        void inferredLensPicksTheMatchingFramingAndIsPersisted() {
+            Bullet[] pair = crossLensPair();
+            when(llm.cleanJd(any(), any(), any())).thenReturn(
+                    new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
+
+            Application out = service.create(user, "jd text", null, null, false, ProgressLog.noOp());
+
+            assertEquals("[" + pair[1].getId() + "]", rankedIds());
+            assertEquals("backend", out.getRoleEmphasis());
+        }
+
+        @Test
+        void explicitRoleEmphasisOverridesInferredLens() {
+            Bullet[] pair = crossLensPair();
+            when(llm.cleanJd(any(), any(), any())).thenReturn(
+                    new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
+
+            Application out = service.create(user, "jd text", null, "security", false, ProgressLog.noOp());
+
+            assertEquals("[" + pair[0].getId() + "]", rankedIds());
+            assertEquals("security", out.getRoleEmphasis());
+        }
+
+        @Test
+        void noLensFallsBackToGeneralist() {
+            crossLensPair();
+            Application out = service.create(user, "jd text", null, "  ", false, ProgressLog.noOp());
+
+            assertEquals("generalist", out.getRoleEmphasis());
+        }
+
         @Test
         void createReturnsBeforeTheRecruiterPassThenScoresInBackground() throws Exception {
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(
