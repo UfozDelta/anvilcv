@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { api, type ApplicationResponse, type Bullet, type Project } from '../lib/api';
 import { groupRankedByProject } from '../lib/groupBullets';
-import { estimatedLines } from '../lib/bulletLength';
+import { awkwardCount, estimatedLines } from '../lib/bulletLength';
 import { useBulletPreview } from './useBulletPreview';
 import { parseRanking } from '../lib/ranking';
 import { useGenerationConfig } from './useGenerationConfig';
@@ -197,6 +197,12 @@ export function useApplicationDetail(id: string | undefined) {
     [selectedIds, bullets],
   );
 
+  // Selected bullets whose length wraps badly (half-filled second line, third line, too short).
+  const selectedAwkward = useMemo(
+    () => awkwardCount([...selectedIds].map(bid => bullets[bid]?.text ?? '').filter(Boolean), cfg),
+    [selectedIds, bullets, cfg],
+  );
+
   /** Saves straight to the bullet bank (same endpoint the Project page uses), so the
    * edit is visible on both /projects/:id and every application referencing this bullet. */
   async function saveBullet(b: Bullet, text: string, tags: string[]) {
@@ -276,7 +282,7 @@ export function useApplicationDetail(id: string | undefined) {
     justAddedIds, startRefit, finishRefit,
     previewKey, previewUrl: preview.url, previewBusy: preview.busy, previewErr: preview.err,
     previewGroup, closePreview,
-    selectedLines, MAX_TOTAL_LINES,
+    selectedLines, selectedAwkward, MAX_TOTAL_LINES,
     rankedIds, bankOpen, toggleBank, textStale, setTextStale,
     TOP_N,
   };

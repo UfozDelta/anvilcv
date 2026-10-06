@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHARS_PER_LINE, CHARS_PER_WORD, charCount, estimatedLines, fitOf, needsRefit } from './bulletLength';
+import { awkwardCount, CHARS_PER_LINE, CHARS_PER_WORD, charCount, estimatedLines, fitOf, needsRefit } from './bulletLength';
 import type { GenerationConfig } from './api';
 
 // The shipped backend defaults (V24, calibrated at CHARS_PER_WORD 7.4 measured over
@@ -76,5 +76,14 @@ describe('needsRefit', () => {
   it('acts on the three bad fits only', () => {
     expect(['DEAD_ZONE', 'TOO_LONG', 'TOO_SHORT'].every(f => needsRefit(f as any))).toBe(true);
     expect(['ONE_LINE', 'TWO_LINE', 'OFF'].some(f => needsRefit(f as any))).toBe(false);
+  });
+});
+
+describe('awkwardCount', () => {
+  it('counts dead-zone, too-long and too-short bullets, not clean ones', () => {
+    expect(awkwardCount([of(90), of(130), of(250), of(40), of(180)], CFG)).toBe(3);
+  });
+  it('is zero when the length filter is off', () => {
+    expect(awkwardCount([of(130)], { ...CFG, wordFilterEnabled: false })).toBe(0);
   });
 });

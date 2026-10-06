@@ -1,5 +1,5 @@
 import type { Bullet, BulletVerdict, GenerationConfig, RankedBullet } from '../../lib/api';
-import { estimatedLines } from '../../lib/bulletLength';
+import { estimatedLines, fitHint, fitOf, needsRefit, FIT_LABEL } from '../../lib/bulletLength';
 import { RichText } from '../RichText';
 import { EditBullet } from '../ProjectDetail/EditBullet';
 
@@ -32,6 +32,7 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
   }
   // What this bullet costs against the one-page budget, shown on the row that spends it.
   const cost = estimatedLines(bullet?.text ?? '');
+  const fit = bullet ? fitOf(bullet.text, cfg) : 'OFF';
   return (
     <div className={`brow ${isSelected ? 'is-in' : 'is-out'}${isNew ? ' is-new' : ''}`}>
       {/* A real button with the state written out — not a dimmed div you have to decode. */}
@@ -64,6 +65,9 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
           )}
           {bullet?.status === 'PENDING' && (
             <span className="vchip vchip--weak" title="Not reviewed yet in the bullet bank">pending</span>
+          )}
+          {bullet && needsRefit(fit) && (
+            <span className="kw kw--miss" style={{ color: 'var(--rust)' }} title={fitHint(bullet.text, cfg)}>{FIT_LABEL[fit]}</span>
           )}
           {bullet?.tags.map(t => <span key={t} className="kw">{t}</span>)}
 

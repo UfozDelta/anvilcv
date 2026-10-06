@@ -53,6 +53,11 @@ export function needsRefit(fit: Fit): boolean {
   return fit === 'DEAD_ZONE' || fit === 'TOO_LONG' || fit === 'TOO_SHORT';
 }
 
+/** How many of these bullets wrap awkwardly on the page (dead zone, third line, or under the floor). */
+export function awkwardCount(texts: string[], cfg: GenerationConfig): number {
+  return texts.filter(t => needsRefit(fitOf(t, cfg))).length;
+}
+
 export const FIT_LABEL: Record<Fit, string> = {
   ONE_LINE: '1-LINE',
   TWO_LINE: '2-LINE',
