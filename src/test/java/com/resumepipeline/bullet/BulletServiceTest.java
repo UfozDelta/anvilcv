@@ -97,6 +97,8 @@ class BulletServiceTest {
         // The bullet keeps its id, so every application still renders it - under a scorecard
         // that graded the old wording. Nothing else in the app flags that.
         verify(applicationRepo).markRecruiterStaleForBullets(user, id.toString());
+        // ...and the stored PDF still prints the old wording.
+        verify(applicationRepo).markPdfStaleForBullets(user, id.toString());
     }
 
     @Test
@@ -109,8 +111,10 @@ class BulletServiceTest {
 
         service.update(user, id, null, new String[]{"data"});
 
-        // Tags steer selection; they are not printed, so no rendered page changed.
-        verifyNoInteractions(applicationRepo);
+        // Tags steer selection and are not graded, so no scorecard changed...
+        verify(applicationRepo, never()).markRecruiterStaleForBullets(any(), any());
+        // ...but a project heading prints them when its tech stack is blank, so the PDF may have.
+        verify(applicationRepo).markPdfStaleForBullets(user, id.toString());
     }
 
     @Test

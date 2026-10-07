@@ -316,6 +316,8 @@ export interface ApplicationResponse {
   /** Pages in the compiled PDF, from tectonic's log. Null when unknown. */
   pageCount: number | null;
   pdfAvailable: boolean;
+  /** Something the PDF prints was edited (here or on another page) since it was compiled. */
+  pdfStale: boolean;
   tectonicLog: string | null;
   outcome: string;
   createdAt: string;

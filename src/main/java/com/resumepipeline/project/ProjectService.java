@@ -1,5 +1,6 @@
 package com.resumepipeline.project;
 
+import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.llm.GithubContextFetcher;
 import org.slf4j.Logger;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -24,11 +26,15 @@ public class ProjectService {
     private final ProjectRepository repo;
     private final BulletRepository bulletRepo;
     private final GithubContextFetcher githubFetcher;
+    // A heading edit changes every PDF that prints this entry — see markPdfStale.
+    private final ApplicationRepository applicationRepo;
 
-    public ProjectService(ProjectRepository repo, BulletRepository bulletRepo, GithubContextFetcher githubFetcher) {
+    public ProjectService(ProjectRepository repo, BulletRepository bulletRepo, GithubContextFetcher githubFetcher,
+                          ApplicationRepository applicationRepo) {
         this.repo = repo;
         this.bulletRepo = bulletRepo;
         this.githubFetcher = githubFetcher;
+        this.applicationRepo = applicationRepo;
     }
 
     public List<Project> list(UUID userId) {
@@ -101,6 +107,7 @@ public class ProjectService {
                           String technicalDecisions, String userImpact, String securityPosture,
                           String title, String company, String location, String dates, Boolean current) {
         Project p = get(userId, id);
+        List<Object> printedBefore = printed(p);
         if (name != null)        p.setName(name);
         if (description != null) p.setDescription(description);
         p.setContextDescription(contextDescription);
@@ -121,6 +128,7 @@ public class ProjectService {
         if (current != null) p.setCurrent(current);
         else if (looksCurrent(dates)) p.setCurrent(true);
         Project saved = repo.save(p);
+        if (!printed(saved).equals(printedBefore)) markPdfStale(userId, saved.getId());
         boolean urlChanged = githubUrl != null && !githubUrl.equals(oldUrl);
         if (urlChanged) {
             fetchAndCacheRepoContext(saved.getId(), githubUrl);
@@ -144,9 +152,25 @@ public class ProjectService {
         }
     }
 
+    /** The fields ApplicationRenderer prints in this entry's heading; the rest only feed prompts. */
+    private static List<Object> printed(Project p) {
+        return Arrays.asList(p.getName(), p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(), p.getTechStack());
+    }
+
+    /** Flag every PDF printing a bullet of this project. Never fails the edit it follows. */
+    private void markPdfStale(UUID userId, UUID projectId) {
+        try {
+            applicationRepo.markPdfStaleForProject(userId, projectId);
+        } catch (RuntimeException e) {
+            log.warn("Could not flag application PDFs stale after project edit: {}", e.getMessage());
+        }
+    }
+
     @Transactional
     public void delete(UUID userId, UUID id) {
         Project p = get(userId, id);
+        // Before the bullets go: the flag finds affected pages through them.
+        markPdfStale(userId, p.getId());
         bulletRepo.deleteByProjectId(p.getId());
         repo.deleteById(p.getId());
     }

@@ -1,5 +1,6 @@
 package com.resumepipeline.project;
 
+import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.llm.GithubContextFetcher;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ class ProjectServiceTest {
     @Mock ProjectRepository repo;
     @Mock BulletRepository bulletRepo;
     @Mock GithubContextFetcher githubFetcher;
+    @Mock ApplicationRepository applicationRepo;
     @InjectMocks ProjectService service;
 
     @Test
@@ -105,6 +107,46 @@ class ProjectServiceTest {
         InOrder order = inOrder(bulletRepo, repo);
         order.verify(bulletRepo).deleteByProjectId(existing.getId());
         order.verify(repo).deleteById(existing.getId());
+    }
+
+    @Test
+    void deleteFlagsPdfsBeforeTheBulletsTheFlagIsFoundThroughAreGone() {
+        UUID user = UUID.randomUUID(), id = UUID.randomUUID();
+        Project existing = new Project(user, Project.Kind.PROJECT, "P", "d", null, null, null, null, null);
+        when(repo.findByUserIdAndId(user, id)).thenReturn(Optional.of(existing));
+
+        service.delete(user, id);
+
+        InOrder order = inOrder(applicationRepo, bulletRepo);
+        order.verify(applicationRepo).markPdfStaleForProject(user, existing.getId());
+        order.verify(bulletRepo).deleteByProjectId(existing.getId());
+    }
+
+    @Test
+    void editingAPrintedHeadingFieldFlagsPdfs() {
+        UUID user = UUID.randomUUID(), id = UUID.randomUUID();
+        Project existing = new Project(user, Project.Kind.EXPERIENCE, "x", "d", null, "SWE", "Acme", "NYC", "2024");
+        when(repo.findByUserIdAndId(user, id)).thenReturn(Optional.of(existing));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.update(user, id, null, null, null, null, null, null, null, null, null, null, null, null,
+                "Senior SWE", "Acme", "NYC", "2024");
+
+        verify(applicationRepo).markPdfStaleForProject(user, existing.getId());
+    }
+
+    @Test
+    void editingOnlyPromptFieldsLeavesPdfsAlone() {
+        UUID user = UUID.randomUUID(), id = UUID.randomUUID();
+        Project existing = new Project(user, Project.Kind.EXPERIENCE, "x", "d", null, "SWE", "Acme", "NYC", "2024");
+        when(repo.findByUserIdAndId(user, id)).thenReturn(Optional.of(existing));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // yourRole / hardestProblem feed bullet generation; nothing on the page prints them.
+        service.update(user, id, null, "new desc", null, null, null, "lead", null, null, "hard thing",
+                null, null, null, "SWE", "Acme", "NYC", "2024");
+
+        verifyNoInteractions(applicationRepo);
     }
 
     @Test

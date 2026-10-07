@@ -418,6 +418,44 @@ class ApplicationServiceTest {
             assertEquals(0, out.getAtsMatched().length);
             assertEquals(2, out.getAtsMissing().length);
         }
+
+        @Test
+        void aSuccessfulRebuildClearsPdfStale() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Application a = new Application();
+            a.setPdfStale(true);
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(TestFixtures.project(proj, Project.Kind.PROJECT, "P")));
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
+
+            verify(repo).setPdfStale(any(), eq(false));
+            assertFalse(out.isPdfStale());
+        }
+
+        @Test
+        void aFailedRebuildLeavesTheOldPdfFlaggedStale() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Application a = new Application();
+            a.setPdfBlob(new byte[]{9});   // the previous compile's PDF, now under a new selection
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(TestFixtures.project(proj, Project.Kind.PROJECT, "P")));
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.failure("boom", "log"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
+
+            verify(repo).setPdfStale(any(), eq(true));
+            assertTrue(out.isPdfStale());
+        }
     }
 
     /**

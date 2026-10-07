@@ -66,7 +66,7 @@ public class ApplicationDtos {
             List<BulletVerdictDto> recruiterBulletVerdicts, List<String> recruiterWeaknesses,
             String recruiterThinnestRequirement, UUID recruiterWeakestBulletId,
             boolean recruiterStale, boolean recruiterPending, Integer pageCount,
-            boolean pdfAvailable, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
+            boolean pdfAvailable, boolean pdfStale, String pdfBase64, String tectonicLog, String outcome, Instant createdAt
     ) {
         private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -96,7 +96,7 @@ public class ApplicationDtos {
                     Arrays.asList(a.getRecruiterWeaknesses()),
                     a.getRecruiterThinnestRequirement(), a.getRecruiterWeakestBulletId(),
                     a.isRecruiterStale(), a.isRecruiterPending(), a.getPageCount(),
-                    a.getPdfBlob() != null && a.getPdfBlob().length > 0,
+                    a.getPdfBlob() != null && a.getPdfBlob().length > 0, a.isPdfStale(),
                     b64, a.getTectonicLog(), a.getOutcome(), a.getCreatedAt());
         }
 
