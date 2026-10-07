@@ -138,20 +138,7 @@ public abstract class BaseLlmClient implements LlmClient {
     public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens) {
         boolean experience = req.kind() == SourceKind.EXPERIENCE;
 
-        // Both kinds get the same enrich-field block. Experience rows used to get a
-        // description-only template, which silently discarded tech stack, role, ownership,
-        // scale, decisions, impact and security even though BulletService passes them all --
-        // and experience is where most of the resume's real estate goes.
-        String header = experience
-                ? """
-                Role:     %s
-                Company:  %s
-                Location: %s
-                Dates:    %s
-                """.formatted(nz(req.title()), nz(req.company()), nz(req.location()), nz(req.dates()))
-                : "Project name: " + nz(req.projectName()) + "\n";
-
-        String contextBlock = header + "\n" + buildFieldBlock(req, experience);
+        String contextBlock = contextBlock(req);
 
         String repoBlock = req.repoContext() == null || req.repoContext().isBlank()
                 ? ""
@@ -164,9 +151,9 @@ public abstract class BaseLlmClient implements LlmClient {
                 "\n─────────────────────────────────────────────────────────────\n"
                 + "## REPO MAP — this lens's part of the system\n\n"
                 + "Write each bullet about ONE subsystem or module below, framed by the project overview in the\n"
-                + "repo context: what it does for users (X), how it was built (Z), and — only when a counted\n"
-                + "fact or a number in the source supports it — how much (Y). Different bullets should cover\n"
-                + "different modules where the material allows.\n\n"
+                + "repo context: what it does for users (X), how it was built (Z), and — only when the source\n"
+                + "states a result — how much (Y). File, line and test counts are never Y. Different bullets\n"
+                + "should cover different modules where the material allows.\n\n"
                 + req.lensFocus() + "\n";
 
         // Without this the model happily rewrites bullets the bank already holds; the dedup
@@ -187,7 +174,8 @@ public abstract class BaseLlmClient implements LlmClient {
                         .map(t -> "  - " + t)
                         .reduce("", (a, b) -> a + b + "\n"));
 
-        String countTarget = experience ? "8 to 12" : "4 to 6";
+        // "Up to", not a range: a mandatory range is a quota, and a quota on a thin lens is padding.
+        String countTarget = experience ? "up to 10" : "up to 6";
         String sourceWord  = experience ? "ROLE" : "PROJECT";
 
         GenerationConfig cfg = configService.get(req.userId());
@@ -224,134 +212,21 @@ public abstract class BaseLlmClient implements LlmClient {
                 + "overlapping bullets are discarded. If a piece of work fits another lens better, leave\n"
                 + "it to that lens.\n";
 
-        String toneInstruction = switch (cfg.getTone()) {
-            case CONSERVATIVE -> "Write in a precise, understated tone. Avoid hyperbole. Let the metrics speak.";
-            case AGGRESSIVE   -> "Write with a confident, high-impact tone. Emphasise scale, speed, and results aggressively.";
-            default           -> "";
-        };
-        String boldInstruction = switch (cfg.getBoldDensity()) {
-            case NONE  -> "Do NOT use any **bold** markup in bullets.";
-            case HEAVY -> "Use up to 4 **bold** spans per bullet instead of 2 — prefer the quantified claims.";
-            default    -> "";
-        };
-        String verbInstruction = switch (cfg.getActionVerbStyle()) {
-            case LEADERSHIP -> "Prefer leadership verbs (Led, Owned, Directed, Coordinated, Mentored, Drove) wherever the source material shows that role.";
-            case IMPACT     -> "Prefer impact verbs: Accelerated, Reduced, Eliminated, Boosted, Saved, Cut, Scaled.";
-            default         -> "";
-        };
-        String tuningBlock = (toneInstruction + boldInstruction + verbInstruction).isBlank() ? "" :
-                "\n─────────────────────────────────────────────────────────────\n## STYLE OVERRIDES\n\n"
-                + (toneInstruction.isBlank() ? "" : toneInstruction + "\n")
-                + (boldInstruction.isBlank() ? "" : boldInstruction + "\n")
-                + (verbInstruction.isBlank() ? "" : verbInstruction + "\n");
+        String tuningBlock = styleOverrides(cfg);
 
         String prompt = tuningBlock + """
                 You are writing resume bullet points for a %s.
                 Produce %s bullets in JSON. EVERY rule below is mandatory.
 
-                ─────────────────────────────────────────────────────────────
-                ## 1. LENGTH — line-filling discipline (CRITICAL)
-
-                Each bullet must compile to EITHER exactly 1 full line OR exactly 2 full lines on the
-                rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
-                second line — that looks broken.
-
-                Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
-                (they compile to \\textbf{} and take no width). Word counts are approximate guides;
-                the character range is what actually decides whether a line fills.
-
-                Targets:
-                  • 1-line bullet: %d to %d characters (roughly %d to %d words).
-                  • 2-line bullet: %d to %d characters (roughly %d to %d words).
-                  • NEVER produce a bullet of %d-%d characters — that range half-fills line 2.
-
-                Aim for about 70%% 1-line and 30%% 2-line bullets. Recruiters skim a page in seconds
-                and dense multi-line bullets get skipped, so use the 2-line form only when the
-                substance genuinely needs it — every 2-liner spends double the vertical space of a
-                1-liner that lands just as hard.
-
-                ## 2. FORMAT — Google XYZ pattern
-
-                Every bullet reads as "Accomplished X, as measured by Y, by doing Z":
-                  [STRONG ACTION VERB] + [WHAT was built, X] + [HOW, Z] + [MEASURE, Y].
-                Y is a real number from the source material or a counted fact — when none exists,
-                write X + Z and stop. A tight bullet without Y beats one padded with a vague outcome.
-
-                Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
-                Shipped · Engineered · Implemented · Migrated · Automated · Hardened · Integrated.
-                Give every bullet in this batch a different opening verb — and do not reuse the
-                opener of an ALREADY COVERED bullet below when another fits.
-                Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
-                only when the source material says so. Never upgrade a contribution into leadership.
-
-                Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
-                "Contributed to", "Collaborated on" — these are passive and weak. Also avoid the
-                clichés "Spearheaded", "Leveraged" and "Utilized".
-
-                EVERY bullet ends with a period.
-
-                ## 3. BOLD — **double asterisks** (compiles to \\textbf{})
-
-                Use AT MOST 1 bold in a 1-line bullet and 2 in a 2-line bullet — bold is emphasis,
-                and a bullet that bolds everything emphasizes nothing. Reserve it for the one or two things a recruiter's
-                eye should land on first: usually the biggest quantified claim. Pick from these
-                categories, in priority order:
-
-                  (a) Every quantity / scale / metric:
-                      **64K**, **500+**, **300ms**, **sub-200ms**, **95%%+**, **$200K**,
-                      **11.5MB**, **2-3%%**, **120K transactions/month**, **15+ features**
-
-                  (b) Every marquee technology / framework / protocol / vendor:
-                      **RAG**, **RRF-k fusion**, **React-Leaflet**, **MongoDB 2dsphere**,
-                      **AES-256-GCM**, **Clerk JWT**, **PyTorch**, **Stripe**, **BetterAuth**,
-                      **WebRTC**, **Next.js 16**, **D3.js**
-
-                  (c) Signature systems / techniques you designed (the noun phrase that names the thing):
-                      **sub-cent-precision credit ledger**, **3-tier fuzzy matching**,
-                      **AST-based parser**, **5-role RBAC**, **hybrid three-store architecture**
-
-                Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action verb itself.
-
-                ## 4. CONTENT RULES
-
-                  • Quote anchor numbers from the description VERBATIM. NEVER fabricate metrics.
-                    If the description doesn't have a number, omit it — don't invent one.
-                  • NO internal identifiers (table names, function names, file paths, env-var names).
-                    Those belong in interview answers, not on a resume.
-                  • Each bullet stands alone — a recruiter must understand it in 5 seconds without
-                    reading neighbors.
-                  • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
-                    explicitly named in the bullet text itself (e.g. "react", "kubernetes",
-                    "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.
-                    Do not invent tags for things not mentioned in the bullet.
-
-                ─────────────────────────────────────────────────────────────
-                ## EXAMPLES (study these — match this length, bold density, and ending punctuation)
-                ## Two are 1-line and two are 2-line, and every one of them satisfies the character
-                ## targets above. Do not write anything longer than the longest example here.
-
-                  ✓ Built a RAG pipeline over **64K** MLS listings with hybrid full-text + vector search, RRF-k fusion, and a semantic cache, cutting query latency under **300ms** and LLM calls by 40%%.
-
-                  ✓ Engineered a real-time geospatial pipeline over 64K live listings with React-Leaflet and MongoDB 2dsphere viewport queries, cutting map re-render from **180ms to 70ms**.
-
-                  ✓ Designed a sub-cent-precision credit ledger clearing **120K transactions/month**.
-
-                  ✓ Encrypted third-party OAuth and telephony tokens at rest with **AES-256-GCM**.
-
-                  ✗ Worked on backend stuff using various tools and got things faster.
-                    (passive opener, no bolds, no metrics, no period-style impact)
+                """.formatted(sourceWord, countTarget)
+                + writingRules(cfg)
+                + """
 
                 ─────────────────────────────────────────────────────────────
                 ## %s CONTEXT
 
                 %s%s%s
-                """.formatted(sourceWord, countTarget,
-                        BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
-                        cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
-                        BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg),
-                        cfg.getDoubleLineLow(), cfg.getDoubleLineHigh(),
-                        BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
-                        sourceWord, contextBlock, repoBlock, existingBlock)
+                """.formatted(sourceWord, contextBlock, repoBlock, existingBlock)
                 + lensBlock + focusBlock + siblingBlock;
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
@@ -435,13 +310,253 @@ public abstract class BaseLlmClient implements LlmClient {
         // runs, wrong as an absolute for OpenAI/OpenRouter.
         log.info("BULLET_GEN category={} kind={} target={} returned={} kept={} repaired={} recovery={}"
                         + " cut_opener={} cut_fabricated={} cut_deadzone={} cut_toolong={} cut_tooshort={}"
-                        + " in_tok={} out_tok={} cost_usd={}",
+                        + " cut_vanity={} cut_padded={} in_tok={} out_tok={} cost_usd={}",
                 req.category(), req.kind(), target, returned, kept.size(), repaired, recovered,
                 cuts.opener(), cuts.fabricated(), cuts.deadZone(), cuts.tooLong(), cuts.tooShort(),
+                cuts.vanity(), cuts.padded(),
                 tokens.getPromptTokens(), tokens.getCandidatesTokens(), tokens.getCostUsd());
 
         progress.emit("Saved " + kept.size() + " bullets for category: " + req.category());
         return new BulletGenerationResult(kept);
+    }
+
+    // -------- story bank: findStories + writeStoryBullets --------
+
+    /**
+     * Pass 1 of the bank build. One call for the whole project instead of one per lens: the
+     * per-lens fan-out asked every lens for 4-6 bullets, so a lens the project barely touched
+     * was padded with whatever was nearest (commit counts, a RAG bullet under "frontend").
+     * Here the model picks the work first and tags lenses second, and a lens nothing fits
+     * simply comes back unsupported.
+     */
+    @Override
+    public StoryResult findStories(StoryRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        GenerateBulletsRequest src = req.source();
+        boolean experience = src.kind() == SourceKind.EXPERIENCE;
+        GenerationConfig cfg = configService.get(src.userId());
+
+        String prompt = sourceMaterial(src) + """
+
+                ─────────────────────────────────────────────────────────────
+                ## TASK — pick the stories
+
+                You are choosing what a resume should say about this %s. Pick %s STORIES from the
+                source material above: distinct pieces of work a hiring manager would want to ask about
+                in an interview — a hard problem solved, a system built for real users, a design
+                decision with a clear tradeoff, a measured result.
+
+                For each story return:
+                  - id: "s1", "s2", ...
+                  - title: one plain line naming the work (not a resume bullet).
+                  - evidence: 1 to 4 short quotes copied EXACTLY from the source material above that
+                    prove the story, including every number a bullet about it could cite. Copy
+                    character for character; do not paraphrase, merge or tidy. Only the source
+                    material counts — not your own knowledge. Quotes not found in it are discarded.
+                  - lenses: 1 to 3 of these lens slugs, and only these: %s. Tag a lens only when a
+                    reviewer for that role would genuinely care about this work. A requested lens that
+                    no story fits should stay untagged — never stretch a story to cover it.
+
+                Rules:
+                  - Fewer, stronger stories beat more. Two stories about the same work are one story.
+                  - Skip routine work every project has (CRUD screens, login, config, setup, a plain
+                    test suite or CI) unless the source shows something unusual about it.
+                  - Activity counts (commits, lines of code, files, tests, tables, migrations) are
+                    never a story and never evidence of impact.
+
+                Lens definitions:
+
+                %s
+                """.formatted(experience ? "role" : "project",
+                        experience ? "4 to 10" : "up to 8 (fewer for a small project)",
+                        String.join(", ", req.lenses()), lensDefinitions(req.lenses()));
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "stories", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                        "id", SchemaSpec.string(),
+                        "title", SchemaSpec.string(),
+                        "evidence", SchemaSpec.array(SchemaSpec.string()),
+                        "lenses", SchemaSpec.array(SchemaSpec.string())
+                )), List.of("id", "title", "evidence", "lenses")))
+        )), List.of("stories"));
+
+        progress.emit("Finding the project's strongest stories...");
+        String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(),
+                progress, tokens, false, "Stories");
+        StoriesEnvelope env = readLenient(json, StoriesEnvelope.class, "stories");
+        StoryResult result = validateStories(env.stories, req.lenses(), sourceContext(src));
+        int returned = env.stories == null ? 0 : env.stories.size();
+        log.info("BULLET_STORIES kind={} returned={} kept={} unsupported={} in_tok={} out_tok={}",
+                src.kind(), returned, result.stories().size(), result.unsupportedLenses(),
+                tokens.getPromptTokens(), tokens.getCandidatesTokens());
+        progress.emit("Stories: " + result.stories().size() + " kept of " + returned
+                + (result.unsupportedLenses().isEmpty() ? ""
+                        : " — no real work for: " + String.join(", ", result.unsupportedLenses())));
+        return result;
+    }
+
+    /**
+     * The deterministic half of {@link #findStories}: keeps only evidence quotes found in the
+     * source, only requested lenses (at most 3), and only stories left with both. Unsupported
+     * lenses are computed here, not trusted from the model: requested minus every lens a kept
+     * story carries.
+     */
+    static StoryResult validateStories(List<StoryJson> raw, List<String> requested, String source) {
+        List<Story> kept = new ArrayList<>();
+        Set<String> ids = new java.util.HashSet<>();
+        Set<String> covered = new java.util.HashSet<>();
+        int n = 0;
+        for (StoryJson s : raw == null ? List.<StoryJson>of() : raw) {
+            n++;
+            if (s == null || s.title == null || s.title.isBlank()) continue;
+            List<String> evidence = (s.evidence == null ? List.<String>of() : s.evidence).stream()
+                    .filter(q -> q != null && BulletTextRules.isQuotedIn(q, source))
+                    .distinct().toList();
+            List<String> lenses = (s.lenses == null ? List.<String>of() : s.lenses).stream()
+                    .filter(l -> l != null && requested.contains(l.trim().toLowerCase()))
+                    .map(l -> l.trim().toLowerCase())
+                    .distinct().limit(3).toList();
+            if (evidence.isEmpty() || lenses.isEmpty()) continue;
+            String id = s.id == null || s.id.isBlank() || ids.contains(s.id.trim()) ? "s" + n + "_" + kept.size() : s.id.trim();
+            ids.add(id);
+            covered.addAll(lenses);
+            kept.add(new Story(id, s.title.trim(), evidence, lenses));
+        }
+        List<String> unsupported = requested.stream().filter(l -> !covered.contains(l)).toList();
+        return new StoryResult(kept, unsupported);
+    }
+
+    /**
+     * Pass 2 of the bank build: one call writes every story's bullets. The source material
+     * leads the prompt exactly as in {@link #findStories}, so the two calls share their largest
+     * block as a cacheable prefix.
+     */
+    @Override
+    public BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
+                                                    TokenAccumulator tokens) {
+        if (stories.isEmpty()) return new BulletGenerationResult(List.of());
+        GenerateBulletsRequest src = req.source();
+        boolean experience = src.kind() == SourceKind.EXPERIENCE;
+        GenerationConfig cfg = configService.get(src.userId());
+
+        StringBuilder storyList = new StringBuilder();
+        List<String> used = new ArrayList<>();
+        int expected = 0;
+        for (Story st : stories) {
+            storyList.append("  - ").append(st.id()).append(": ").append(st.title())
+                    .append("   [lenses: ").append(String.join(", ", st.lenses())).append("]\n");
+            for (String e : st.evidence()) storyList.append("      evidence: \"").append(e).append("\"\n");
+            st.lenses().stream().filter(l -> !used.contains(l)).forEach(used::add);
+            expected += Math.max(2, st.lenses().size());
+        }
+
+        String prompt = sourceMaterial(src) + styleOverrides(cfg) + """
+
+                ─────────────────────────────────────────────────────────────
+                You are writing resume bullet points for a %s from the STORIES at the end.
+                EVERY rule below is mandatory.
+
+                """.formatted(experience ? "ROLE" : "PROJECT")
+                + writingRules(cfg)
+                + """
+
+                ─────────────────────────────────────────────────────────────
+                ## STORIES — what to write
+
+                For each story, write one bullet per lens listed on it, aimed at a reviewer for that
+                lens (definitions below): lead with what that reviewer cares about and pick different
+                details — not a reworded copy of the story's other bullet. For a story with a single
+                lens, write two bullets with different emphasis: one 1-line and one 2-line.
+                Write only what the story's evidence supports. The source material above is there so
+                you understand the work, not licence to add claims; every number must come from the
+                story's evidence. Return every bullet with the storyId and lens it was written for.
+
+                %s
+                Lens definitions:
+
+                %s
+                """.formatted(storyList, lensDefinitions(used));
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                        "storyId", SchemaSpec.string(),
+                        "lens", SchemaSpec.string(),
+                        "text", SchemaSpec.string(),
+                        "tags", SchemaSpec.array(SchemaSpec.string())
+                )), List.of("storyId", "lens", "text", "tags")))
+        )), List.of("bullets"));
+
+        progress.emit("Writing bullets for " + stories.size() + " stories...");
+        // Numbers are checked against the whole source, not just the story's quotes: a true metric
+        // the model forgot to quote as evidence must not be cut as invented.
+        String sourceContext = sourceContext(src);
+        FilterResult first = callAndFilter(prompt, schema, expected, cfg, progress, tokens, sourceContext);
+        List<GeneratedBullet> kept = new ArrayList<>(first.kept());
+        Cuts cuts = first.cuts();
+        int repaired = 0;
+
+        // One repair pass for what the filter cut on form (length, opener, activity count, filler
+        // sentence). Never a top-up: asking for N more bullets is how padding gets in.
+        if (!first.repairable().isEmpty()) {
+            progress.emit("Recovery: repairing " + first.repairable().size() + " rejected bullet(s)...");
+            FilterResult second = callAndFilter(prompt + recoveryNote(first.repairable(), kept, 0, cfg),
+                    schema, first.repairable().size(), cfg, progress, tokens, sourceContext);
+            List<String> keptTexts = new ArrayList<>(kept.stream().map(GeneratedBullet::text).toList());
+            for (GeneratedBullet g : second.kept()) {
+                if (BulletTextRules.isNearDuplicate(g.text(), keptTexts, BulletTextRules.CROSS_LENS_THRESHOLD)) continue;
+                keptTexts.add(g.text());
+                kept.add(g);
+                repaired++;
+            }
+            cuts = cuts.plus(second.cuts());
+        }
+
+        List<GeneratedBullet> out = attachToStories(kept, stories);
+        log.info("BULLET_STORY_GEN kind={} stories={} expected={} returned={} kept={} repaired={} orphaned={}"
+                        + " cut_opener={} cut_fabricated={} cut_deadzone={} cut_toolong={} cut_tooshort={}"
+                        + " cut_vanity={} cut_padded={} in_tok={} out_tok={} cost_usd={}",
+                src.kind(), stories.size(), expected, first.returned(), out.size(), repaired, kept.size() - out.size(),
+                cuts.opener(), cuts.fabricated(), cuts.deadZone(), cuts.tooLong(), cuts.tooShort(),
+                cuts.vanity(), cuts.padded(),
+                tokens.getPromptTokens(), tokens.getCandidatesTokens(), tokens.getCostUsd());
+        progress.emit("Wrote " + out.size() + " bullets for " + stories.size() + " stories.");
+        return new BulletGenerationResult(out);
+    }
+
+    /**
+     * Drops bullets naming a story that does not exist, and pins a bullet's lens to one its story
+     * carries — the lens decides the stored category, which drives job matching.
+     */
+    static List<GeneratedBullet> attachToStories(List<GeneratedBullet> bullets, List<Story> stories) {
+        Map<String, Story> byId = new LinkedHashMap<>();
+        stories.forEach(s -> byId.put(s.id(), s));
+        List<GeneratedBullet> out = new ArrayList<>();
+        for (GeneratedBullet g : bullets) {
+            Story st = g.storyId() == null ? null : byId.get(g.storyId().trim());
+            if (st == null) continue;
+            String lens = g.lens() == null ? "" : g.lens().trim().toLowerCase();
+            if (!st.lenses().contains(lens)) lens = st.lenses().get(0);
+            out.add(new GeneratedBullet(g.text(), g.tags(), st.id(), lens));
+        }
+        return out;
+    }
+
+    /** Leads both story prompts, byte-identical between them, so it caches as a shared prefix. */
+    private static String sourceMaterial(GenerateBulletsRequest req) {
+        return "## " + (req.kind() == SourceKind.EXPERIENCE ? "ROLE" : "PROJECT") + " SOURCE MATERIAL\n\n"
+                + sourceContext(req);
+    }
+
+    /** Everything the source states: what evidence quotes and numbers are checked against. */
+    private static String sourceContext(GenerateBulletsRequest req) {
+        return contextBlock(req)
+                + (has(req.repoContext()) ? "\nRepo context:\n" + req.repoContext() + "\n" : "")
+                + (has(req.lensFocus()) ? "\nRepo map — the parts relevant to the requested lenses:\n"
+                        + req.lensFocus() + "\n" : "");
+    }
+
+    private static String lensDefinitions(List<String> lenses) {
+        return lenses.stream().map(CategoryLenses::lensFor).filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.joining("\n\n"));
     }
 
     /**
@@ -457,9 +572,13 @@ public abstract class BaseLlmClient implements LlmClient {
         // Grouped by reason: a bullet cut for length and a bullet cut for its opening verb need
         // opposite instructions, and a single blended one ("rewrite this") gets both done badly.
         List<String> tooLong = repairable.stream()
-                .filter(r -> r.reason() == RejectReason.LENGTH).map(Reject::text).toList();
+                .filter(r -> r.reason() == RejectReason.LENGTH).map(Reject::listed).toList();
         List<String> weakOpener = repairable.stream()
-                .filter(r -> r.reason() == RejectReason.OPENER).map(Reject::text).toList();
+                .filter(r -> r.reason() == RejectReason.OPENER).map(Reject::listed).toList();
+        List<String> vanity = repairable.stream()
+                .filter(r -> r.reason() == RejectReason.VANITY).map(Reject::listed).toList();
+        List<String> padded = repairable.stream()
+                .filter(r -> r.reason() == RejectReason.PADDING).map(Reject::listed).toList();
 
         if (!tooLong.isEmpty()) {
             sb.append("Rewrite each bullet below so it lands in a valid band. Keep the same facts, metrics\n")
@@ -479,6 +598,20 @@ public abstract class BaseLlmClient implements LlmClient {
             for (String t : weakOpener) sb.append("  - ").append(t).append("\n");
             sb.append("\n");
         }
+        if (!vanity.isEmpty()) {
+            sb.append("Each bullet below cites a count of the author's own work (commits, lines of code,\n")
+              .append("files, tests, tables, migrations, builds). Delete that count and keep the actual claim:\n")
+              .append("what was built, how, and any result the source states. If nothing is left once the\n")
+              .append("count is gone, drop the bullet.\n\n");
+            for (String t : vanity) sb.append("  - ").append(t).append("\n");
+            sb.append("\n");
+        }
+        if (!padded.isEmpty()) {
+            sb.append("Each bullet below runs to extra sentences or a filler sentence (\"This ensured...\").\n")
+              .append("Rewrite it as ONE sentence: keep the strongest facts, drop the restatement.\n\n");
+            for (String t : padded) sb.append("  - ").append(t).append("\n");
+            sb.append("\n");
+        }
         if (newNeeded > 0) {
             sb.append("Also write ").append(newNeeded)
               .append(" additional NEW bullet(s) covering work from the source material that the\n")
@@ -489,6 +622,9 @@ public abstract class BaseLlmClient implements LlmClient {
             sb.append("Already accepted — do not repeat or rewrite these, or reuse their opening verbs:\n");
             for (GeneratedBullet g : kept) sb.append("  - ").append(g.text()).append("\n");
             sb.append("\n");
+        }
+        if (repairable.stream().anyMatch(r -> r.storyId() != null)) {
+            sb.append("Return each rewrite with the same storyId and lens shown in its [brackets].\n");
         }
         sb.append("Return the rewritten bullets and any new bullets together in the bullets array.\n");
         return sb.toString();
@@ -616,19 +752,26 @@ public abstract class BaseLlmClient implements LlmClient {
      * can say WHY bullets were lost — an accept rate alone cannot distinguish a prompt that
      * writes weak openers from one that fabricates metrics, and those need opposite fixes.
      */
-    private record Cuts(int opener, int fabricated, int deadZone, int tooLong, int tooShort) {
-        static final Cuts ZERO = new Cuts(0, 0, 0, 0, 0);
+    private record Cuts(int opener, int fabricated, int deadZone, int tooLong, int tooShort,
+                        int vanity, int padded) {
+        static final Cuts ZERO = new Cuts(0, 0, 0, 0, 0, 0, 0);
         Cuts plus(Cuts o) {
             return new Cuts(opener + o.opener, fabricated + o.fabricated, deadZone + o.deadZone,
-                    tooLong + o.tooLong, tooShort + o.tooShort);
+                    tooLong + o.tooLong, tooShort + o.tooShort, vanity + o.vanity, padded + o.padded);
         }
     }
 
     /** Why a repairable bullet was rejected — decides which instruction the recovery pass gets. */
-    enum RejectReason { LENGTH, OPENER }
+    enum RejectReason { LENGTH, OPENER, VANITY, PADDING }
 
-    /** A rejected bullet the recovery pass can plausibly fix, with the reason it was cut. */
-    record Reject(String text, RejectReason reason) {}
+    /**
+     * A rejected bullet the recovery pass can plausibly fix, with the reason it was cut. storyId
+     * and lens ride along on the story path so the repaired bullet keeps its story.
+     */
+    record Reject(String text, RejectReason reason, String storyId, String lens) {
+        Reject(String text, RejectReason reason) { this(text, reason, null, null); }
+        String listed() { return storyId == null ? text : "[storyId=" + storyId + " lens=" + lens + "] " + text; }
+    }
 
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private FilterResult callAndFilter(String prompt, SchemaSpec schema,
@@ -657,6 +800,7 @@ public abstract class BaseLlmClient implements LlmClient {
         List<Reject> repairable = new ArrayList<>();
         int dropped = 0;
         int cutOpener = 0, cutFabricated = 0, cutDeadZone = 0, cutTooLong = 0, cutTooShort = 0;
+        int cutVanity = 0, cutPadded = 0;
         for (BulletJson b : env.bullets) {
             String text = BulletTextRules.ensureTerminalPeriod(b.text);
 
@@ -665,8 +809,27 @@ public abstract class BaseLlmClient implements LlmClient {
                 progress.emit("Cut: weak/passive opener - queued for rewrite");
                 // The content is fine; only the first two words are wrong. Repairing that is a
                 // verb swap, so this goes to the recovery pass rather than being thrown away.
-                repairable.add(new Reject(text, RejectReason.OPENER));
+                repairable.add(new Reject(text, RejectReason.OPENER, b.storyId, b.lens));
                 cutOpener++;
+                dropped++;
+                continue;
+            }
+            // Activity counts and filler sentences: the claim underneath is usually fine, so these
+            // go to the recovery pass to be cut down rather than being thrown away.
+            String vanity = BulletTextRules.vanityCount(text);
+            if (vanity != null) {
+                log.info("Dropped bullet (vanity count '{}'): {}", vanity, LogText.abbreviate(text, 80));
+                progress.emit("Cut: activity count (" + vanity + ") - queued for rewrite");
+                repairable.add(new Reject(text, RejectReason.VANITY, b.storyId, b.lens));
+                cutVanity++;
+                dropped++;
+                continue;
+            }
+            if (BulletTextRules.isPadded(text)) {
+                log.info("Dropped bullet (padded sentences): {}", LogText.abbreviate(text, 80));
+                progress.emit("Cut: extra/filler sentence - queued for rewrite");
+                repairable.add(new Reject(text, RejectReason.PADDING, b.storyId, b.lens));
+                cutPadded++;
                 dropped++;
                 continue;
             }
@@ -690,7 +853,7 @@ public abstract class BaseLlmClient implements LlmClient {
                             + BulletTextRules.deadZoneLowChars(cfg) + "-" + BulletTextRules.deadZoneHighChars(cfg)
                             + "), needs " + BulletTextRules.singleLowChars(cfg) + "-" + BulletTextRules.singleHighChars(cfg)
                             + " or " + BulletTextRules.doubleLowChars(cfg) + "-" + BulletTextRules.doubleHighChars(cfg));
-                    repairable.add(new Reject(text, RejectReason.LENGTH));
+                    repairable.add(new Reject(text, RejectReason.LENGTH, b.storyId, b.lens));
                     cutDeadZone++;
                     dropped++;
                 }
@@ -701,7 +864,7 @@ public abstract class BaseLlmClient implements LlmClient {
                             + BulletTextRules.doubleHighChars(cfg) + ")");
                     // Same shape as a dead-zone reject — right content, wrong length — so it goes
                     // to the recovery pass, whose instruction is already "rewrite into a valid band".
-                    repairable.add(new Reject(text, RejectReason.LENGTH));
+                    repairable.add(new Reject(text, RejectReason.LENGTH, b.storyId, b.lens));
                     cutTooLong++;
                     dropped++;
                 }
@@ -723,13 +886,13 @@ public abstract class BaseLlmClient implements LlmClient {
                     int droppedTags = rawTags.size() - tags.size();
                     String tagNote = droppedTags == 0 ? "" : " (" + droppedTags + " unmentioned tag(s) dropped)";
                     progress.emit("Kept: " + cc + "c [" + String.join(", ", tags) + "]" + tagNote);
-                    kept.add(new GeneratedBullet(text, tags));
+                    kept.add(new GeneratedBullet(text, tags, b.storyId, b.lens));
                 }
             }
         }
         log.info("Generation kept {} bullets, dropped {}.", kept.size(), dropped);
         return new FilterResult(kept, repairable,
-                new Cuts(cutOpener, cutFabricated, cutDeadZone, cutTooLong, cutTooShort), total);
+                new Cuts(cutOpener, cutFabricated, cutDeadZone, cutTooLong, cutTooShort, cutVanity, cutPadded), total);
     }
 
 
@@ -1451,6 +1614,152 @@ public abstract class BaseLlmClient implements LlmClient {
 
     private static String nz(String s) { return s == null ? "" : s; }
 
+    /** Role header (experience) or project name, then the enrich fields. */
+    private static String contextBlock(GenerateBulletsRequest req) {
+        boolean experience = req.kind() == SourceKind.EXPERIENCE;
+        // Both kinds get the same enrich-field block. Experience rows used to get a
+        // description-only template, which silently discarded tech stack, role, ownership,
+        // scale, decisions, impact and security even though BulletService passes them all --
+        // and experience is where most of the resume's real estate goes.
+        String header = experience
+                ? """
+                Role:     %s
+                Company:  %s
+                Location: %s
+                Dates:    %s
+                """.formatted(nz(req.title()), nz(req.company()), nz(req.location()), nz(req.dates()))
+                : "Project name: " + nz(req.projectName()) + "\n";
+        return header + "\n" + buildFieldBlock(req, experience);
+    }
+
+    /** The user's tone / bold / verb knobs as a prompt block; empty when all are default. */
+    private static String styleOverrides(GenerationConfig cfg) {
+        String toneInstruction = switch (cfg.getTone()) {
+            case CONSERVATIVE -> "Write in a precise, understated tone. Avoid hyperbole. Let the metrics speak.";
+            case AGGRESSIVE   -> "Write with a confident, high-impact tone. Emphasise scale, speed, and results aggressively.";
+            default           -> "";
+        };
+        String boldInstruction = switch (cfg.getBoldDensity()) {
+            case NONE  -> "Do NOT use any **bold** markup in bullets.";
+            case HEAVY -> "Use up to 4 **bold** spans per bullet instead of 2 — prefer the quantified claims.";
+            default    -> "";
+        };
+        String verbInstruction = switch (cfg.getActionVerbStyle()) {
+            case LEADERSHIP -> "Prefer leadership verbs (Led, Owned, Directed, Coordinated, Mentored, Drove) wherever the source material shows that role.";
+            case IMPACT     -> "Prefer impact verbs: Accelerated, Reduced, Eliminated, Boosted, Saved, Cut, Scaled.";
+            default         -> "";
+        };
+        return (toneInstruction + boldInstruction + verbInstruction).isBlank() ? "" :
+                "\n─────────────────────────────────────────────────────────────\n## STYLE OVERRIDES\n\n"
+                + (toneInstruction.isBlank() ? "" : toneInstruction + "\n")
+                + (boldInstruction.isBlank() ? "" : boldInstruction + "\n")
+                + (verbInstruction.isBlank() ? "" : verbInstruction + "\n");
+    }
+
+    /**
+     * Length, format, bold and content rules shared by both writing paths.
+     *
+     * <p>The examples are shape-only on purpose. They used to be four real bullets from one
+     * user's real-estate project ("64K MLS listings", "180ms to 70ms"), which every other user's
+     * prompt then carried: the model echoed their techniques and numbers into unrelated projects,
+     * and one user's project data sat in everyone's prompt.
+     */
+    static String writingRules(GenerationConfig cfg) {
+        return """
+                ─────────────────────────────────────────────────────────────
+                ## 1. LENGTH — line-filling discipline (CRITICAL)
+
+                Each bullet must compile to EITHER exactly 1 full line OR exactly 2 full lines on the
+                rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
+                second line — that looks broken.
+
+                Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
+                (they compile to \\textbf{} and take no width). Word counts are approximate guides;
+                the character range is what actually decides whether a line fills.
+
+                Targets:
+                  • 1-line bullet: %d to %d characters (roughly %d to %d words).
+                  • 2-line bullet: %d to %d characters (roughly %d to %d words).
+                  • NEVER produce a bullet of %d-%d characters — that range half-fills line 2.
+
+                Aim for about 70%% 1-line and 30%% 2-line bullets. Recruiters skim a page in seconds
+                and dense multi-line bullets get skipped, so use the 2-line form only when the
+                substance genuinely needs it — every 2-liner spends double the vertical space of a
+                1-liner that lands just as hard.
+
+                ## 2. FORMAT — Google XYZ pattern
+
+                Every bullet reads as "Accomplished X, as measured by Y, by doing Z":
+                  [STRONG ACTION VERB] + [WHAT was built, X] + [HOW, Z] + [MEASURE, Y].
+                Y is a result someone outside the codebase would notice — latency, cost, error or
+                failure rate, users served, data volume handled, time saved — and only when the source
+                material states it. When it does not, write X + Z and name the problem solved or the
+                failure the design prevents, then stop. A tight bullet without Y beats a padded one.
+                Counts of your own work are activity, not results, and never belong in a bullet:
+                commits, lines of code, files, tests, tables, migrations, "zero broken builds".
+
+                ONE sentence per bullet. Never add a second sentence that restates the first
+                ("This ensured...", "This enabled...") and never trail off with filler like
+                ", ensuring robust and reliable X".
+
+                Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
+                Shipped · Implemented · Migrated · Automated · Integrated · Reduced · Wrote.
+                Give every bullet in this batch a different opening verb — and do not reuse the
+                opener of an ALREADY COVERED bullet when another fits.
+                Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
+                only when the source material says so. Never upgrade a contribution into leadership.
+
+                Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
+                "Contributed to", "Collaborated on" — these are passive and weak. Also avoid the
+                clichés "Spearheaded", "Leveraged", "Utilized", "Orchestrated", "Honed" and
+                "Streamlined", and puffed adjectives ("robust", "comprehensive", "cutting-edge").
+
+                EVERY bullet ends with a period.
+
+                ## 3. BOLD — **double asterisks** (compiles to \\textbf{})
+
+                Use AT MOST 1 bold in a 1-line bullet and 2 in a 2-line bullet — bold is emphasis,
+                and a bullet that bolds everything emphasizes nothing. Reserve it for what a
+                recruiter's eye should land on first, in priority order:
+                  (a) the headline result or scale figure the source states;
+                  (b) a marquee technology, protocol or vendor the bullet names;
+                  (c) the name of the system or technique you designed.
+                Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action verb itself.
+
+                ## 4. CONTENT RULES
+
+                  • Quote anchor numbers from the source VERBATIM. NEVER fabricate metrics.
+                    If the source doesn't have a number, omit it — don't invent one.
+                  • NO internal identifiers (table names, function names, file paths, env-var names).
+                    Those belong in interview answers, not on a resume.
+                  • Each bullet stands alone — a recruiter must understand it in 5 seconds without
+                    reading neighbors.
+                  • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
+                    explicitly named in the bullet text itself (e.g. "react", "kubernetes",
+                    "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.
+                    Do not invent tags for things not mentioned in the bullet.
+
+                ─────────────────────────────────────────────────────────────
+                ## EXAMPLES — shape only. Never copy their wording, domain or numbers.
+
+                  ✓ [Verb] [what was built, in the source's own words] with [technology the source names],
+                    [how it works or the key decision], [result the source states].
+                  ✓ [Verb] [system] so [who] could [do what], [the failure or cost it removed].
+
+                  ✗ Maintained zero broken main builds across 87 commits.
+                    (activity counts, not a result)
+                  ✗ Built a backend test suite of 190 unit tests. This enabled rapid development.
+                    (artifact count, plus a filler second sentence)
+                  ✗ Worked on backend stuff using various tools and got things faster.
+                    (passive opener, vague, no result)
+                """.formatted(
+                        BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
+                        cfg.getSingleLineLow(), cfg.getSingleLineHigh(),
+                        BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg),
+                        cfg.getDoubleLineLow(), cfg.getDoubleLineHigh(),
+                        BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg));
+    }
+
     /**
      * The enrich fields, each under its own label. Shared by both source kinds -- only the
      * header above differs. Every field is optional; {@link #has} drops the label with it so
@@ -1508,7 +1817,11 @@ public abstract class BaseLlmClient implements LlmClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class BulletsEnvelope { public List<BulletJson> bullets; }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    protected static class BulletJson { public String text; public List<String> tags; }
+    protected static class BulletJson { public String text; public List<String> tags; public String storyId; public String lens; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class StoriesEnvelope { public List<StoryJson> stories; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class StoryJson { public String id; public String title; public List<String> evidence; public List<String> lenses; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class RefitEnvelope { public List<RefitJson> bullets; }
     @JsonIgnoreProperties(ignoreUnknown = true)

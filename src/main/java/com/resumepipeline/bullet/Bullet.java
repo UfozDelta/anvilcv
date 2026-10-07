@@ -31,6 +31,10 @@ public class Bullet {
     @Column(nullable = false)
     private String status = "PENDING";
 
+    // Wordings of one story from one bank build share this; null = a story of its own.
+    @Column(name = "story_id")
+    private UUID storyId;
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
@@ -60,6 +64,8 @@ public class Bullet {
     public void setCategory(String category) { this.category = category == null || category.isBlank() ? "general" : category; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public UUID getStoryId() { return storyId; }
+    public void setStoryId(UUID storyId) { this.storyId = storyId; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

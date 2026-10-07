@@ -11,76 +11,59 @@ import java.util.Map;
  */
 public final class CategoryLenses {
 
+    // Each lens = what the role covers + what a reviewer hiring for it looks for. No technique
+    // lists and no "quantify with X counts": both used to read as a quota, so the model borrowed
+    // techniques the project never used and padded bullets with commit / endpoint / build counts.
     public static final Map<String, String> LENSES = new LinkedHashMap<>();
     static {
         LENSES.put("ai-ml", """
                 LENS: AI / Machine Learning.
-                Lead with: production RAG pipelines, hybrid full-text + vector search, embedding-similarity
-                models, multi-stage retrieval (cheatsheet -> semantic cache -> tool exec), multi-tool LLM
-                agents with tool-loop budgets, provider failover, prompt design, semantic caches. Name the
-                models, frameworks, vector stores and providers THE SOURCE NAMES — never one it does not.
-                Quantify with latency (ms), call-volume reduction (%), and accuracy where the source supports it.
-                Avoid generic "used AI to do X" bullets — name the technique.""");
+                Covers: work where a model, retrieval or learned component does the core job.
+                A reviewer for this role looks for: which technique was chosen and why, how output
+                quality was judged or protected, and what it cost in latency or money.""");
 
         LENSES.put("backend", """
                 LENS: Backend & Data Architecture.
-                Lead with: API design at scale (mention endpoint count if material), data-modeling decisions
-                (relational vs document vs hybrid), index choices (2dsphere, GIN, partial, composite),
-                migration work that fixed real corruption, integration patterns (idempotency, signature
-                verification), versioned migrations as the schema source of truth. Name the databases,
-                ORMs and migration tools THE SOURCE NAMES. Quantify with row counts, endpoint counts,
-                migration time, and per-tenant boundary enforcement.""");
+                Covers: services, APIs, data models and storage behind a product.
+                A reviewer for this role looks for: design decisions and their tradeoffs, correctness
+                under failure (consistency, idempotency, migrations), and performance at the scale
+                the source states.""");
 
         LENSES.put("frontend", """
                 LENS: Frontend & Product.
-                Lead with: design-token / shared-component systems with class-based dark mode, responsive
-                layouts with desktop/mobile parity, complex client-side state (15+ filter dimensions, URL
-                serialization for shareable searches), interactive visualizations (D3 hierarchical trees,
-                map rendering), accessibility, mobile-first patterns. Name the frameworks and versions
-                THE SOURCE NAMES, and no others. Quantify with re-render reductions, filter
-                dimensions, and dataset sizes rendered.""");
+                Covers: what users see and touch: UI, client-side state, rendering, interaction.
+                A reviewer for this role looks for: what users could do because of it, how hard UI
+                state or rendering problems were solved, and responsiveness or accessibility.""");
 
         LENSES.put("data", """
                 LENS: Data Engineering.
-                Lead with: ingestion pipelines (scrape-and-parse, ETL), parser design
-                (AST-based, recursive tokenization, cycle detection), data quality / validation against
-                authoritative sources, analytics queries at scale, geospatial joins, search index
-                management. Quote data volumes verbatim (file size in MB, row counts, course counts).
-                Frame each bullet as: what was ingested -> with what technique -> at what scale -> with
-                what curation/automation outcome.""");
+                Covers: getting data in, cleaning it, transforming it and serving it for analysis.
+                A reviewer for this role looks for: sources and volume, how data quality was enforced,
+                and what the pipeline made possible downstream.""");
 
         LENSES.put("security", """
                 LENS: Security & Authentication.
-                Lead with: RBAC schemes with database-enforced constraints, encryption-at-rest with
-                specific cipher names (AES-256-GCM), signed-and-idempotent webhooks with replay protection,
-                multi-tenant isolation enforced at a single authorization boundary (not duplicated per
-                route), and any compliance framework THE SOURCE NAMES. Use adversarial-thinking framing:
-                what threat does this defend against? Name the auth libraries and providers THE SOURCE
-                NAMES, and no others. Avoid generic "added authentication" bullets.""");
+                Covers: identity, access control, secrets, tenant isolation and abuse prevention.
+                A reviewer for this role looks for: the concrete threat each control stops, where the
+                boundary is enforced, and any compliance constraint the source states.""");
 
         LENSES.put("devops", """
                 LENS: Infrastructure & DevOps.
-                Lead with: CI/CD pipeline structure (parallel unit + end-to-end suites, environment-isolated
-                dev/prod), monorepo ownership at scale (mention contributor count + commit count if
-                impressive), GitOps deploys, VPS deploy automation with failure-alert email, centralized
-                third-party config so vendor rotations are a single-line change. Quantify with build counts,
-                contributor counts, broken-build rates ("zero broken main builds to date").""");
+                Covers: build, deploy, hosting, observability and reliability.
+                A reviewer for this role looks for: what got faster, safer or cheaper to ship or run,
+                and how failures are detected and recovered from.""");
 
         LENSES.put("systems", """
                 LENS: Distributed Systems & Real-time.
-                Lead with: async fan-out with thread-safe primitives, message bus patterns, idempotent
-                webhook handling under provider retries, WebSocket delta processing, per-vendor rate-limit
-                handling, decoupling latency-critical user paths from background automations via webhook
-                fan-out, hard timeout caps preventing runaway tool loops. Quantify with concurrent event
-                counts, per-vendor metrics, and latency budgets protected.""");
+                Covers: concurrency, streaming, messaging and coordination between processes or services.
+                A reviewer for this role looks for: how ordering, backpressure, retries or partial
+                failure were handled, and the latency or throughput the source states.""");
 
         LENSES.put("comms", """
                 LENS: Real-time Communications.
-                Lead with: provider-agnostic stacks across telephony / SMS / email vendors unified behind a
-                single webhook layer, WebRTC dialing with live SMS feeds over a realtime channel,
-                machine-voicemail detection with SIP bridging, transcription
-                routing into downstream automation, regulatory compliance at the message boundary
-                (STOP/opt-out, after-hours rules). Quantify with vendor counts and unified-timeline coverage.""");
+                Covers: telephony, messaging, email, chat and live media channels.
+                A reviewer for this role looks for: which channels and providers were integrated, how
+                delivery and failures were handled, and messaging rules (consent, opt-out) enforced.""");
     }
 
     /**

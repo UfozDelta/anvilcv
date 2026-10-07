@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * The {@link LlmClient} everything else injects. Picks the real provider client from the
@@ -40,6 +41,17 @@ public class RoutingLlmClient implements LlmClient {
     @Override
     public BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens) {
         return current().generateBullets(req, progress, tokens);
+    }
+
+    @Override
+    public StoryResult findStories(StoryRequest req, ProgressLog progress, TokenAccumulator tokens) {
+        return current().findStories(req, progress, tokens);
+    }
+
+    @Override
+    public BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
+                                                    TokenAccumulator tokens) {
+        return current().writeStoryBullets(req, stories, progress, tokens);
     }
 
     @Override
