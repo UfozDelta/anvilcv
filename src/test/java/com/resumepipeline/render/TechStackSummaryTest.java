@@ -25,6 +25,15 @@ class TechStackSummaryTest {
         assertEquals("Java, React, Docker", TechStackSummary.shorten("Java, React, Docker"));
     }
 
+    // The reorder runs before the cap, so a fifth term it promotes takes a heading slot.
+    @Test void reorderRunsBeforeTheCap() {
+        assertEquals("Docker, Java, React, Kafka", TechStackSummary.shorten(
+                "Java, React, Kafka, Redis, Docker",
+                terms -> java.util.stream.Stream.concat(
+                        terms.stream().filter("Docker"::equals),
+                        terms.stream().filter(t -> !t.equals("Docker"))).toList()));
+    }
+
     // Longest-first matching: "Spring Boot" must claim the text before "Spring" sees it.
     @Test void prefersTheLongerName() {
         assertEquals("Spring Boot", TechStackSummary.shorten("Spring Boot"));

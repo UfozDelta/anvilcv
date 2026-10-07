@@ -150,7 +150,7 @@ class ApplicationServiceTest {
                     List.of("java"), List.of(), List.of(), Map.of()));
             when(llm.scoreFit(any(), any(), any())).thenReturn(new LlmClient.FitResult(
                     80, 70, 75, "Strong Fit", List.of("owns the stack"), List.of("no Terraform")));
-            when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\documentclass{article}");
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\documentclass{article}");
             // A real id: create hands it to the background recruiter pass.
             when(repo.save(any())).thenAnswer(inv -> {
                 Application a = inv.getArgument(0);
@@ -359,7 +359,7 @@ class ApplicationServiceTest {
             when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
             when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
             when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
-            when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -386,7 +386,7 @@ class ApplicationServiceTest {
             when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
             when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
             when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
-            when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(
                     new byte[]{1}, "Output written on in.pdf (2 pages, 8192 bytes)."));
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -394,6 +394,8 @@ class ApplicationServiceTest {
             Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
 
             verify(llm, never()).reviewResume(any(), any(), any());
+            // Heading tech line is ordered against the stored keywords, read before the recompute.
+            verify(renderer).render(any(), any(), any(), any(), any(), eq(List.of("kubernetes", "java")));
             assertTrue(out.isRecruiterStale());
             assertEquals(70, out.getRecruiterScore());          // kept, not blanked
             assertEquals("Solid", out.getRecruiterVerdict());
@@ -449,7 +451,7 @@ class ApplicationServiceTest {
                     TestFixtures.project(expA, Project.Kind.EXPERIENCE, "Experience A"),
                     TestFixtures.project(projB, Project.Kind.PROJECT, "Project B"),
                     TestFixtures.project(projC, Project.Kind.PROJECT, "Project C")));
-            when(renderer.render(any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
             return a;

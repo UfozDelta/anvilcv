@@ -1,12 +1,15 @@
 package com.resumepipeline.application;
 
 import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.profile.Profile;
+import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.render.LatexEscaper;
 import com.resumepipeline.render.LatexRenderer;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,6 +60,27 @@ class ApplicationRendererSnippetTest {
         assertTrue(tex.contains("\\resumeSubheading"), "experience heading macro");
         assertTrue(tex.contains("Foundify Inc"), "company should appear in the heading");
         assertFalse(tex.contains("\\section{Projects}"), "no projects section for experience-only");
+    }
+
+    // Application render puts JD-matched stack terms first, before the four-term cap
+    // (alias-aware: "k8s" names Kubernetes); the bullet preview keeps the author's order.
+    @Test void applicationRenderLeadsHeadingWithJdKeywordsSnippetDoesNot() {
+        Project p = project(Project.Kind.PROJECT);
+        p.setTechStack("Java, React, Kafka, Redis, Kubernetes");
+        Bullet b = new Bullet(p.getId(), "Shipped it", new String[0], "general");
+        UUID user = UUID.randomUUID();
+        ProfileService profiles = org.mockito.Mockito.mock(ProfileService.class);
+        Profile profile = new Profile();
+        org.mockito.Mockito.when(profiles.get(user)).thenReturn(profile);
+        org.mockito.Mockito.when(profiles.readEducation(profile)).thenReturn(List.of());
+        ApplicationRenderer full = new ApplicationRenderer(
+                new LatexRenderer(new LatexEscaper()), new LatexEscaper(), profiles);
+
+        String app = full.render(user, List.of(b), Map.of(p.getId(), p), List.of(), Map.of(), List.of("k8s"));
+        String snippet = renderer.renderSnippet(List.of(b), Map.of(p.getId(), p));
+
+        assertTrue(app.contains("\\emph{Kubernetes, Java, React, Kafka}"), app);
+        assertTrue(snippet.contains("\\emph{Java, React, Kafka, Redis}"), snippet);
     }
 
     private static void setId(Object entity, UUID id) {
