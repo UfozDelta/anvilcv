@@ -1,23 +1,65 @@
 package com.resumepipeline.eval;
 
 import com.resumepipeline.application.Application;
+import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.bullet.BulletRepository;
+import com.resumepipeline.project.Project;
+import com.resumepipeline.project.ProjectRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 class EvalServiceTest {
 
     @Test
-    void baselineFileHoldsTheFrozenBank() {
-        List<EvalItem> items = EvalService.readBaseline();
-        assertEquals(196, items.size());
-        assertEquals(9, items.stream().map(EvalItem::projectId).distinct().count());
-        assertTrue(items.stream().noneMatch(i -> i.text().matches("(?s).*[\\w.+-]+@[\\w-]+\\.\\w+.*")),
-                "no email addresses in the committed baseline");
+    void snapshotCopiesTheUsersBulletsIntoADoneBaselineSet() throws Exception {
+        UUID user = UUID.randomUUID();
+        Project p = new Project();
+        p.setUserId(user);
+        p.setName("Demo Shop");
+        p.setKind(Project.Kind.PROJECT);
+        ReflectionTestUtils.setField(p, "id", UUID.randomUUID());
+        Bullet kept = new Bullet(p.getId(), "Built a checkout API in Spring Boot.", new String[]{"java"}, "backend");
+        Bullet rejected = new Bullet(p.getId(), "Wrote 40 unit tests.", new String[0], "backend");
+        rejected.setStatus("REJECTED");
+
+        EvalSetRepository sets = mock(EvalSetRepository.class);
+        ProjectRepository projects = mock(ProjectRepository.class);
+        BulletRepository bullets = mock(BulletRepository.class);
+        when(projects.findAllByUserIdOrderByCreatedAtDesc(user)).thenReturn(List.of(p));
+        when(bullets.findByProjectIdOrderByCreatedAtAsc(p.getId())).thenReturn(List.of(kept, rejected));
+        when(sets.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        EvalService svc = new EvalService(sets, projects, bullets, null, null, null);
+
+        EvalSet s = svc.snapshotBank(user);
+
+        assertEquals(EvalSet.BASELINE, s.getSource());
+        assertEquals(EvalSet.DONE, s.getStatus());
+        assertTrue(s.getLabel().startsWith("bank-" + LocalDate.now(ZoneOffset.UTC)));
+        List<EvalItem> items = svc.items(s);
+        assertEquals(2, items.size());
+        assertEquals(new EvalItem(p.getId(), "Demo Shop", "PROJECT", "backend", "PENDING", List.of("java"),
+                "Built a checkout API in Spring Boot."), items.get(0));
+        assertEquals("REJECTED", items.get(1).status());
+        verify(bullets, never()).save(any());
+        verify(bullets, never()).delete(any());
+    }
+
+    @Test
+    void snapshotOfAnEmptyBankIsRejected() {
+        EvalService svc = new EvalService(mock(EvalSetRepository.class), mock(ProjectRepository.class),
+                mock(BulletRepository.class), null, null, null);
+        assertThrows(ResponseStatusException.class, () -> svc.snapshotBank(UUID.randomUUID()));
     }
 
     @Test

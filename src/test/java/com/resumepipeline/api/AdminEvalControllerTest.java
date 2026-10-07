@@ -3,6 +3,7 @@ package com.resumepipeline.api;
 import com.resumepipeline.auth.AppUserDetailsService;
 import com.resumepipeline.auth.SecurityConfig;
 import com.resumepipeline.eval.EvalService;
+import com.resumepipeline.eval.EvalSet;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -34,7 +35,7 @@ class AdminEvalControllerTest {
     void nonAdminGets403OnEveryEvalRoute() throws Exception {
         UUID u = UUID.randomUUID();
         mvc.perform(get("/api/admin/eval/sets").with(user(u))).andExpect(status().isForbidden());
-        mvc.perform(post("/api/admin/eval/baseline").with(user(u))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/admin/eval/snapshot").with(user(u))).andExpect(status().isForbidden());
         mvc.perform(post("/api/admin/eval/generate").with(user(u))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"projectIds\":[]}"))
                 .andExpect(status().isForbidden());
@@ -54,5 +55,13 @@ class AdminEvalControllerTest {
         when(eval.list()).thenReturn(List.of());
         mvc.perform(get("/api/admin/eval/sets").with(admin(UUID.randomUUID()))).andExpect(status().isOk());
         verify(eval).list();
+    }
+
+    @Test
+    void snapshotUsesTheCallingAdminsOwnBank() throws Exception {
+        UUID admin = UUID.randomUUID();
+        when(eval.snapshotBank(admin)).thenReturn(new EvalSet("bank-x", EvalSet.BASELINE, null, EvalSet.DONE));
+        mvc.perform(post("/api/admin/eval/snapshot").with(admin(admin))).andExpect(status().isOk());
+        verify(eval).snapshotBank(admin);
     }
 }

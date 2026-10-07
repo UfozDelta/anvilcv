@@ -155,7 +155,7 @@ export function BulletEvalSection() {
   });
 
   const generate = () => act(async () => {
-    if (!reference) throw new Error('Import the baseline first');
+    if (!reference) throw new Error('Snapshot the bank first');
     await api.post('/api/admin/eval/generate', { referenceSetId: reference.id, projectIds: picked, note: genNote });
     setPicked([]);
   });
@@ -167,7 +167,8 @@ export function BulletEvalSection() {
       <Section num="10" title="Bullet Eval" count={sets.length} />
       <div style={styles.section}>
         <p style={note}>
-          Frozen baseline vs dry-run generations of the current generator. A dry run never writes the
+          Snapshots of your live bullet bank vs dry-run generations of the current generator. A snapshot
+          copies the bullet table into an eval set (stored in the DB only). A dry run never writes the
           bullet table; it starts from an empty bank, so compare rates, not counts. Generation is not
           seeded — run the same config twice before trusting a small delta.
         </p>
@@ -199,17 +200,15 @@ export function BulletEvalSection() {
                   </td>
                 </tr>
               ))}
-              {sets.length === 0 && <tr><td style={cell} colSpan={6}>No sets yet — import the baseline.</td></tr>}
+              {sets.length === 0 && <tr><td style={cell} colSpan={6}>No sets yet — snapshot the current bank.</td></tr>}
             </tbody>
           </table>
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
-          {!sets.some(s => s.source === 'BASELINE') && (
-            <button className="btn" disabled={busy} onClick={() => act(() => api.post('/api/admin/eval/baseline'))}>
-              IMPORT BASELINE
-            </button>
-          )}
+          <button className="btn" disabled={busy} onClick={() => act(() => api.post('/api/admin/eval/snapshot'))}>
+            SNAPSHOT CURRENT BANK
+          </button>
         </div>
 
         {reference && (
