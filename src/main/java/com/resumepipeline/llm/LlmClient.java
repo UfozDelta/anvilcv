@@ -13,6 +13,17 @@ public interface LlmClient {
 
     BulletGenerationResult generateBullets(GenerateBulletsRequest req, ProgressLog progress, TokenAccumulator tokens);
 
+    /**
+     * Bank pass 1 of 2: pick the project's strongest stories, each backed by verbatim evidence
+     * from the source and tagged with the requested lenses it truly fits. Evidence that cannot be
+     * found in the source is dropped, and so is a story left with none.
+     */
+    StoryResult findStories(StoryRequest req, ProgressLog progress, TokenAccumulator tokens);
+
+    /** Bank pass 2 of 2: write bullets for those stories, each tagged with its story id and lens. */
+    BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
+                                             TokenAccumulator tokens);
+
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
     /**
@@ -110,7 +121,16 @@ public interface LlmClient {
             String lensFocus
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
-    record GeneratedBullet(String text, List<String> tags) {}
+    /** storyId and lens are set only by {@link #writeStoryBullets}; null on the single-lens path. */
+    record GeneratedBullet(String text, List<String> tags, String storyId, String lens) {
+        public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null); }
+    }
+
+    /** {@code source.category()} is unused here; {@code lenses} are the ones the user asked for. */
+    record StoryRequest(GenerateBulletsRequest source, List<String> lenses) {}
+    /** id: the model's own key ("s1"), only meaningful within one generation run. */
+    record Story(String id, String title, List<String> evidence, List<String> lenses) {}
+    record StoryResult(List<Story> stories, List<String> unsupportedLenses) {}
 
     /**
      * A batch of over/under-length bullets to rewrite. Ids are opaque to the LLM layer and

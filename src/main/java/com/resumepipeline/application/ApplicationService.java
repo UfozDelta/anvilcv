@@ -935,11 +935,14 @@ public class ApplicationService {
      * here and it is what decides which framing survives. {@code BulletSelector} still runs its
      * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
      */
-    private static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
+    static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
         List<Bullet> kept = new ArrayList<>();
         List<String> keptTexts = new ArrayList<>();
         for (Bullet b : byScoreDesc) {
             if (BulletTextRules.isNearDuplicate(b.getText(), keptTexts)) continue;
+            // Wordings of one story share a storyId even when their prose overlaps too little
+            // for the text check — they were written to differ.
+            if (BulletSelector.sameStory(b, kept)) continue;
             kept.add(b);
             keptTexts.add(b.getText());
         }

@@ -70,13 +70,18 @@ public final class RepoMapRenderer {
      * when nothing is tagged, so a lens is never left with only the overview.
      */
     public static String lensFocus(RepoMap map, String lens, List<String> subsystemFilter) {
+        return lensFocus(map, lens == null ? List.<String>of() : List.of(lens), subsystemFilter);
+    }
+
+    /** As above for several lenses at once: a subsystem tagged with any of them is in. */
+    public static String lensFocus(RepoMap map, List<String> lenses, List<String> subsystemFilter) {
         if (map == null) return null;
         Map<String, RepoMap.Module> byPath = new HashMap<>();
         map.modules().forEach(m -> byPath.put(m.path(), m));
         List<RepoMap.Subsystem> subs = map.project() == null ? List.of() : map.project().subsystems();
         List<RepoMap.Subsystem> picked = subsystemFilter != null && !subsystemFilter.isEmpty()
                 ? subs.stream().filter(s -> subsystemFilter.contains(s.name())).toList()
-                : subs.stream().filter(s -> s.lenses().contains(lens)).toList();
+                : subs.stream().filter(s -> s.lenses().stream().anyMatch(lenses::contains)).toList();
 
         StringBuilder sb = new StringBuilder();
         if (picked.isEmpty()) {
@@ -117,7 +122,8 @@ public final class RepoMapRenderer {
 
     private static void facts(StringBuilder sb, RepoMap map) {
         if (map.facts().isEmpty()) return;
-        sb.append("\nCounted facts (computed from the code — safe to quote):\n");
+        // Not "safe to quote": that label is how test, file and line counts became bullet metrics.
+        sb.append("\nCounted facts (computed from the code — accurate, but counts of the code itself are context, not results):\n");
         for (RepoMap.Fact f : map.facts()) sb.append("- ").append(f.value()).append(' ').append(f.label()).append(" (").append(f.source()).append(")\n");
     }
 }

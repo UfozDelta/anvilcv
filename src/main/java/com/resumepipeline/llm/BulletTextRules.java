@@ -61,6 +61,87 @@ public final class BulletTextRules {
     }
 
     /**
+     * Counts of the author's own artifacts: activity, not results. A recruiter reads "87 commits"
+     * or "192 unit tests" as padding. Deliberately narrow: domain counts that describe the product
+     * ("16 indicator classes", "4 venues", "41 REST endpoints") are scope, not vanity, and stay.
+     */
+    private static final Pattern VANITY = Pattern.compile(
+            "\\b\\d[\\d,.]*\\+?\\s*(?:\\*\\*)?\\s*(?:in-repo |automated )?(?:commits?|s?loc|lines? of \\w+|source files|files"
+                    + "|(?:unit |integration |e2e |end-to-end )?tests?|test cases|assert(?:ion)?s?(?: checks)?"
+                    + "|(?:database |db )?tables|(?:flyway |database |db |schema )?migrations|contributors)\\b"
+                    + "|\\bzero broken (?:main )?builds\\b",
+            Pattern.CASE_INSENSITIVE);
+
+    /** The vanity phrase in a bullet (e.g. "87 commits"), or null if it has none. */
+    public static String vanityCount(String text) {
+        if (text == null) return null;
+        Matcher m = VANITY.matcher(text.replace("**", ""));
+        return m.find() ? m.group() : null;
+    }
+
+    // Abbreviations whose period is not a sentence end.
+    private static final Pattern ABBREV = Pattern.compile("\\b(?:e\\.g|i\\.e|etc|vs|approx|incl|U\\.S|Inc|Ltd|Co)\\.",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SENTENCE_BREAK = Pattern.compile("[.!?]\\s+(?=[A-Z\"(*])");
+    // A second sentence that only restates the first: "This ensured...", "These enabled...".
+    private static final Pattern FILLER_SENTENCE = Pattern.compile(
+            "[.!?]\\s+(?:\\*\\*)?(?:This|These|Which|It|Together|Overall)\\b[^.!?]*\\b(?:ensur|enabl|empower|facilitat"
+                    + "|significantly|robust|accelerat|ultimately|demonstrat)", Pattern.CASE_INSENSITIVE);
+
+    /** Sentence count, not fooled by "e.g.", "vs.", "Next.js" or "v5.4". */
+    public static int sentenceCount(String text) {
+        if (text == null || text.isBlank()) return 0;
+        String t = ABBREV.matcher(text.strip()).replaceAll("_");
+        int n = 1;
+        Matcher m = SENTENCE_BREAK.matcher(t);
+        while (m.find()) n++;
+        return n;
+    }
+
+    /** True when a bullet runs past 2 sentences or tacks on a filler sentence that restates the first. */
+    public static boolean isPadded(String text) {
+        if (text == null) return false;
+        return sentenceCount(text) > 2 || FILLER_SENTENCE.matcher(ABBREV.matcher(text).replaceAll("_")).find();
+    }
+
+    /** First word, lower-cased, bold and punctuation stripped: the bullet's opening verb. */
+    public static String openingVerb(String text) {
+        if (text == null) return "";
+        String t = text.replace("**", "").strip();
+        int sp = t.indexOf(' ');
+        return (sp < 0 ? t : t.substring(0, sp)).replaceAll("[^A-Za-z-]", "").toLowerCase();
+    }
+
+    /**
+     * True when {@code quote} appears in {@code source}, tolerating what models do to a copy:
+     * markdown, curly quotes, dashes, line wraps, case. Falls back to word coverage (85% of the
+     * quote's 3+ letter words) for quotes that reflowed or dropped a word.
+     */
+    public static boolean isQuotedIn(String quote, String source) {
+        String q = normalizeForQuote(quote);
+        if (q.length() < 12) return false;
+        String s = normalizeForQuote(source);
+        if (s.contains(q)) return true;
+        Set<String> srcWords = Arrays.stream(s.split(" ")).collect(Collectors.toSet());
+        List<String> words = Arrays.stream(q.split(" ")).filter(w -> w.length() >= 3).distinct().toList();
+        if (words.size() < 4) return false;
+        long hit = words.stream().filter(srcWords::contains).count();
+        return hit >= Math.ceil(words.size() * 0.85);
+    }
+
+    private static String normalizeForQuote(String s) {
+        if (s == null) return "";
+        return s.toLowerCase()
+                .replaceAll("[‘’“”\"'`*#>]", "")
+                .replaceAll("[–—]", "-")
+                .replaceAll("(?m)^\\s*[-+]\\s+", " ")
+                .replaceAll("[^a-z0-9%$+./\\- ]", " ")
+                .replaceAll("[.,;:]+(\\s|$)", " ")
+                .replaceAll("\\s+", " ")
+                .strip();
+    }
+
+    /**
      * Quantities claimed anywhere in the bullet that don't appear in the source context
      * (project/role description + repo context) the bullet was generated from. The LLM is
      * instructed to quote metrics verbatim — this catches it when it doesn't. Returns the

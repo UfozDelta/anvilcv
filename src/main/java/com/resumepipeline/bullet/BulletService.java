@@ -11,7 +11,6 @@ import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.obs.LogText;
-import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectRepository;
@@ -29,19 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Service
 public class BulletService {
 
     private static final Logger log = LoggerFactory.getLogger(BulletService.class);
-
-    // Fans out per-category LLM calls in generateBank; blocking I/O, so virtual threads.
-    private static final ExecutorService PARALLEL_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     private final BulletRepository repo;
     private final ProjectService projectService;
@@ -348,6 +340,22 @@ public class BulletService {
         return generateForProjectAndCategory(userId, projectId, "general", ProgressLog.noOp());
     }
 
+    /** Everything the project row says, as one generation request. */
+    private static LlmClient.GenerateBulletsRequest sourceRequest(Project p, String category, List<String> existing,
+                                                                 List<String> siblings, String lensFocus) {
+        LlmClient.SourceKind sk = p.getKind() == Project.Kind.EXPERIENCE
+                ? LlmClient.SourceKind.EXPERIENCE
+                : LlmClient.SourceKind.PROJECT;
+        return new LlmClient.GenerateBulletsRequest(
+                p.getUserId(), sk, category,
+                p.getName(), p.getDescription(), p.getContextDescription(), p.getRepoContext(),
+                p.getTechStack(), p.getYourRole(), p.getOwnership(),
+                p.getScaleImpact(), p.getHardestProblem(),
+                p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
+                p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
+                existing, siblings, lensFocus);
+    }
+
     private record RawGeneration(String category, LlmClient.BulletGenerationResult result) {}
 
     /** Call the LLM for one project/category. No shared state — safe to run concurrently. */
@@ -355,17 +363,10 @@ public class BulletService {
                                               List<String> siblingCategories, List<String> subsystems,
                                               ProgressLog progress) {
         Project p = projectService.get(userId, projectId);
-
-        LlmClient.SourceKind sk = p.getKind() == Project.Kind.EXPERIENCE
-                ? LlmClient.SourceKind.EXPERIENCE
-                : LlmClient.SourceKind.PROJECT;
-
         String cat = (category == null || category.isBlank()) ? "general" : category;
 
         // Shown to the model so it writes something new instead of re-deriving what the bank
-        // already holds and losing it to saveDeduped afterwards. In a generateBank run the
-        // categories are in flight together, so each one sees only what was already persisted,
-        // never its siblings' output — dedup still backstops that overlap.
+        // already holds and losing it to saveDeduped afterwards.
         List<String> existing = repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
                 .map(Bullet::getText)
                 .toList();
@@ -373,15 +374,7 @@ public class BulletService {
         TokenAccumulator tokens = new TokenAccumulator();
         LlmClient.BulletGenerationResult result;
         try {
-            result = llm.generateBullets(
-                    new LlmClient.GenerateBulletsRequest(
-                            userId, sk, cat,
-                            p.getName(), p.getDescription(), p.getContextDescription(), p.getRepoContext(),
-                            p.getTechStack(), p.getYourRole(), p.getOwnership(),
-                            p.getScaleImpact(), p.getHardestProblem(),
-                            p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
-                            p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
-                            existing, siblingCategories,
+            result = llm.generateBullets(sourceRequest(p, cat, existing, siblingCategories,
                             RepoMapRenderer.lensFocus(RepoMapRenderer.parse(p.getRepoMap()), cat, subsystems)),
                     progress, tokens);
         } finally {
@@ -474,8 +467,16 @@ public class BulletService {
     }
 
     /**
-     * @param subsystems repo-map subsystem names the user ticked; every lens then writes from
-     *                   those instead of the subsystems tagged for it. Empty = use the tags.
+     * @param subsystems repo-map subsystem names the user ticked; generation then writes from
+     *                   those instead of the subsystems tagged for the lenses. Empty = use the tags.
+     *
+     * <p>Two calls, whatever the lens count: {@code findStories} picks the project's strongest
+     * pieces of work (each backed by quotes verified against the source, each tagged with the
+     * requested lenses it really fits), then {@code writeStoryBullets} writes one wording per
+     * story-lens pair. This replaced one call per lens, each asked for 4-6 bullets, which padded
+     * every lens the project barely touched. A lens no story fits now gets no bullets.
+     *
+     * <p>Additive like before: nothing already in the bank, APPROVED or not, is changed.
      */
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, List<String> subsystems,
                                      ProgressLog progress) {
@@ -487,52 +488,77 @@ public class BulletService {
                 throw new IllegalArgumentException("Unknown category: " + c);
             }
         }
-        int total = categories.size();
-        for (int i = 0; i < total; i++) {
-            progress.emit("[" + (i + 1) + "/" + total + "] Starting category: " + categories.get(i));
-        }
-        log.info("Generating bank for project {} categories {}", projectId, categories);
+        log.info("Generating bank for project {} lenses {}", projectId, categories);
+        progress.emit("Lenses: " + String.join(", ", categories));
 
-        List<CompletableFuture<RawGeneration>> futures = categories.stream()
-                .map(c -> CompletableFuture.supplyAsync(
-                        Mdc.wrap(() -> generateBulletsOnly(userId, projectId, c,
-                                categories.stream().filter(o -> !o.equals(c)).toList(), subsystems,
-                                tagged(progress, c))), PARALLEL_EXECUTOR))
-                .toList();
+        Project p = projectService.get(userId, projectId);
+        List<Bullet> existing = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
+        LlmClient.GenerateBulletsRequest source = sourceRequest(p, "general",
+                existing.stream().map(Bullet::getText).toList(), List.of(),
+                RepoMapRenderer.lensFocus(RepoMapRenderer.parse(p.getRepoMap()), categories, subsystems));
+        LlmClient.StoryRequest req = new LlmClient.StoryRequest(source, categories);
 
-        List<RawGeneration> results;
+        TokenAccumulator tokens = new TokenAccumulator();
+        LlmClient.BulletGenerationResult result;
+        List<LlmClient.Story> stories;
         try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            results = futures.stream().map(CompletableFuture::join).toList();
-        } catch (CompletionException e) {
-            // Unwrap so e.g. ResponseStatusException(404) from projectService.get() still
-            // surfaces as 404 through the synchronous endpoint, not a wrapped 500.
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            if (cause instanceof RuntimeException re) throw re;
-            throw new RuntimeException(cause.getMessage(), cause);
+            stories = llm.findStories(req, progress, tokens).stories();
+            if (stories.isEmpty()) {
+                progress.emit("No story in the source is backed by evidence — nothing generated.");
+                return List.of();
+            }
+            result = llm.writeStoryBullets(req, stories, progress, tokens);
+        } finally {
+            llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
         }
 
-        recordMeasureDiagnostics(userId, projectId, results, progress);
+        // Grouped by lens so the shadow-mode measurement keeps its per-category ids.
+        Map<String, List<LlmClient.GeneratedBullet>> byLens = new LinkedHashMap<>();
+        result.bullets().forEach(g -> byLens.computeIfAbsent(g.lens(), k -> new ArrayList<>()).add(g));
+        recordMeasureDiagnostics(userId, projectId, byLens.entrySet().stream()
+                .map(e -> new RawGeneration(e.getKey(), new LlmClient.BulletGenerationResult(e.getValue())))
+                .toList(), progress);
 
-        // Every lens judges itself against the SAME stored-bank snapshot at the strict floor —
-        // hence a fresh copy per lens, not one shared mutable list. Sharing it would put lens 1's
-        // output into lens 2's strict comparison and reinstate exactly the cross-lens deletion
-        // this split exists to stop. Sibling output travels in siblingTexts instead, judged at
-        // CROSS_LENS_THRESHOLD, so a second framing of the same work survives.
-        List<String> bankSnapshot =
-                repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream().map(Bullet::getText).toList();
-        List<String> siblingTexts = new ArrayList<>();
-        List<Bullet> combined = new ArrayList<>();
-        for (RawGeneration gen : results) {
-            combined.addAll(saveDeduped(userId, projectId, gen,
-                    new ArrayList<>(bankSnapshot), siblingTexts, progress));
-        }
-        progress.emit("Done — generated " + combined.size() + " bullets across " + total + " categories.");
-        return combined;
+        List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(),
+                existing.stream().map(Bullet::getText).toList(), progress);
+        progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
+        return saved;
     }
 
-    private static ProgressLog tagged(ProgressLog progress, String category) {
-        return msg -> progress.emit("[" + category + "] " + msg);
+    /**
+     * Persist a story run. Each model story id becomes one fresh UUID shared by its wordings.
+     *
+     * <p>Dedup against the stored bank and against OTHER stories is the normal strict check —
+     * a different story restating a claim is a repeat. Against the same story only near-identical
+     * prose is dropped ({@link BulletTextRules#CROSS_LENS_THRESHOLD}): two wordings of one story
+     * are meant to share facts, and selection keeps them off the same resume by storyId.
+     */
+    List<Bullet> saveStoryBullets(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
+                                  List<String> bankTexts, ProgressLog progress) {
+        GenerationConfig cfg = configService.get(userId);
+        Map<String, UUID> storyUuid = new LinkedHashMap<>();
+        Map<String, List<String>> textsByStory = new LinkedHashMap<>();
+        List<Bullet> saved = new ArrayList<>();
+        int dupDropped = 0;
+        for (LlmClient.GeneratedBullet g : bullets) {
+            List<String> sameStory = textsByStory.computeIfAbsent(g.storyId(), k -> new ArrayList<>());
+            List<String> others = new ArrayList<>(bankTexts);
+            textsByStory.forEach((k, v) -> { if (!k.equals(g.storyId())) others.addAll(v); });
+            if (BulletTextRules.isNearDuplicate(g.text(), others)
+                    || BulletTextRules.isNearDuplicate(g.text(), sameStory, BulletTextRules.CROSS_LENS_THRESHOLD)) {
+                dupDropped++;
+                continue;
+            }
+            String text = BulletTextRules.capBoldSpans(g.text(), BulletTextRules.maxBoldSpans(cfg, g.text()));
+            sameStory.add(text);
+            Bullet b = new Bullet(projectId, text, g.tags().toArray(new String[0]), g.lens());
+            b.setStoryId(storyUuid.computeIfAbsent(g.storyId(), k -> UUID.randomUUID()));
+            saved.add(repo.save(b));
+        }
+        if (dupDropped > 0) progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
+        log.info("BULLET_PERSIST project={} stories={} generated={} saved={} dup_dropped={}",
+                projectId, storyUuid.size(), bullets.size(), saved.size(), dupDropped);
+        return saved;
     }
 
     /**
