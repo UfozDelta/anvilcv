@@ -42,7 +42,19 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
   (`ai-ml`, `backend`, `frontend`, `data`, `security`, `devops`, `systems`, `comms`); evidence
   quotes not found in the source are dropped, and a lens no story fits gets no bullets.
   `writeStoryBullets` then writes one wording per story-lens pair (two for a single-lens story).
-  Wordings of one story share a `story_id`.
+  Wordings of one story share a `story_id`, and each kept story is saved as a `story` row (title,
+  evidence quotes, lenses).
+- Reruns build on the bank. `findStories` is shown the live stories, storyless bullets as
+  covered work, and dismissed stories (every wording rejected), and asks for up to
+  `min(8, 12 - live)` new ones. A found story is dropped as a repeat if at least half of its
+  quotes (ignoring quotes under 40 chars) sit inside a saved one's, or its title is a
+  near-duplicate. A project holds at most 12 live stories (`STORY_CAP`); a full bank makes no
+  LLM call. One build per project at a time: a second gets 409 (the async submit fails the job).
+- Distinct progress messages when nothing is generated: no new stories, all duplicated, or bank
+  full.
+- Project page: a BY STORY view, and an "only N usable stories" warning under 3 (usable = has a
+  non-rejected wording selection may pick, i.e. not an unreviewed vanity count; a storyless
+  bullet counts as its own story).
 - XYZ format, with the Y (a measured result) only when the source states it.
 - Deterministic filters: activity counts (commits, lines, tests...), filler sentences, numbers
   absent from the source, and lengths outside the one-line / two-line bands (a dead zone between
@@ -62,14 +74,18 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
   wording per story, 25 total, then the LLM ranks them.
 - Selection is code: up to 6 entries at 3 bullets each under a one-page line budget, minimum 2
   experience and 3 project entries, no near-duplicates, one wording per story, no repeated
-  opening verb within an entry, and unreviewed bullets with vanity counts skipped.
-- LLM also picks the relevant skill categories and coursework per JD. Skills not in your profile
-  are dropped; skills rows and each project's tech line list JD keywords first. The ATS report
-  counts keywords in bullets, skills rows, and heading tech lines.
+  opening verb within an entry, and unreviewed bullets with vanity counts skipped. An entry left
+  with under 2 bullets is swapped for the next-best entry of the same kind (never a locked
+  entry, the refit target, or one the kind floor needs).
+- LLM also picks the relevant skill categories and coursework per JD. Skills come only from your
+  profile; skills rows and each project's tech line list JD keywords first. The ATS report counts
+  keywords in bullets, every printed skills row (AI & Integrations included; an empty saved row
+  falls back to the profile row, as the renderer does), and heading tech lines.
 - A recruiter-style review scores the page in the background after the PDF is ready.
 - PDF downloads as `Last_Company_resume.pdf`.
 - Application page: add any bank bullet, reorder, see duplicate and awkward-wrap warnings, and a
-  persistent "PDF out of date" flag after edits until the next rerender.
+  persistent "PDF out of date" flag after edits until the next rerender. A rerender clears it only
+  if `pdf_stale_seq` is unchanged, so an edit landing mid-compile keeps the flag.
 - Async: submit returns a job UUID immediately, frontend polls progress every 1.5s.
 
 **Tracking**
@@ -105,11 +121,16 @@ Full writeup: [github-repo-explorer.html](github-repo-explorer.html).
 
 **Jobs**
 - `/jobs` feed with remote, added-within, tech-stack chip, and "My skills" (stack overlaps your
-  profile) filters.
+  profile) filters. Filters are capped: 20 stack tags of 50 chars, `q` and `location` 100 chars.
+- Postings arrive through a signed webhook (`POST /api/public/jobs/webhook`, HMAC-SHA256 in
+  `X-Jobs-Signature`; off while `JOBS_WEBHOOK_SECRET` is blank). Stack tags are normalised at
+  ingest (trimmed, comma-free, case-insensitive repeats dropped).
 
 **Admin**
 - Bullet Eval (admin only): snapshot the live bank, dry-run the current generator on chosen
-  projects without saving, and compare two sets side by side with deterministic metrics.
+  projects without saving, and compare two sets side by side with deterministic metrics. Items
+  keep their `storyId`, and coverage replays the real selectable bank (no rejected, no unreviewed
+  vanity, one wording per story).
 - `/admin` — LLM provider, API keys, base URLs, and per-call models. Keys encrypted at rest
   (AES-256-GCM), masked on read, live-tested against the provider before save.
 - Enforced server-side with `hasRole("ADMIN")`; the nav-link gate is cosmetic.
@@ -231,6 +252,7 @@ OpenAI defaults to `gpt-4o-mini` for all three.
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | split-origin deploys only |
 | `COOKIE_SAME_SITE` / `COOKIE_SECURE` | `Lax` / `false` | set `None` / `true` behind a tunnel |
 | `TUNNEL_TOKEN` | — | secret; `compose.yml` cloudflared only |
+| `JOBS_WEBHOOK_SECRET` | — | secret; blank disables the jobs webhook |
 
 Hikari is tuned for Neon's scale-to-zero (pool 5, min idle 0, 4-minute max lifetime).
 `tectonic.timeout-seconds` is 30.
@@ -303,11 +325,11 @@ stored key undecryptable — they have to be re-entered.
 | Path | Contents |
 |---|---|
 | `src/main/java/com/resumepipeline/` | Spring Boot backend |
-| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V39` |
+| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V41` |
 | `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
 | `src/main/resources/repo-explorer-instructions.md` | System prompt for the server-side repo explorer |
-| `src/test/java/` | ~370 backend tests |
+| `src/test/java/` | ~535 backend tests |
 | `frontend/` | React + Vite SPA |
 | `.github/workflows/ci.yml` | Maven job + Vite job |
 | `start.ps1`, `Dockerfile`, `compose.yml`, `pom.xml` | Build and run |
@@ -343,20 +365,27 @@ public   POST /api/login  /api/register  /api/logout   GET /api/me  /api/ping
 profile  GET|PUT /api/profile
 config   GET|PUT /api/config/generation
 projects GET|POST /api/projects          GET|PUT|DELETE /api/projects/{id}
-         POST /api/projects/{id}/bullets/generate
-         POST /api/projects/{id}/bullets/generate-bank[/submit]
+         POST /api/projects/{id}/duplicate
+         POST /api/projects/{id}/bullets/generate  /bullets/refit
+         POST /api/projects/{id}/bullets/generate-bank[/submit]   (409 if a run is in flight)
          GET  /api/projects/jobs/{jobId}/progress
 bullets  GET|POST /api/projects/{projectId}/bullets
          PUT|DELETE /api/bullets/{id}    PATCH /api/bullets/{id}/status
+         POST /api/bullets/preview
 apps     GET /api/applications           GET /api/applications/outcome-history
          POST /api/applications/submit   GET /api/applications/jobs/{jobId}/progress
          GET|POST|PATCH|DELETE /api/applications/{id}
-         POST /api/applications/{id}/rerender[/submit]
+         POST /api/applications/{id}/rerender[/submit]  /refit-selection[/submit]
+         POST /api/applications/{id}/rescore/submit     PATCH /api/applications/{id}/locks
+         POST /api/applications/selection-check         (read-only repeat warnings)
          GET  /api/applications/{id}/pdf            (application/pdf)
+         GET  /api/applications/{id}/tex            (application/x-tex)
          GET  /api/applications/{id}/cover-letter   (text/plain)
 jobs     GET /api/public/jobs  /api/public/jobs/tags     PUT|DELETE /api/jobs/{id}/save
+         POST /api/public/jobs/webhook   (public, HMAC-signed)
 import   POST /api/resume/parse          POST /api/resume/import
-admin    GET /api/admin/stats            GET|PUT /api/admin/llm   POST /api/admin/llm/test
+admin    GET /api/admin/stats  /logs  /bullet-measure-diagnostics
+         GET|PUT /api/admin/llm          POST /api/admin/llm/test
          GET /api/admin/eval/sets  /compare   POST /api/admin/eval/snapshot  /generate
          DELETE /api/admin/eval/sets/{id}
 github   GET /api/github/status  /connect  /callback  /repos      DELETE /api/github
@@ -369,7 +398,8 @@ Session-cookie auth (`JSESSIONID`, httpOnly), BCrypt passwords, `/api/admin/**` 
 
 ### Frontend routes
 
-`/` landing, `/login`, `/register`, `/docs`, and `/jobs` are public. `/projects`, `/experiences`,
+`/` landing, `/login`, `/register`, `/docs`, `/pricing`, and `/jobs` are public, as are the
+`/lab/*` UI prototypes (placeholder data, no API calls). `/projects`, `/experiences`,
 `/projects/:id`, `/experiences/:id`, `/new`, `/applications`, `/applications/:id`, `/flow`,
 `/profile`, `/settings`, `/admin`, `/upload` sit behind `RequireAuth`.
 
@@ -388,14 +418,17 @@ jobs, and it does not survive horizontal scaling.
 | `app_user` | UUID pk, unique username/email, bcrypt hash, `is_admin` |
 | `profile` | one per user; education JSONB, five skill-category columns (one renders as "AI & Integrations") |
 | `project` | `kind` = PROJECT \| EXPERIENCE; GitHub URL + repo context; enrichment fields (tech stack, role, ownership, scale/impact, hardest problem) |
-| `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED, `story_id` (groups wordings of one story) — cascades from project |
-| `application` | JD text/URL, ranking JSONB, selected bullet IDs, cover letter, ATS matched/missing, `tex_blob` + `pdf_blob`, `pdf_stale`, tectonic log, token counts and cost, pipeline duration |
+| `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED, `story_id` (groups wordings of one story; FK to `story`, deferred, on delete set null) — cascades from project |
+| `story` | one per kept story: title, `evidence[]` quotes, `lenses[]`; app-assigned id, cascades from project. V41 backfilled rows for existing story ids |
+| `application` | JD text/URL, ranking JSONB, selected bullet IDs, cover letter, ATS matched/missing, `tex_blob` + `pdf_blob`, `pdf_stale` + `pdf_stale_seq`, tectonic log, token counts and cost, pipeline duration |
 | `outcome_history` | one row per outcome change — feeds the sankey; cascades from application |
 | `generation_config` | per-user word-filter bounds, temperature, bold density, tone, verb style |
 | `llm_usage_log` | per-call tokens and cost, nullable app/project FKs |
 | `llm_settings` | singleton row: provider, encrypted keys, base URLs, per-call models |
 | `github_installation` | one per user: GitHub App installation id + account login. No tokens |
 | `eval_set` | admin bullet eval: frozen bank snapshots and dry-run generations, items as JSONB |
+| `job_posting` / `saved_job` | jobs feed postings (from the webhook) and per-user saves |
+| `bullet_measure_diagnostic` | admin diagnostics: estimated vs compiled bullet line counts |
 
 `project` also carries `repo_branch`, `repo_commit_sha` (the pinned snapshot),
 `repo_evidence` (JSON of the explorer's verified spans, used for bullet tracing), and
@@ -415,7 +448,7 @@ cd frontend && npm test     # vitest run
 Backend tests are all fast units — Mockito service tests plus `@WebMvcTest` slices. No
 Testcontainers, no `@SpringBootTest`, **no database needed**. Heaviest coverage sits on
 `BulletTextRules`, `KeywordScorer`, `LatexEscaper`, `BulletSelector`, and `ApplicationService`.
-Frontend coverage is thin: two files.
+Frontend coverage is thin: 6 files, 71 tests.
 
 CI runs on push to `main` and on every PR — Temurin 21 + `mvn -B verify`, and Node 20 +
 `npm ci && npm test && npm run build`.

@@ -13,13 +13,16 @@ Turn your code into resume bullets, then tailor a one-page PDF to each job.
   stories, each backed by quotes checked against the source; the second writes one or two
   wordings per story for each lens it fits (AI/ML, backend, frontend, data, security, DevOps,
   systems, comms). Code filters cut vanity counts, filler, invented numbers, and bad lengths,
-  then one repair pass rewrites what it can. Approved bullets are never touched.
+  then one repair pass rewrites what it can. Approved bullets are never touched. Stories are
+  saved, so a rerun sees what the bank already covers and drops repeats; a project holds up to
+  12 live stories.
 - **Keeps you in control.** Approve or reject bullets, pin or exclude files, add notes, and pick
-  which parts of the project to write about.
+  which parts of the project to write about. View the bank by story, with a warning when a
+  project has fewer than 3 usable stories.
 - **Tailors per job.** Paste a job description or URL. AnvilCV pulls keywords and a role lens,
   pre-filters the bank by keyword, has the LLM rank the rest, then picks bullets in code (one page,
-  no two wordings of one story) and builds a LaTeX PDF plus a cover letter in 1-3 minutes. Skills
-  and tech lines lead with the job's keywords, and an ATS check counts what is on the page.
+  no two wordings of one story, no one-bullet entries) and builds a LaTeX PDF plus a cover letter in 1-3 minutes. Skills
+  and tech lines lead with the job's keywords (skills come only from your profile), and an ATS check counts what is on the page.
 - **Lets you edit the result.** Add any bank bullet, reorder, see duplicate and awkward-wrap
   warnings, and a flag when the PDF is out of date.
 - **Finds jobs.** A job feed filtered by remote, date added, tech stack, or overlap with your skills.
