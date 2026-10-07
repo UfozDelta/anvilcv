@@ -168,6 +168,13 @@ public class BulletService {
         return repo.findByProjectIdOrderByCreatedAtAsc(projectId);
     }
 
+    /** Story titles of this project, by story id. */
+    public Map<UUID, String> storyTitles(UUID userId, UUID projectId) {
+        projectService.get(userId, projectId); // verify ownership
+        return storyRepo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .collect(Collectors.toMap(Story::getId, Story::getTitle));
+    }
+
     public Bullet create(UUID userId, UUID projectId, String text, String[] tags, String category) {
         projectService.get(userId, projectId); // verify ownership
         return repo.save(new Bullet(projectId, text, tags, category));

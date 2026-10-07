@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -32,7 +33,12 @@ public class BulletController {
 
     @GetMapping("/projects/{projectId}/bullets")
     public List<BulletResponse> listForProject(Authentication auth, @PathVariable UUID projectId) {
-        return bullets.listForProject(AuthUtils.userId(auth), projectId).stream().map(BulletResponse::from).toList();
+        UUID userId = AuthUtils.userId(auth);
+        List<com.resumepipeline.bullet.Bullet> list = bullets.listForProject(userId, projectId);
+        Map<UUID, String> titles = bullets.storyTitles(userId, projectId);
+        return list.stream()
+                .map(b -> BulletResponse.from(b, b.getStoryId() == null ? null : titles.get(b.getStoryId())))
+                .toList();
     }
 
     @PostMapping("/projects/{projectId}/bullets")

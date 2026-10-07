@@ -116,6 +116,10 @@ export interface Bullet {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   updatedAt: string;
+  /** Wordings of one story share it; null for a bullet of its own. */
+  storyId?: string | null;
+  /** Only the project's bullet list fills it. */
+  storyTitle?: string | null;
 }
 
 export interface GithubStatus {

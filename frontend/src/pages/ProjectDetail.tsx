@@ -166,6 +166,11 @@ export function ProjectDetail() {
                   onClick={() => s.setSortMode('date')}
                   style={{ background: s.sortMode === 'date' ? 'var(--ink)' : 'var(--paper)', color: s.sortMode === 'date' ? 'var(--paper)' : 'var(--ink)', marginLeft: -2 }}
                 >BY DATE</button>
+                <button
+                  className="btn btn--sm"
+                  onClick={() => s.setSortMode('story')}
+                  style={{ background: s.sortMode === 'story' ? 'var(--ink)' : 'var(--paper)', color: s.sortMode === 'story' ? 'var(--paper)' : 'var(--ink)', marginLeft: -2 }}
+                >BY STORY</button>
               </div>
             </div>
 
@@ -262,6 +267,33 @@ export function ProjectDetail() {
                       categoryLabel={cat} />
                   );
                 })}
+              </div>
+            )}
+
+            {/* BY STORY view */}
+            {s.sortMode === 'story' && (
+              <div>
+                {s.byStory.groups.map(g => (
+                  <div key={g.id} style={{ marginBottom: 24 }}>
+                    <div className="label" style={{ marginBottom: 8, paddingBottom: 6, borderBottom: 'var(--rule-thick)' }}>{g.title}</div>
+                    {g.rows.map((b, i) => s.editing === b.id ? (
+                      <EditBullet key={b.id} bullet={b} cfg={s.cfg} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
+                    ) : (
+                      <BulletRow key={b.id} bullet={b} index={i} cfg={s.cfg} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+                        removing={s.deletingBulletIds.has(b.id)}
+                        onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')}
+                        categoryLabel={s.categoryMap.get(b.category)} />
+                    ))}
+                  </div>
+                ))}
+                {s.byStory.loose.map((b, i) => s.editing === b.id ? (
+                  <EditBullet key={b.id} bullet={b} cfg={s.cfg} onCancel={() => s.setEditing(null)} onSave={(t, tg) => s.saveBullet(b, t, tg)} />
+                ) : (
+                  <BulletRow key={b.id} bullet={b} index={i} cfg={s.cfg} onEdit={() => s.setEditing(b.id)} onDelete={() => s.delBullet(b)}
+                    removing={s.deletingBulletIds.has(b.id)}
+                    onToggleApprove={() => s.setBulletStatus(b, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED')}
+                    categoryLabel={s.categoryMap.get(b.category)} />
+                ))}
               </div>
             )}
           </div>

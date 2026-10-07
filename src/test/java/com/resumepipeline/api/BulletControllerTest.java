@@ -41,6 +41,23 @@ class BulletControllerTest {
     }
 
     @Test
+    void listCarriesEachWordingsStoryTitle() throws Exception {
+        UUID userId = UUID.randomUUID(), proj = UUID.randomUUID(), story = UUID.randomUUID();
+        Bullet told = new Bullet(proj, "Built the ledger.", new String[0], "backend");
+        told.setStoryId(story);
+        Bullet loose = new Bullet(proj, "Hand-written.", new String[0], "general");
+        when(bullets.listForProject(userId, proj)).thenReturn(List.of(told, loose));
+        when(bullets.storyTitles(userId, proj)).thenReturn(java.util.Map.of(story, "Ledger service"));
+
+        mvc.perform(get("/api/projects/{p}/bullets", proj).with(user(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].storyId").value(story.toString()))
+                .andExpect(jsonPath("$[0].storyTitle").value("Ledger service"))
+                .andExpect(jsonPath("$[1].storyId").isEmpty())
+                .andExpect(jsonPath("$[1].storyTitle").isEmpty());
+    }
+
+    @Test
     void createRejectsBlankTextWith400() throws Exception {
         UUID userId = UUID.randomUUID(), proj = UUID.randomUUID();
 
