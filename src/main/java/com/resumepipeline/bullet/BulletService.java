@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -54,6 +55,9 @@ public class BulletService {
     // Editing a bullet changes what is printed on every page that already renders it, so the
     // recruiter scorecard for those pages stops describing reality — see markStaleFor below.
     private final ApplicationRepository applicationRepo;
+    private final StoryRepository storyRepo;
+    // A story build's bullets and story rows commit together (see saveStoryBullets).
+    private final TransactionOperations tx;
     // See generateBank: off for the eval dry run, which must measure the story generator only.
     private boolean lensFallback = true;
 
@@ -61,7 +65,8 @@ public class BulletService {
                          LlmUsageService llmUsageService, GenerationConfigService configService,
                          ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler,
                          BulletLineMeasurer measurer, BulletMeasureDiagnosticRepository diagnosticRepo,
-                         ApplicationRepository applicationRepo) {
+                         ApplicationRepository applicationRepo, StoryRepository storyRepo,
+                         TransactionOperations tx) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
@@ -73,6 +78,8 @@ public class BulletService {
         this.renderer = renderer;
         this.compiler = compiler;
         this.applicationRepo = applicationRepo;
+        this.storyRepo = storyRepo;
+        this.tx = tx;
     }
 
     /** Story-pass failures then fail the run instead of falling back to per-lens generation. */
@@ -552,7 +559,7 @@ public class BulletService {
                 .map(e -> new RawGeneration(e.getKey(), new LlmClient.BulletGenerationResult(e.getValue())))
                 .toList(), progress);
 
-        List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(),
+        List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(), stories,
                 existing.stream().map(Bullet::getText).toList(), progress);
         progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
         return saved;
@@ -590,7 +597,9 @@ public class BulletService {
     }
 
     /**
-     * Persist a story run. Each model story id becomes one fresh UUID shared by its wordings.
+     * Persist a story run. Each model story id becomes one fresh UUID shared by its wordings,
+     * and a story row under that UUID once at least one of its wordings is kept. One
+     * transaction, bullets first: bullet.story_id's foreign key is checked at commit (V41).
      *
      * <p>Dedup against the stored bank and against OTHER stories is the normal strict check —
      * a different story restating a claim is a repeat. Against the same story only near-identical
@@ -598,7 +607,13 @@ public class BulletService {
      * are meant to share facts, and selection keeps them off the same resume by storyId.
      */
     List<Bullet> saveStoryBullets(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
-                                  List<String> bankTexts, ProgressLog progress) {
+                                  List<LlmClient.Story> stories, List<String> bankTexts, ProgressLog progress) {
+        return tx.execute(status -> saveStoryBulletsNow(userId, projectId, bullets, stories, bankTexts, progress));
+    }
+
+    private List<Bullet> saveStoryBulletsNow(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
+                                             List<LlmClient.Story> stories, List<String> bankTexts,
+                                             ProgressLog progress) {
         GenerationConfig cfg = configService.get(userId);
         Map<String, UUID> storyUuid = new LinkedHashMap<>();
         Map<String, List<String>> textsByStory = new LinkedHashMap<>();
@@ -619,6 +634,16 @@ public class BulletService {
             b.setStoryId(storyUuid.computeIfAbsent(g.storyId(), k -> UUID.randomUUID()));
             saved.add(repo.save(b));
         }
+        Map<String, LlmClient.Story> storyById = new LinkedHashMap<>();
+        stories.forEach(s -> storyById.put(s.id(), s));
+        List<Story> rows = new ArrayList<>();
+        storyUuid.forEach((key, uuid) -> {
+            LlmClient.Story s = storyById.get(key);
+            if (s == null) return;
+            rows.add(new Story(uuid, projectId, s.title(), s.evidence().toArray(new String[0]),
+                    s.lenses().toArray(new String[0])));
+        });
+        storyRepo.saveAll(rows);
         if (dupDropped > 0) progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
         log.info("BULLET_PERSIST project={} stories={} generated={} saved={} dup_dropped={}",
                 projectId, storyUuid.size(), bullets.size(), saved.size(), dupDropped);

@@ -8,6 +8,7 @@ import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -16,6 +17,8 @@ import org.mockito.Mock;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -37,7 +40,15 @@ class BulletServiceTest {
     @Mock ApplicationRepository applicationRepo;
     @Mock BulletLineMeasurer measurer;
     @Mock BulletMeasureDiagnosticRepository diagnosticRepo;
+    @Mock StoryRepository storyRepo;
+    @Mock TransactionOperations tx;
     @InjectMocks BulletService service;
+
+    @BeforeEach
+    void runTransactionsInline() {
+        lenient().when(tx.execute(any())).thenAnswer(inv ->
+                inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
+    }
 
     private static Project project(UUID user, Project.Kind kind) {
         return new Project(user, kind, "P", "desc", null, "Eng", "Acme", "NYC", "2024");
@@ -333,9 +344,32 @@ class BulletServiceTest {
         List<Bullet> out = service.saveStoryBullets(user, proj, List.of(
                 new LlmClient.GeneratedBullet(a, List.of(), "s1", "backend"),
                 new LlmClient.GeneratedBullet(aAlt, List.of(), "s1", "data"),
-                new LlmClient.GeneratedBullet(aAlt, List.of(), "s2", "backend")), List.of(), ProgressLog.noOp());
+                new LlmClient.GeneratedBullet(aAlt, List.of(), "s2", "backend")),
+                List.of(story("s1", "backend", "data"), story("s2", "backend")), List.of(), ProgressLog.noOp());
 
         assertEquals(List.of(a, aAlt), out.stream().map(Bullet::getText).toList());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void storyRowsAreSavedOnlyForStoriesThatKeptAWording() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        String a = "Built a ledger service in Go that settles marketplace payouts nightly.";
+        List<Bullet> out = service.saveStoryBullets(user, proj, List.of(
+                new LlmClient.GeneratedBullet(a, List.of(), "s1", "backend"),
+                new LlmClient.GeneratedBullet(a, List.of(), "s2", "backend")),   // repeat: dropped
+                List.of(story("s1", "backend"), story("s2", "backend")), List.of(), ProgressLog.noOp());
+
+        ArgumentCaptor<List<Story>> rows = ArgumentCaptor.forClass(List.class);
+        verify(storyRepo).saveAll(rows.capture());
+        assertEquals(1, rows.getValue().size());
+        Story s1 = rows.getValue().get(0);
+        assertEquals(out.get(0).getStoryId(), s1.getId());
+        assertEquals("title s1", s1.getTitle());
+        assertEquals(proj, s1.getProjectId());
+        verify(tx).execute(any());
     }
 
     @Test
@@ -344,7 +378,8 @@ class BulletServiceTest {
         when(configService.get(any())).thenReturn(new GenerationConfig());
         String a = "Built a ledger service in Go that settles marketplace payouts nightly.";
         List<Bullet> out = service.saveStoryBullets(user, proj, List.of(
-                new LlmClient.GeneratedBullet(a, List.of(), "s1", "backend")), List.of(a), ProgressLog.noOp());
+                new LlmClient.GeneratedBullet(a, List.of(), "s1", "backend")), List.of(story("s1", "backend")),
+                List.of(a), ProgressLog.noOp());
         assertTrue(out.isEmpty());
     }
 }
