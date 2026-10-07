@@ -212,6 +212,8 @@ export interface JobPosting {
   receivedAt: string;
   /** Always false for guests. */
   saved: boolean;
+  /** Stack tags the signed-in user's profile skills cover; empty for guests. */
+  matched: string[];
 }
 
 /** Totals under the current search filters; `saved` is 0 for guests. */

@@ -51,6 +51,8 @@ class SecurityRulesTest {
         // 404, not 401: security let the anonymous request through; this slice has no handler.
         mvc.perform(get("/api/public/jobs"))
                 .andExpect(status().isNotFound());
+        mvc.perform(get("/api/public/jobs/tags"))
+                .andExpect(status().isNotFound());
         mvc.perform(post("/api/public/jobs/webhook"))
                 .andExpect(status().isNotFound());
     }

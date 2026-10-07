@@ -15,6 +15,11 @@ public interface JobPostingRepository extends JpaRepository<JobPosting, UUID>, J
 
     boolean existsBySourceAndExternalId(String source, String externalId);
 
+    /** Most used stack tags, merged across case and spelled as one of the stored forms. */
+    @Query(value = "SELECT min(t) FROM job_posting, unnest(stack) AS t GROUP BY lower(t) ORDER BY count(*) DESC, lower(t) LIMIT :n",
+            nativeQuery = true)
+    List<String> topTags(@Param("n") int n);
+
     // saved_job is a bare (user, posting) pair, so it is reached through native queries
     // here instead of getting an entity of its own.
 

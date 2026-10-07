@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyChar;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -124,7 +125,7 @@ class JobFeedServiceTest {
     void countsAreZeroSavedForGuests() {
         when(repo.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(3L, 4L);
 
-        JobFeedService.JobCounts c = service.counts(new JobFeedService.JobFilter("intern", null, false, null), null);
+        JobFeedService.JobCounts c = service.counts(new JobFeedService.JobFilter("intern", null, false, null, null, null), null);
 
         assertThat(c).isEqualTo(new JobFeedService.JobCounts(3, 4, 0));
         verify(repo, times(2)).count(any(org.springframework.data.jpa.domain.Specification.class));
@@ -138,7 +139,7 @@ class JobFeedServiceTest {
         when(repo.savedIds(user)).thenReturn(List.of(UUID.randomUUID()));
         when(repo.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(3L, 4L, 2L);
 
-        assertThat(service.counts(new JobFeedService.JobFilter(null, null, false, null), user)).isEqualTo(new JobFeedService.JobCounts(3, 4, 2));
+        assertThat(service.counts(new JobFeedService.JobFilter(null, null, false, null, null, null), user)).isEqualTo(new JobFeedService.JobCounts(3, 4, 2));
     }
 
     // The repo is mocked, so these check which predicates a filter builds rather than the SQL result.
@@ -154,7 +155,7 @@ class JobFeedServiceTest {
     @Test
     void remoteAloneMatchesOnlyRemoteLocations() {
         CriteriaBuilder cb = mock(CriteriaBuilder.class);
-        service.spec(null, new JobFeedService.JobFilter(null, null, true, null), null)
+        service.spec(null, new JobFeedService.JobFilter(null, null, true, null, null, null), null)
                 .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
 
         verify(cb).like(any(), eq("%remote%"));
@@ -164,7 +165,7 @@ class JobFeedServiceTest {
     @Test
     void remoteWidensLocationInsteadOfNarrowingIt() {
         CriteriaBuilder cb = mock(CriteriaBuilder.class);
-        service.spec(null, new JobFeedService.JobFilter(null, "NYC", true, null), null)
+        service.spec(null, new JobFeedService.JobFilter(null, "NYC", true, null, null, null), null)
                 .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
 
         verify(cb).like(any(), eq("%nyc%"));
@@ -176,7 +177,7 @@ class JobFeedServiceTest {
     void daysKeepsRecentlyReceivedPostings() {
         CriteriaBuilder cb = mock(CriteriaBuilder.class);
         Root<JobPosting> root = root(cb);
-        service.spec(null, new JobFeedService.JobFilter(null, null, false, 7), null)
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, 7, null, null), null)
                 .toPredicate(root, mock(CriteriaQuery.class), cb);
 
         ArgumentCaptor<Instant> since = ArgumentCaptor.forClass(Instant.class);
@@ -189,10 +190,56 @@ class JobFeedServiceTest {
     @Test
     void zeroDaysAndNoRemoteAddNoPredicates() {
         CriteriaBuilder cb = mock(CriteriaBuilder.class);
-        service.spec(null, new JobFeedService.JobFilter(null, null, false, 0), null)
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, 0, null, null), null)
                 .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
 
         verify(cb, never()).like(any(), anyString());
         verify(cb, never()).greaterThanOrEqualTo(any(Expression.class), any(Instant.class));
+    }
+
+    @Test
+    void stackFilterMatchesAnyTagCaseInsensitivelyAndWholeTag() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, null, List.of("Java", " react ", "java", "c_%"), null), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb).function(eq("array_to_string"), eq(String.class), any(), any());
+        verify(cb).like(any(), eq("%,java,%"), eq('!'));
+        verify(cb).like(any(), eq("%,react,%"), eq('!'));
+        verify(cb).like(any(), eq("%,c!_!%,%"), eq('!'));
+        verify(cb, times(3)).like(any(), anyString(), anyChar());
+    }
+
+    @Test
+    void blankStackFilterIsIgnored() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, null, List.of(" "), null), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb, never()).function(anyString(), any(), any());
+        verify(cb, never()).disjunction();
+    }
+
+    @Test
+    void skillsFilterWithNoSkillsMatchesNothing() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, null, null, List.of()), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb).disjunction();
+    }
+
+    @Test
+    void skillSpellingsIncludeAliases() {
+        assertThat(JobFeedService.skillSpellings(List.of("Postgres", "Node.js")))
+                .contains("postgres", "postgresql", "psql", "node.js", "nodejs");
+    }
+
+    @Test
+    void matchedTagsAreAliasAware() {
+        String[] stack = {"K8s", "PostgreSQL", "Rust", "React"};
+        assertThat(JobFeedService.matchedTags(stack, List.of("Kubernetes", "Postgres", "React/Redux")))
+                .containsExactly("K8s", "PostgreSQL", "React");
+        assertThat(JobFeedService.matchedTags(stack, List.of())).isEmpty();
     }
 }

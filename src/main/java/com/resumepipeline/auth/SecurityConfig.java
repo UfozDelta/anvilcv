@@ -31,7 +31,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/login", "/api/logout", "/api/me", "/api/register", "/error", "/api/public/stats", "/api/public/jobs", "/api/public/jobs/webhook").permitAll()
+                .requestMatchers("/api/login", "/api/logout", "/api/me", "/api/register", "/error", "/api/public/stats", "/api/public/jobs", "/api/public/jobs/tags", "/api/public/jobs/webhook").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()

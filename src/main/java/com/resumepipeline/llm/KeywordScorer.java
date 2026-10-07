@@ -164,6 +164,21 @@ public final class KeywordScorer {
     }
 
     /**
+     * Lower-cased spellings of {@code term} a plain string compare can match: the term itself,
+     * its canonical form and every alias that shares it ("Postgres" -> postgres, postgresql, psql).
+     */
+    public static Set<String> variants(String term) {
+        String c = canonical(term);
+        if (c.isBlank()) return Set.of();
+        Set<String> out = new HashSet<>(List.of(term.trim().toLowerCase(), c));
+        ALIASES.forEach((k, v) -> {
+            if (canonical(k).equals(c)) out.add(k);
+            if (canonical(v).equals(c)) out.add(v);
+        });
+        return out;
+    }
+
+    /**
      * The single normalised form of a keyword or tag: every token glued together, so
      * "Amazon Web Services" and "AWS" both reduce to "amazonwebservices".
      */
