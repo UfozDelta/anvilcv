@@ -128,11 +128,12 @@ public interface LlmClient {
 
     /**
      * {@code source.category()} is unused here; {@code lenses} are the ones the user asked for;
-     * {@code bank} is what the project's bank already covers, shown to findStories only.
+     * {@code bank} is what the project's bank already covers, shown to findStories only;
+     * {@code maxStories} is how many new stories findStories may ask for.
      */
-    record StoryRequest(GenerateBulletsRequest source, List<String> lenses, BankCoverage bank) {
+    record StoryRequest(GenerateBulletsRequest source, List<String> lenses, BankCoverage bank, int maxStories) {
         public StoryRequest(GenerateBulletsRequest source, List<String> lenses) {
-            this(source, lenses, BankCoverage.EMPTY);
+            this(source, lenses, BankCoverage.EMPTY, 8);
         }
     }
     /** A story the bank already holds, as findStories sees it: title and lenses, no evidence. */

@@ -401,6 +401,108 @@ class BulletServiceTest {
         assertEquals(java.util.Set.of(live.getId()), BulletService.liveStoryIds(bank));
     }
 
+    private static final String LONG_QUOTE = "Sequence-gap detection triggers a full resync of the order book";
+
+    @Test
+    void dropRepeatsCatchesQuoteOverlapTitleRepeatsAndRepeatsWithinTheRun() {
+        UUID proj = UUID.randomUUID();
+        Story saved = new Story(UUID.randomUUID(), proj, "Order book resync",
+                new String[]{"**" + LONG_QUOTE + "**, so the book is never stale."}, new String[]{"systems"});
+        LlmClient.Story quoteRepeat = new LlmClient.Story("s1", "Gap detection",
+                List.of(LONG_QUOTE.toUpperCase(), "short quote"), List.of("systems"));
+        LlmClient.Story titleRepeat = new LlmClient.Story("s2", "Order book resync",
+                List.of("A brand new quote about canvas rendering that is long enough"), List.of("frontend"));
+        LlmClient.Story fresh = new LlmClient.Story("s3", "Canvas renderer",
+                List.of("Median render time fell from 40ms to 12ms after moving to canvas"), List.of("frontend"));
+        LlmClient.Story freshAgain = new LlmClient.Story("s4", "Faster charts",
+                List.of("Median render time fell from 40ms to 12ms after moving to canvas"), List.of("frontend"));
+        LlmClient.Story shortOnly = new LlmClient.Story("s5", "Login page", List.of("4 venues"), List.of("frontend"));
+
+        List<LlmClient.Story> kept = BulletService.dropRepeats(
+                List.of(quoteRepeat, titleRepeat, fresh, freshAgain, shortOnly), List.of(saved));
+
+        assertEquals(List.of("s3", "s5"), kept.stream().map(LlmClient.Story::id).toList());
+    }
+
+    private void liveBank(UUID proj, int stories) {
+        List<Bullet> bank = new java.util.ArrayList<>();
+        for (int i = 0; i < stories; i++) bank.add(wording(proj, UUID.randomUUID(), "PENDING", "Bullet " + i));
+        when(repo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(bank);
+    }
+
+    @Test
+    void aFullStoryBankMakesNoLlmCall() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        liveBank(proj, BulletService.STORY_CAP);
+        List<String> progress = new java.util.ArrayList<>();
+
+        assertTrue(service.generateBank(user, proj, List.of("backend"), progress::add).isEmpty());
+
+        verifyNoInteractions(llm);
+        assertTrue(progress.stream().anyMatch(m -> m.startsWith("Story bank full (12)")), progress.toString());
+    }
+
+    @Test
+    void asksOnlyForTheRoomLeftAndKeepsNoMore() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        liveBank(proj, BulletService.STORY_CAP - 1);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(
+                new LlmClient.Story("s1", "Ledger service", List.of("q"), List.of("backend")),
+                new LlmClient.Story("s2", "Payout approvals", List.of("q"), List.of("backend"))), List.of()));
+        when(llm.writeStoryBullets(any(), any(), any(), any())).thenReturn(new LlmClient.BulletGenerationResult(List.of()));
+
+        service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+
+        ArgumentCaptor<LlmClient.StoryRequest> req = ArgumentCaptor.forClass(LlmClient.StoryRequest.class);
+        verify(llm).findStories(req.capture(), any(), any());
+        assertEquals(1, req.getValue().maxStories());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<LlmClient.Story>> written = ArgumentCaptor.forClass(List.class);
+        verify(llm).writeStoryBullets(any(), written.capture(), any(), any());
+        assertEquals(List.of("s1"), written.getValue().stream().map(LlmClient.Story::id).toList());
+    }
+
+    @Test
+    void storiesThatAllRepeatTheBankSaveNothing() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        Story saved = new Story(UUID.randomUUID(), proj, "Order book resync", new String[]{LONG_QUOTE}, new String[]{"systems"});
+        when(repo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(wording(proj, saved.getId(), "PENDING", "x")));
+        when(storyRepo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(saved));
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(
+                new LlmClient.Story("s1", "Resync on gaps", List.of(LONG_QUOTE), List.of("systems"))), List.of()));
+        List<String> progress = new java.util.ArrayList<>();
+
+        assertTrue(service.generateBank(user, proj, List.of("systems"), progress::add).isEmpty());
+
+        verify(llm, never()).writeStoryBullets(any(), any(), any(), any());
+        verify(llm, never()).generateBullets(any(), any(), any());
+        assertTrue(progress.contains("All stories duplicated existing ones — nothing generated."), progress.toString());
+    }
+
+    @Test
+    void aSecondGenerateOnTheSameProjectFailsFast() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        // The nested call runs while the first is still inside findStories.
+        when(llm.findStories(any(), any(), any())).thenAnswer(inv -> {
+            IllegalStateException e = assertThrows(IllegalStateException.class,
+                    () -> service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp()));
+            assertTrue(e.getMessage().contains("already being generated"));
+            return new LlmClient.StoryResult(List.of(), List.of("backend"));
+        });
+
+        service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+
+        verify(llm, times(1)).findStories(any(), any(), any());
+        // Released afterwards: the next run gets through.
+        service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+        verify(llm, times(2)).findStories(any(), any(), any());
+    }
+
     @Test
     void storyDedupNeverRepeatsTheStoredBank() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();

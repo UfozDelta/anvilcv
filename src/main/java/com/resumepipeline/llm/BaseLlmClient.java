@@ -356,9 +356,9 @@ public abstract class BaseLlmClient implements LlmClient {
                 ─────────────────────────────────────────────────────────────
                 ## TASK — pick the stories
 
-                You are choosing what a resume should say about this %s. Pick %s STORIES from the
-                source material above: distinct pieces of work a hiring manager would want to ask about
-                in an interview — a hard problem solved, a system built for real users, a design
+                You are choosing what a resume should say about this %s. Pick up to %d NEW STORIES from
+                the source material above: distinct pieces of work a hiring manager would want to ask
+                about in an interview — a hard problem solved, a system built for real users, a design
                 decision with a clear tradeoff, a measured result.
 
                 For each story return:
@@ -373,6 +373,8 @@ public abstract class BaseLlmClient implements LlmClient {
                     no story fits should stay untagged — never stretch a story to cover it.
 
                 Rules:
+                  - Up to %d new stories. Never repeat or split work listed as already in the bank.
+                  - %s
                   - Fewer, stronger stories beat more. Two stories about the same work are one story.
                   - Skip routine work every project has (CRUD screens, login, config, setup, a plain
                     test suite or CI) unless the source shows something unusual about it.
@@ -382,9 +384,14 @@ public abstract class BaseLlmClient implements LlmClient {
                 Lens definitions:
 
                 %s
-                """.formatted(experience ? "role" : "project",
-                        experience ? "4 to 10" : "up to 8 (fewer for a small project)",
-                        String.join(", ", req.lenses()), lensDefinitions(req.lenses()));
+                """.formatted(experience ? "role" : "project", req.maxStories(),
+                        String.join(", ", req.lenses()), req.maxStories(),
+                        experience
+                                ? "A role usually spans several distinct pieces of work: aim for 3 or more stories in"
+                                  + " total, the bank's included, only if the source supports them. Fewer or none is valid."
+                                : "Aim for 3 or more stories in total, the bank's included, only if the source supports"
+                                  + " them; a small project may have fewer. Fewer or none is valid.",
+                        lensDefinitions(req.lenses()));
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "stories", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(

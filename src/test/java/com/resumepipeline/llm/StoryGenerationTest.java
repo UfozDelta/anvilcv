@@ -179,6 +179,7 @@ class StoryGenerationTest {
         });
         server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
                 .andExpect(content().string(containsString("Venue failover drill")))
+                .andExpect(content().string(containsString("Pick up to 5 NEW STORIES")))
                 .andRespond(withSuccess(STORIES_REPLY, MediaType.APPLICATION_JSON));
         server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
                 .andExpect(content().string(not(containsString("Venue failover drill"))))
@@ -191,7 +192,7 @@ class StoryGenerationTest {
                 LlmClient.SourceKind.PROJECT, "general", "Terminal", SOURCE, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, List.of(), List.of(), null);
         LlmClient.StoryRequest req = new LlmClient.StoryRequest(src, List.of("systems"), new LlmClient.BankCoverage(
-                List.of(new LlmClient.KnownStory("Venue failover drill", List.of("systems"))), List.of(), List.of()));
+                List.of(new LlmClient.KnownStory("Venue failover drill", List.of("systems"))), List.of(), List.of()), 5);
 
         LlmClient.StoryResult stories = client.findStories(req, ProgressLog.noOp(), new TokenAccumulator());
         client.writeStoryBullets(req, stories.stories(), ProgressLog.noOp(), new TokenAccumulator());
