@@ -57,6 +57,26 @@ class EvalServiceTest {
     }
 
     @Test
+    void labelsCarryMillisAndARandomSuffix() {
+        String a = EvalService.label("gen"), b = EvalService.label("gen");
+        assertTrue(a.matches("gen-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}\\.\\d{3}-[0-9a-f]{4}"), a);
+        assertNotEquals(a, b);
+    }
+
+    @Test
+    void newSetCarriesCreatedAtBeforeAnyRefresh() {
+        assertNotNull(new EvalSet("x", EvalSet.BASELINE, null, EvalSet.DONE).getCreatedAt());
+    }
+
+    @Test
+    void generationWithoutAReferenceSetIs400() {
+        EvalService svc = new EvalService(mock(EvalSetRepository.class), null, null, null, null, null);
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> svc.startGeneration(null, List.of(UUID.randomUUID()), null));
+        assertEquals(400, e.getStatusCode().value());
+    }
+
+    @Test
     void snapshotOfAnEmptyBankIsRejected() {
         EvalService svc = new EvalService(mock(EvalSetRepository.class), mock(ProjectRepository.class),
                 mock(BulletRepository.class), null, null, null);
