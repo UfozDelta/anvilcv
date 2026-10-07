@@ -584,6 +584,7 @@ public class ApplicationService {
     /** Override selection and re-render. Does NOT re-call the LLM. */
     public Application rerender(UUID userId, UUID applicationId, List<UUID> selectedBulletIds, ProgressLog progress) {
         Application a = get(userId, applicationId);
+        long seenStaleSeq = a.getPdfStaleSeq();
         Map<UUID, Bullet> bulletById = bulletRepo.findByIdsAndProjectUserId(
                 selectedBulletIds.toArray(new UUID[0]), userId).stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
@@ -643,7 +644,7 @@ public class ApplicationService {
         }
         a.setPipelineDurationMs(tRerender.stop());
         Application saved = repo.save(a);
-        syncPdfStale(saved, r);
+        syncPdfStale(saved, r, seenStaleSeq);
         log.info("APP_RERENDER app={} ms={}", shortId(saved.getId()), a.getPipelineDurationMs());
         return saved;
     }
@@ -734,6 +735,7 @@ public class ApplicationService {
      */
     public Application refitSelection(UUID userId, UUID applicationId, UUID onlyProjectId, ProgressLog progress) {
         Application a = get(userId, applicationId);
+        long seenStaleSeq = a.getPdfStaleSeq();
         List<Bullet> bank = bulletRepo.findSelectableByProjectUserId(userId);
         // Locked and on-page ids resolve against the whole bank, so a pin is never dropped; only
         // what the selector may pick on its own is narrowed.
@@ -847,7 +849,7 @@ public class ApplicationService {
             progress.emit("PDF compile failed: " + r.error());
         }
         Application saved = repo.save(a);
-        syncPdfStale(saved, r);
+        syncPdfStale(saved, r, seenStaleSeq);
         return saved;
     }
 
@@ -855,12 +857,19 @@ public class ApplicationService {
      * After a rerender or refit: a fresh PDF is current; a failed compile left the old PDF in
      * place under a new selection and LaTeX, so that PDF is out of date. Written by its own
      * statement because save() never writes pdf_stale (see Application#pdfStale).
+     *
+     * <p>{@code seenStaleSeq} is pdf_stale_seq as loaded before the compile. An edit marked
+     * during the compile bumps it, so the clear misses and the page stays flagged: the new PDF
+     * may predate that edit.
      */
-    private void syncPdfStale(Application a, PdfCompiler.Result r) {
-        boolean stale = !r.success() && a.getPdfBlob() != null;
+    private void syncPdfStale(Application a, PdfCompiler.Result r, long seenStaleSeq) {
         try {
-            repo.setPdfStale(a.getId(), stale);
-            a.setPdfStale(stale);
+            if (r.success()) {
+                a.setPdfStale(repo.clearPdfStale(a.getId(), seenStaleSeq) == 0);
+            } else {
+                repo.markPdfStaleAfterFailedCompile(a.getId());
+                a.setPdfStale(a.getPdfBlob() != null);
+            }
         } catch (RuntimeException e) {
             log.warn("Could not update pdf_stale for app {}: {}", shortId(a.getId()), e.getMessage());
         }

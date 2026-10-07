@@ -133,6 +133,10 @@ public class Application {
     @Column(name = "pdf_stale", nullable = false, insertable = false, updatable = false)
     private boolean pdfStale = false;
 
+    /** Bumped by every pdf_stale mark; same write rules as {@link #pdfStale}. */
+    @Column(name = "pdf_stale_seq", nullable = false, insertable = false, updatable = false)
+    private long pdfStaleSeq;
+
     /** Post-create recruiter pass still running. Not persisted - see ApplicationService.scoring. */
     @Transient
     private boolean recruiterPending;
@@ -243,6 +247,7 @@ public class Application {
     public void setRecruiterStale(boolean recruiterStale) { this.recruiterStale = recruiterStale; }
     public boolean isPdfStale() { return pdfStale; }
     public void setPdfStale(boolean pdfStale) { this.pdfStale = pdfStale; }
+    public long getPdfStaleSeq() { return pdfStaleSeq; }
     public boolean isRecruiterPending() { return recruiterPending; }
     public void setRecruiterPending(boolean recruiterPending) { this.recruiterPending = recruiterPending; }
     public Integer getPageCount() { return pageCount; }

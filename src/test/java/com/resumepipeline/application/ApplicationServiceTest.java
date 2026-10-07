@@ -527,6 +527,7 @@ class ApplicationServiceTest {
             UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
             Application a = new Application();
             a.setPdfStale(true);
+            ReflectionTestUtils.setField(a, "pdfStaleSeq", 7L);
             Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
             when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
             when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
@@ -534,11 +535,31 @@ class ApplicationServiceTest {
             when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
             when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(repo.clearPdfStale(any(), eq(7L))).thenReturn(1);
 
             Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
 
-            verify(repo).setPdfStale(any(), eq(false));
+            verify(repo).clearPdfStale(any(), eq(7L));   // the seq read before the compile
             assertFalse(out.isPdfStale());
+        }
+
+        @Test
+        void anEditDuringTheRebuildKeepsThePdfStale() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Application a = new Application();
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(TestFixtures.project(proj, Project.Kind.PROJECT, "P")));
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            // A mark bumped pdf_stale_seq mid-compile, so the guarded clear matches no row.
+            when(repo.clearPdfStale(any(), eq(0L))).thenReturn(0);
+
+            Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
+
+            assertTrue(out.isPdfStale());
         }
 
         @Test
@@ -556,7 +577,8 @@ class ApplicationServiceTest {
 
             Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
 
-            verify(repo).setPdfStale(any(), eq(true));
+            verify(repo).markPdfStaleAfterFailedCompile(any());
+            verify(repo, never()).clearPdfStale(any(), anyLong());
             assertTrue(out.isPdfStale());
         }
     }
