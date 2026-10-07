@@ -1746,7 +1746,7 @@ public abstract class BaseLlmClient implements LlmClient {
                     [how it works or the key decision], [result the source states].
                   ✓ [Verb] [system] so [who] could [do what], [the failure or cost it removed].
 
-                  ✗ Maintained zero broken main builds across 87 commits.
+                  ✗ Maintained zero broken main builds across 120 commits.
                     (activity counts, not a result)
                   ✗ Built a backend test suite of 190 unit tests. This enabled rapid development.
                     (artifact count, plus a filler second sentence)

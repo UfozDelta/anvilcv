@@ -61,9 +61,9 @@ public final class BulletTextRules {
     }
 
     /**
-     * Counts of the author's own artifacts: activity, not results. A recruiter reads "87 commits"
-     * or "192 unit tests" as padding. Deliberately narrow: domain counts that describe the product
-     * ("16 indicator classes", "4 venues", "41 REST endpoints") are scope, not vanity, and stay.
+     * Counts of the author's own artifacts: activity, not results. A recruiter reads "120 commits"
+     * or "300 unit tests" as padding. Deliberately narrow: domain counts that describe the product
+     * ("12 report types", "3 regions", "30 REST endpoints") are scope, not vanity, and stay.
      */
     private static final Pattern VANITY = Pattern.compile(
             "\\b\\d[\\d,.]*\\+?\\s*(?:\\*\\*)?\\s*(?:in-repo |automated )?(?:commits?|s?loc|lines? of \\w+|source files|files"
@@ -72,7 +72,7 @@ public final class BulletTextRules {
                     + "|\\bzero broken (?:main )?builds\\b",
             Pattern.CASE_INSENSITIVE);
 
-    /** The vanity phrase in a bullet (e.g. "87 commits"), or null if it has none. */
+    /** The vanity phrase in a bullet (e.g. "120 commits"), or null if it has none. */
     public static String vanityCount(String text) {
         if (text == null) return null;
         Matcher m = VANITY.matcher(text.replace("**", ""));

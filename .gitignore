@@ -64,3 +64,4 @@ context_work/
 
 logging-plan.md
 .neon
+src/test/resources/bullets/local/
