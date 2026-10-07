@@ -7,7 +7,7 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
-/** One bullet bank under evaluation: the frozen baseline or a dry-run generation. See V37. */
+/** One bullet bank under evaluation: the frozen baseline or a dry-run generation. See V38. */
 @Entity
 @Table(name = "eval_set")
 public class EvalSet {
