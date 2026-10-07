@@ -205,7 +205,7 @@ public final class BulletSelector {
             // with. Refuse to open the entry at all — better four full entries than six stubs.
             if (count == 0 && perProject.size() >= MAX_ENTRIES) continue;
             if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
-            if (sameStory(b, selected) || verbCapped(b, selected)) continue;
+            if (sameStory(b, selected) || verbClash(b, selected)) continue;
             int bLines = BulletTextRules.estimatedLines(b.getText());
             // A later, shorter bullet may still fit even if this one doesn't — skip, don't stop.
             if (lines + bLines > MAX_TOTAL_LINES) continue;
@@ -290,7 +290,7 @@ public final class BulletSelector {
                 Bullet b = bulletById.get(bid);
                 if (b == null || !b.getProjectId().equals(pid)) continue;
                 if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
-                if (sameStory(b, selected) || verbCapped(b, selected)) continue;
+                if (sameStory(b, selected) || verbClash(b, selected)) continue;
                 int bLines = BulletTextRules.estimatedLines(b.getText());
                 if (lines + bLines > MAX_TOTAL_LINES) continue;
                 selected.add(b); selectedIds.add(bid); selectedTexts.add(b.getText()); have++;
@@ -305,7 +305,7 @@ public final class BulletSelector {
                 while (have < MAX_PER_PROJECT && selected.size() < MAX_TOTAL && !bank.isEmpty()) {
                     Bullet b = bank.remove(bestByGainIndex(bank, covered, keywordsLower, tagScore));
                     if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts)) continue;
-                    if (sameStory(b, selected) || verbCapped(b, selected)) continue;
+                    if (sameStory(b, selected) || verbClash(b, selected)) continue;
                     int bLines = BulletTextRules.estimatedLines(b.getText());
                     if (lines + bLines > MAX_TOTAL_LINES) continue;
                     selected.add(b); selectedIds.add(b.getId()); selectedTexts.add(b.getText()); have++;
@@ -442,16 +442,14 @@ public final class BulletSelector {
     }
 
     /**
-     * Most bullets on one resume that may open with the same verb. Four "Engineered" bullets read
-     * as a model's habit, not a person. Applied in passes 1 and 3 only — the kind floor (pass 2)
-     * and the per-entry floor (pass 4) outrank it, so it can reorder a page but never empty an entry.
+     * Two bullets in one entry that open with the same verb read as a model's habit, not a person.
+     * Repeats across entries are fine. Applied in passes 1 and 3 only — the kind floor (pass 2) and
+     * the per-entry floor (pass 4) outrank it, so it can swap in another wording but never empty an entry.
      */
-    static final int MAX_SAME_VERB = 3;
-
-    static boolean verbCapped(Bullet b, List<Bullet> selected) {
+    static boolean verbClash(Bullet b, List<Bullet> selected) {
         String verb = BulletTextRules.openingVerb(b.getText());
-        return !verb.isEmpty()
-                && selected.stream().filter(s -> verb.equals(BulletTextRules.openingVerb(s.getText()))).count() >= MAX_SAME_VERB;
+        return !verb.isEmpty() && selected.stream().anyMatch(s ->
+                s.getProjectId().equals(b.getProjectId()) && verb.equals(BulletTextRules.openingVerb(s.getText())));
     }
 
     /** Two wordings of one story (see {@code Bullet.storyId}) are the same claim. Null = its own story. */

@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Story grouping and the verb cap in selection, plus the story-aware variant collapse. */
+/** Story grouping and the per-entry verb clash in selection, plus the story-aware variant collapse. */
 class BulletSelectorStoryTest {
 
     private static Bullet bullet(UUID project, String text, UUID story) {
@@ -60,30 +60,46 @@ class BulletSelectorStoryTest {
     }
 
     @Test
-    void verbCapSkipsAFourthOpenerWhenAnotherBulletCanFill() {
+    void sameVerbNeverRepeatsWithinAnEntryButMayAcrossEntries() {
         UUID pid1 = UUID.randomUUID(), pid2 = UUID.randomUUID();
         Project p1 = TestFixtures.project(pid1, Project.Kind.PROJECT, "A");
         Project p2 = TestFixtures.project(pid2, Project.Kind.PROJECT, "B");
         List<Bullet> bank = List.of(
                 bullet(pid1, "Engineered a quote cache for the pricing API.", null),
                 bullet(pid1, "Engineered retry handling for broker webhooks.", null),
-                bullet(pid1, "Engineered tenant-scoped API keys.", null),
+                bullet(pid1, "Built tenant-scoped API keys.", null),
+                bullet(pid1, "Wrote a replay harness from recorded market ticks.", null),
                 bullet(pid2, "Engineered a CSV importer for brokerage statements.", null),
                 bullet(pid2, "Built a tax-lot calculator for realized gains.", null),
-                bullet(pid2, "Shipped a dividend calendar with email alerts.", null),
-                bullet(pid2, "Wrote a reconciliation job for broker balances.", null));
+                bullet(pid2, "Shipped a dividend calendar with email alerts.", null));
         List<Bullet> out = BulletSelector.select(ranked(bank),
                 bank.stream().collect(Collectors.toMap(Bullet::getId, b -> b)),
                 Map.of(pid1, p1, pid2, p2), bank, Set.of());
 
-        long engineered = out.stream().filter(b -> b.getText().startsWith("Engineered")).count();
-        assertEquals(BulletSelector.MAX_SAME_VERB, engineered);
-        assertEquals(6, out.size());
-        assertFalse(out.contains(bank.get(3)));
+        assertFalse(out.contains(bank.get(1)), "second Engineered in entry A is skipped");
+        assertTrue(out.contains(bank.get(4)), "Engineered may open a bullet in another entry");
+        for (UUID pid : List.of(pid1, pid2)) {
+            List<String> verbs = out.stream().filter(b -> b.getProjectId().equals(pid))
+                    .map(b -> b.getText().split(" ")[0]).toList();
+            assertEquals(verbs.size(), Set.copyOf(verbs).size(), "openers unique within entry");
+        }
     }
 
     @Test
-    void verbCapNeverStarvesAnEntryBelowTheFloor() {
+    void verbClashSwapsInAnotherWordingOfTheSameStory() {
+        UUID pid = UUID.randomUUID();
+        Project p = TestFixtures.project(pid, Project.Kind.PROJECT, "P");
+        UUID story = UUID.randomUUID();
+        Bullet c = bullet(pid, "Built a replay harness from recorded market ticks.", null);
+        Bullet s1 = bullet(pid, "Built an order matcher that pairs fills across venues.", story);
+        Bullet s2 = bullet(pid, "Designed venue-agnostic fill pairing with exact price keys.", story);
+        Bullet d = bullet(pid, "Shipped a browser chart terminal for live order books.", null);
+
+        assertEquals(List.of(c, s2, d), select(p, List.of(c, s1, s2, d)));
+    }
+
+    @Test
+    void verbClashNeverStarvesAnEntryBelowTheFloor() {
         UUID pid = UUID.randomUUID();
         Project p = TestFixtures.project(pid, Project.Kind.PROJECT, "P");
         UUID other = UUID.randomUUID();
@@ -97,7 +113,7 @@ class BulletSelectorStoryTest {
                 bank.stream().collect(Collectors.toMap(Bullet::getId, b -> b)),
                 Map.of(pid, p, other, q), bank, Set.of());
 
-        // Every bullet opens with "Built": the cap reorders, but the floor still fills both entries.
+        // Every bullet opens with "Built": the clash rule reorders, but the floor still fills both entries.
         assertEquals(6, out.size());
     }
 
