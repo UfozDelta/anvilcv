@@ -7,7 +7,10 @@ import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.LlmClient;
-import com.resumepipeline.llm.LlmUsageService;
+import com.resumepipeline.llm.LlmParseException;
+import com.resumepipeline.llm.LlmUsageLog;
+import com.resumepipeline.llm.LlmUsageLogRepository;
+import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectRepository;
@@ -32,7 +35,7 @@ class DryRunGeneratorTest {
     @Mock BulletRepository realBullets;   // stands for the Spring bean: must never be reached
     @Mock ProjectService projectService;
     @Mock LlmClient llm;
-    @Mock LlmUsageService usage;
+    @Mock LlmUsageLogRepository usage;
     @Mock GenerationConfigService configService;
     @Mock ProjectRepository projectRepo;
     @Mock ApplicationRenderer renderer;
@@ -46,7 +49,10 @@ class DryRunGeneratorTest {
                 new Project(owner, Project.Kind.PROJECT, "P", "desc", null, "Eng", "Acme", "NYC", "2024"));
         when(configService.get(any())).thenReturn(new GenerationConfig());
         LlmClient.Story story = new LlmClient.Story("s1", "Pricing cache", List.of("pricing cache"), List.of("backend"));
-        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story), List.of()));
+        when(llm.findStories(any(), any(), any())).thenAnswer(inv -> {
+            inv.getArgument(2, TokenAccumulator.class).add("m", 100, 10);
+            return new LlmClient.StoryResult(List.of(story), List.of());
+        });
         when(llm.writeStoryBullets(any(), any(), any(), any())).thenReturn(new LlmClient.BulletGenerationResult(List.of(
                 new LlmClient.GeneratedBullet("Built a Redis cache for pricing.", List.of("backend"), "s1", "backend"),
                 new LlmClient.GeneratedBullet("Designed an ETL job for billing data.", List.of("data"), "s1", "backend"))));
@@ -64,6 +70,25 @@ class DryRunGeneratorTest {
         ArgumentCaptor<LlmClient.StoryRequest> req = ArgumentCaptor.forClass(LlmClient.StoryRequest.class);
         verify(llm).findStories(req.capture(), any(), any());
         assertTrue(req.getValue().source().existingBullets().isEmpty());
+
+        // Spend is tagged apart from real users' bullet_generation.
+        ArgumentCaptor<LlmUsageLog> logged = ArgumentCaptor.forClass(LlmUsageLog.class);
+        verify(usage).save(logged.capture());
+        assertEquals("eval_generation", logged.getValue().getSource());
+    }
+
+    @Test
+    void storyFailureFailsTheEvalInsteadOfFallingBack() {
+        UUID owner = UUID.randomUUID(), projectId = UUID.randomUUID();
+        when(projectService.get(owner, projectId)).thenReturn(
+                new Project(owner, Project.Kind.PROJECT, "P", "desc", null, "Eng", "Acme", "NYC", "2024"));
+        when(llm.findStories(any(), any(), any())).thenThrow(new LlmParseException("bad json", null));
+
+        DryRunGenerator gen = new DryRunGenerator(projectService, llm, usage, configService, projectRepo,
+                renderer, compiler, applicationRepo);
+        assertThrows(LlmParseException.class,
+                () -> gen.generate(owner, projectId, List.of("backend"), ProgressLog.noOp()));
+        verify(llm, never()).generateBullets(any(), any(), any());
     }
 
     @Test

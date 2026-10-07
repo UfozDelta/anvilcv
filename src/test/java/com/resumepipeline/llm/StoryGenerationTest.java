@@ -153,6 +153,33 @@ class StoryGenerationTest {
     }
 
     @Test
+    void unreadableStoryReplyIsRetriedOnce() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        OpenCodeLlmClient client = new OpenCodeLlmClient(builder, "g", "m", "c", new GenerationConfigService(null) {
+            @Override public GenerationConfig get(UUID userId) { return new GenerationConfig(); }
+        });
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"stories\\":[{\\"id\\":"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andRespond(withSuccess(STORIES_REPLY, MediaType.APPLICATION_JSON));
+
+        LlmClient.GenerateBulletsRequest src = new LlmClient.GenerateBulletsRequest(UUID.randomUUID(),
+                LlmClient.SourceKind.PROJECT, "general", "Terminal", SOURCE, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, List.of(), List.of(), null);
+        TokenAccumulator tokens = new TokenAccumulator();
+        LlmClient.StoryResult stories = client.findStories(
+                new LlmClient.StoryRequest(src, List.of("systems")), ProgressLog.noOp(), tokens);
+
+        assertEquals(1, stories.stories().size());
+        assertEquals(20, tokens.getPromptTokens(), "both calls are billed");
+        server.verify();
+    }
+
+    @Test
     void writingRulesCarryNoOtherUsersProjectData() {
         String rules = BaseLlmClient.writingRules(new GenerationConfig());
         for (String leak : List.of("MLS", "64K", "180ms", "credit ledger", "React-Leaflet", "2dsphere", "AES-256-GCM")) {
