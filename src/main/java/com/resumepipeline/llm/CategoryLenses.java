@@ -77,9 +77,6 @@ public final class CategoryLenses {
 
     public static final String GENERALIST = "generalist";
 
-    /** Bias strength in the application pre-filter: a bullet in the top lens scores up to 30% higher. */
-    public static final double BIAS = 0.3;
-
     /** Keeps known slugs only, de-duplicated, at most 2, best first. Null-safe. */
     public static List<String> validate(List<String> raw) {
         if (raw == null) return List.of();
