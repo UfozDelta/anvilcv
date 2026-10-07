@@ -120,6 +120,22 @@ class ApplicationServiceTest {
             assertThrows(IllegalStateException.class,
                     () -> service.create(user, "jd text", null, "backend", false, ProgressLog.noOp()));
         }
+
+        @Test
+        void unreviewedVanityBulletsNeverReachRanking() {
+            UUID user = UUID.randomUUID();
+            Bullet vanity = TestFixtures.bullet(UUID.randomUUID(), UUID.randomUUID(), new String[0]);
+            vanity.setText("Shipped the app across 87 commits with zero broken builds.");
+            when(llm.cleanJd(any(), any(), any()))
+                    .thenReturn(new LlmClient.JdCleanResult("clean", "Acme", "Eng", List.of("java")));
+            when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(vanity));
+            List<String> log = new java.util.ArrayList<>();
+
+            assertThrows(IllegalStateException.class,
+                    () -> service.create(user, "jd text", null, "backend", false, log::add));
+            assertTrue(log.stream().anyMatch(l -> l.startsWith("Skipped 1 unreviewed bullet ")), log.toString());
+            verify(llm, never()).rankBullets(any(), any(), any());
+        }
     }
 
     @Nested
@@ -582,6 +598,26 @@ class ApplicationServiceTest {
         }
 
         @Test
+        void refitNeverAutoPicksAnUnreviewedVanityBulletButKeepsALockedOne() {
+            List<Bullet> bank = bank(expA, projB, projC);
+            Bullet vanity = bank.get(9);     // projC, PENDING
+            vanity.setText("Shipped the dashboard across 87 commits.");
+            Bullet lockedVanity = bank.get(5); // projB, PENDING, but the user pinned it
+            lockedVanity.setText("Added 40 unit tests to the parser.");
+            Bullet approvedVanity = bank.get(10); // projC, APPROVED: the user chose it
+            approvedVanity.setText("Wrote 1,200 lines of Python for the importer.");
+            approvedVanity.setStatus("APPROVED");
+            stub(bank, List.of(bank.get(0), lockedVanity, bank.get(8)), List.of(lockedVanity));
+
+            Application out = service.refitSelection(user, appId, null, ProgressLog.noOp());
+
+            List<UUID> ids = java.util.Arrays.asList(out.getSelectedBulletIds());
+            assertFalse(ids.contains(vanity.getId()), "unreviewed vanity bullet must not be auto-picked");
+            assertTrue(ids.contains(lockedVanity.getId()), "a lock outranks the vanity filter");
+            assertTrue(ids.contains(approvedVanity.getId()), "approved bullets stay eligible");
+        }
+
+        @Test
         void nullScopeStillRefitsEveryEntry() {
             List<Bullet> bank = bank(expA, projB, projC);
             // One bullet per entry, so a whole-page refit has room to grow all three.
@@ -593,6 +629,49 @@ class ApplicationServiceTest {
             assertTrue(out.getSelectedBulletIds().length > onPage.size(),
                     "an unscoped refit fills the page rather than preserving the prior entries");
             assertTrue(out.isRecruiterStale());
+        }
+    }
+
+    @Nested
+    class SelectionWarnings {
+
+        private Bullet b(UUID project, String text) {
+            Bullet x = TestFixtures.bullet(UUID.randomUUID(), project, new String[0]);
+            x.setText(text);
+            return x;
+        }
+
+        @Test
+        void flagsOnlyTheLaterBulletOfANearDuplicatePair() {
+            UUID p = UUID.randomUUID();
+            Bullet first = b(p, "Built a Spring Boot API serving resume PDFs to recruiters");
+            Bullet dupe = b(p, "Built a Spring Boot API serving resume PDFs to hiring recruiters");
+            Bullet other = b(p, "Cut Postgres query latency with covering indexes");
+
+            List<ApplicationService.SelectionWarning> w = ApplicationService.repeats(List.of(first, other, dupe));
+
+            assertEquals(List.of(new ApplicationService.SelectionWarning(dupe.getId(), first.getId(), "near-duplicate")), w);
+        }
+
+        @Test
+        void flagsTwoWordingsOfOneStoryEvenWhenTheProseDiffers() {
+            UUID p = UUID.randomUUID();
+            UUID story = UUID.randomUUID();
+            Bullet a = b(p, "Designed the ingestion pipeline for market data");
+            Bullet c = b(p, "Cut backtest setup time by replacing manual CSV loading");
+            a.setStoryId(story);
+            c.setStoryId(story);
+
+            assertEquals("same story", ApplicationService.repeats(List.of(a, c)).get(0).reason());
+        }
+
+        @Test
+        void ignoresIdsTheUserDoesNotOwn() {
+            UUID user = UUID.randomUUID();
+            UUID foreign = UUID.randomUUID();
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of());
+
+            assertTrue(service.selectionWarnings(user, List.of(foreign)).isEmpty());
         }
     }
 

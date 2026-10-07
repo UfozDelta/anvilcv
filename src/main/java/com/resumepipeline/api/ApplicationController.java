@@ -119,6 +119,13 @@ public class ApplicationController {
                 req.selectedBulletIds(), ProgressLog.noOp()));
     }
 
+    /** Repeat warnings for a proposed page, in page order. Read-only: nothing is saved. */
+    @PostMapping("/selection-check")
+    public List<ApplicationService.SelectionWarning> selectionCheck(Authentication auth,
+                                                                    @RequestBody RerenderRequest req) {
+        return service.selectionWarnings(AuthUtils.userId(auth), req.selectedBulletIds());
+    }
+
     @PostMapping("/{id}/rerender/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public SubmitResponse rerenderSubmit(Authentication auth, @PathVariable UUID id,

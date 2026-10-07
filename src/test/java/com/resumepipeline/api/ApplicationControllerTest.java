@@ -56,6 +56,22 @@ class ApplicationControllerTest {
     }
 
     @Test
+    void selectionCheckReturnsTheServiceWarningsForTheCaller() throws Exception {
+        UUID userId = UUID.randomUUID(), a = UUID.randomUUID(), b = UUID.randomUUID();
+        when(service.selectionWarnings(userId, List.of(a, b)))
+                .thenReturn(List.of(new ApplicationService.SelectionWarning(b, a, "near-duplicate")));
+
+        mvc.perform(post("/api/applications/selection-check")
+                        .with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"selectedBulletIds\":[\"" + a + "\",\"" + b + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].bulletId").value(b.toString()))
+                .andExpect(jsonPath("$[0].conflictId").value(a.toString()))
+                .andExpect(jsonPath("$[0].reason").value("near-duplicate"));
+    }
+
+    @Test
     void submitWithoutRoleEmphasisReturns202() throws Exception {
         UUID userId = UUID.randomUUID();
 

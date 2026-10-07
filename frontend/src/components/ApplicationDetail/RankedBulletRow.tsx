@@ -3,7 +3,7 @@ import { estimatedLines, fitHint, fitOf, needsRefit, FIT_LABEL } from '../../lib
 import { RichText } from '../RichText';
 import { EditBullet } from '../ProjectDetail/EditBullet';
 
-export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, locked, isNew, unranked, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet, onToggleLock }: {
+export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editing, cfg, locked, isNew, unranked, repeatOf, onMoveUp, onMoveDown, onToggleSelect, onToggleWhy, onEdit, onCancelEdit, onSaveBullet, onToggleLock }: {
   r: RankedBullet;
   bullet: Bullet | undefined;
   isSelected: boolean;
@@ -15,6 +15,11 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
   isNew?: boolean;
   /** Not in the LLM ranking — a manual pick from the bank, so its rank number means nothing. */
   unranked?: boolean;
+  /** Repeats a bullet earlier on the page. A warning only: the user may keep both. */
+  repeatOf?: { reason: string; text: string };
+  /** Present only when the bullet can move within its entry's included block. */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onToggleSelect: () => void;
   onToggleWhy: () => void;
   onEdit: () => void;
@@ -69,6 +74,11 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
           {bullet && needsRefit(fit) && (
             <span className="kw kw--miss" style={{ color: 'var(--rust)' }} title={fitHint(bullet.text, cfg)}>{FIT_LABEL[fit]}</span>
           )}
+          {repeatOf && (
+            <span className="kw kw--miss" style={{ color: 'var(--rust)' }} title={`Repeats: ${repeatOf.text}`}>
+              {repeatOf.reason === 'same story' ? 'SAME STORY' : 'NEAR-DUPLICATE'}
+            </span>
+          )}
           {bullet?.tags.map(t => <span key={t} className="kw">{t}</span>)}
 
           {bullet && (
@@ -78,6 +88,8 @@ export function RankedBulletRow({ r, bullet, isSelected, whyOpen, verdict, editi
                   Why {whyOpen ? '↑' : '↓'}
                 </button>
               )}
+              {onMoveUp && <button className="minibtn" title="Move up in this entry" onClick={onMoveUp}>↑</button>}
+              {onMoveDown && <button className="minibtn" title="Move down in this entry" onClick={onMoveDown}>↓</button>}
               <button className={`minibtn ${locked ? 'is-on' : ''}`} onClick={onToggleLock}>
                 {locked ? 'Unlock' : 'Lock'}
               </button>

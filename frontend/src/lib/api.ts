@@ -183,6 +183,13 @@ export const CATEGORIES: { slug: string; label: string; blurb: string }[] = [
   { slug: 'comms',    label: 'Real-time Comms',   blurb: 'WebRTC, telephony, SMS, webhooks' },
 ];
 
+/** A bullet that repeats `conflictId`, earlier on the same page (POST /api/applications/selection-check). */
+export interface SelectionWarning {
+  bulletId: string;
+  conflictId: string;
+  reason: 'same story' | 'near-duplicate';
+}
+
 export interface RankedBullet {
   bulletId: string;
   rank: number;

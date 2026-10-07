@@ -158,7 +158,7 @@ public class ApplicationService {
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
-        List<Bullet> allBullets = bulletRepo.findSelectableByProjectUserId(userId);
+        List<Bullet> allBullets = autoSelectable(bulletRepo.findSelectableByProjectUserId(userId), progress);
         if (allBullets.isEmpty()) {
             throw new IllegalStateException("No bullets in the bank — generate or add some first.");
         }
@@ -652,6 +652,39 @@ public class ApplicationService {
         return saved;
     }
 
+    /** A bullet on the page that restates {@code conflictId}, which sits earlier on it. */
+    public record SelectionWarning(UUID bulletId, UUID conflictId, String reason) {}
+
+    /**
+     * Hand-picked bullets skip the selector, so this runs its two repeat checks on a proposed
+     * page: same story, or {@link BulletTextRules#isNearDuplicate}. Warns, never blocks. Ids the
+     * user doesn't own are ignored.
+     */
+    public List<SelectionWarning> selectionWarnings(UUID userId, List<UUID> selectedBulletIds) {
+        List<UUID> ids = selectedBulletIds == null ? List.of() : selectedBulletIds;
+        Map<UUID, Bullet> byId = bulletRepo.findByIdsAndProjectUserId(ids.toArray(new UUID[0]), userId).stream()
+                .collect(Collectors.toMap(Bullet::getId, b -> b));
+        return repeats(ids.stream().map(byId::get).filter(Objects::nonNull).toList());
+    }
+
+    /** Flags each bullet against the ones before it, so of a pair only the later one warns. */
+    static List<SelectionWarning> repeats(List<Bullet> ordered) {
+        List<SelectionWarning> out = new ArrayList<>();
+        for (int i = 1; i < ordered.size(); i++) {
+            Bullet b = ordered.get(i);
+            for (Bullet earlier : ordered.subList(0, i)) {
+                String reason = BulletSelector.sameStory(b, List.of(earlier)) ? "same story"
+                        : BulletTextRules.isNearDuplicate(b.getText(), List.of(earlier.getText())) ? "near-duplicate"
+                        : null;
+                if (reason != null) {
+                    out.add(new SelectionWarning(b.getId(), earlier.getId(), reason));
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     /**
      * Replace this application's locked-bullet set. Silently drops any id that doesn't resolve
      * to a bullet the user actually owns (deleted since, or never theirs) — the caller can't
@@ -705,7 +738,12 @@ public class ApplicationService {
      */
     public Application refitSelection(UUID userId, UUID applicationId, UUID onlyProjectId, ProgressLog progress) {
         Application a = get(userId, applicationId);
-        List<Bullet> allBullets = bulletRepo.findSelectableByProjectUserId(userId);
+        List<Bullet> bank = bulletRepo.findSelectableByProjectUserId(userId);
+        // Locked and on-page ids resolve against the whole bank, so a pin is never dropped; only
+        // what the selector may pick on its own is narrowed.
+        Map<UUID, Bullet> bankById = bank.stream()
+                .collect(Collectors.toMap(Bullet::getId, b -> b));
+        List<Bullet> allBullets = autoSelectable(bank, progress);
         Map<UUID, Bullet> bulletById = allBullets.stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
         Map<UUID, Project> projectById = projectRepo.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
@@ -726,11 +764,11 @@ public class ApplicationService {
         }
 
         List<Bullet> userLocked = Arrays.stream(a.getLockedBulletIds())
-                .map(bulletById::get).filter(Objects::nonNull).toList();
+                .map(bankById::get).filter(Objects::nonNull).toList();
         Set<UUID> lockedIds = userLocked.stream().map(Bullet::getId).collect(Collectors.toSet());
 
         List<Bullet> onPage = Arrays.stream(a.getSelectedBulletIds())
-                .map(bulletById::get).filter(Objects::nonNull).toList();
+                .map(bankById::get).filter(Objects::nonNull).toList();
 
         final List<Bullet> locked;
         final Set<UUID> excluded;
@@ -974,6 +1012,23 @@ public class ApplicationService {
                 .sorted(Comparator.comparingDouble(lensedScore).reversed())
                 .limit(25)
                 .toList();
+    }
+
+    /**
+     * Drops unreviewed bullets that pad with an activity count ({@link BulletTextRules#vanityCount}:
+     * "120 commits", "40 unit tests"). The bank still holds PENDING bullets generated before the
+     * vanity filter existed. APPROVED ones stay: the user chose them. Hand-picks and locks bypass this.
+     */
+    static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
+        List<Bullet> kept = bank.stream()
+                .filter(b -> "APPROVED".equals(b.getStatus()) || BulletTextRules.vanityCount(b.getText()) == null)
+                .toList();
+        int dropped = bank.size() - kept.size();
+        if (dropped > 0) {
+            progress.emit("Skipped " + dropped + " unreviewed bullet" + (dropped == 1 ? "" : "s")
+                    + " with activity counts (commits, tests, LOC) - approve one to make it eligible.");
+        }
+        return kept;
     }
 
     static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
