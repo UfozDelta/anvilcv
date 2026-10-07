@@ -45,9 +45,11 @@ class DryRunGeneratorTest {
         when(projectService.get(owner, projectId)).thenReturn(
                 new Project(owner, Project.Kind.PROJECT, "P", "desc", null, "Eng", "Acme", "NYC", "2024"));
         when(configService.get(any())).thenReturn(new GenerationConfig());
-        when(llm.generateBullets(any(), any(), any())).thenReturn(new LlmClient.BulletGenerationResult(List.of(
-                new LlmClient.GeneratedBullet("Built a Redis cache for pricing.", List.of("backend")),
-                new LlmClient.GeneratedBullet("Designed an ETL job for billing data.", List.of("data")))));
+        LlmClient.Story story = new LlmClient.Story("s1", "Pricing cache", List.of("pricing cache"), List.of("backend"));
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story), List.of()));
+        when(llm.writeStoryBullets(any(), any(), any(), any())).thenReturn(new LlmClient.BulletGenerationResult(List.of(
+                new LlmClient.GeneratedBullet("Built a Redis cache for pricing.", List.of("backend"), "s1", "backend"),
+                new LlmClient.GeneratedBullet("Designed an ETL job for billing data.", List.of("data"), "s1", "backend"))));
 
         DryRunGenerator gen = new DryRunGenerator(projectService, llm, usage, configService, projectRepo,
                 renderer, compiler, applicationRepo);
@@ -59,10 +61,9 @@ class DryRunGeneratorTest {
         verifyNoInteractions(realBullets, compiler, applicationRepo);
 
         // From-scratch run: the generator is not shown any existing bank to avoid.
-        ArgumentCaptor<LlmClient.GenerateBulletsRequest> req =
-                ArgumentCaptor.forClass(LlmClient.GenerateBulletsRequest.class);
-        verify(llm).generateBullets(req.capture(), any(), any());
-        assertTrue(req.getValue().existingBullets().isEmpty());
+        ArgumentCaptor<LlmClient.StoryRequest> req = ArgumentCaptor.forClass(LlmClient.StoryRequest.class);
+        verify(llm).findStories(req.capture(), any(), any());
+        assertTrue(req.getValue().source().existingBullets().isEmpty());
     }
 
     @Test
