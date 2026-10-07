@@ -13,8 +13,8 @@ import java.util.stream.Collectors;
 
 /**
  * Deterministic quality metrics for a bullet set. Pure: no Spring, no DB, no LLM. Every rule
- * that already exists for generation is reused from {@link BulletTextRules}; only the vanity
- * and sentence checks are new, because nothing in the pipeline measured them before.
+ * is the one generation uses, from {@link BulletTextRules}, except vanity, which flags a
+ * superset of the generator's check (see {@link #vanity}).
  *
  * <p>All headline numbers are rates, never raw counts: a fresh one-shot run and a bank
  * accumulated over weeks differ in size for reasons that say nothing about prompt quality.
@@ -26,14 +26,12 @@ public final class EvalMetrics {
     /**
      * Counts of work volume that impress nobody: commits, lines of code, files, classes...
      * One optional word between number and noun, so "14 Java classes" and "6,062 lines" match.
+     * The eval's own extra pattern; see {@link #vanity}.
      */
     static final Pattern VANITY = Pattern.compile(
             "\\b\\d[\\d,.]*\\+?\\s*(?:[A-Za-z-]+\\s+)?"
                     + "(?:commits?|lines(?:\\s+of\\s+code)?|LOC|files|classes|modules|methods|functions|PRs|pull\\s+requests)\\b",
             Pattern.CASE_INSENSITIVE);
-
-    // A sentence break: terminal punctuation, whitespace, then a capital or a bold marker.
-    private static final Pattern SENTENCE_BREAK = Pattern.compile("[.!?]\\s+(?=\\*{0,2}[A-Z])");
 
     /** Per-bullet findings, shown next to the bullet in the side-by-side view. */
     public record Flags(boolean identical, boolean overlap, boolean vanity, boolean multiSentence,
@@ -70,7 +68,7 @@ public final class EvalMetrics {
             chars += BulletTextRules.charCount(items.get(i).text());
         }
         Map<String, Long> openers = items.stream()
-                .map(it -> opener(it.text()))
+                .map(it -> BulletTextRules.openingVerb(it.text()))
                 .filter(o -> !o.isEmpty())
                 .collect(Collectors.groupingBy(o -> o, Collectors.counting()));
         List<String> top = openers.entrySet().stream()
@@ -103,8 +101,8 @@ public final class EvalMetrics {
             BulletTextRules.Decision d = BulletTextRules.decide(BulletTextRules.charCount(it.text()), cfg);
             String source = sourceByProject.get(it.projectId());
             out.add(new Flags(identical, overlap,
-                    VANITY.matcher(it.text().replace("**", "")).find(),
-                    sentences(it.text()) >= 2,
+                    vanity(it.text()),
+                    BulletTextRules.sentenceCount(it.text()) >= 2,
                     d == BulletTextRules.Decision.KEPT ? null : d.name(),
                     BulletTextRules.hasForbiddenOpener(it.text()),
                     source == null ? List.of() : BulletTextRules.fabricatedNumbers(it.text(), source)));
@@ -112,18 +110,13 @@ public final class EvalMetrics {
         return out;
     }
 
-    static int sentences(String text) {
-        String t = text == null ? "" : text.strip();
-        if (t.isEmpty()) return 0;
-        return SENTENCE_BREAK.split(t).length;
-    }
-
-    static String opener(String text) {
-        if (text == null) return "";
-        String t = text.replace("**", "").strip();
-        int sp = t.indexOf(' ');
-        String w = sp < 0 ? t : t.substring(0, sp);
-        return w.replaceAll("[^A-Za-z-]", "").toLowerCase();
+    /**
+     * The generator's vanity check ({@link BulletTextRules#vanityCount}) OR this eval's own
+     * {@link #VANITY}, so a superset of what generation rejects: it also flags volume nouns
+     * (classes, modules, methods, PRs) the generator lets through.
+     */
+    static boolean vanity(String text) {
+        return BulletTextRules.vanityCount(text) != null || VANITY.matcher(text.replace("**", "")).find();
     }
 
     private static double rate(int num, int den) {

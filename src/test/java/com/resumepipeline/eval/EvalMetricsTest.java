@@ -34,15 +34,26 @@ class EvalMetricsTest {
     }
 
     @Test
-    void countsSentences() {
-        assertEquals(1, EvalMetrics.sentences("Built an API in Java 17, e.g. for billing."));
-        assertEquals(2, EvalMetrics.sentences("Built an API. This **rigorous** design paid off."));
-        assertEquals(2, EvalMetrics.sentences("Built an API. **Cut** costs."));
+    void vanityIsASupersetOfTheGeneratorCheck() {
+        assertTrue(EvalMetrics.vanity("Added 40 unit tests to the parser."));      // generator's rule only
+        assertTrue(EvalMetrics.vanity("Refactored 14 Java classes."));             // eval's own pattern only
+        assertFalse(EvalMetrics.vanity("Cut p95 latency from 800ms to 120ms."));
     }
 
     @Test
-    void openerIsFirstWordLowercasedWithoutBold() {
-        assertEquals("architected", EvalMetrics.opener("**Architected** a pipeline."));
+    void flagsMultiSentenceWithTheGeneratorsCounter() {
+        List<EvalMetrics.Flags> f = EvalMetrics.flag(List.of(
+                item(P, "backend", "Built an API in Java 17, e.g. for billing."),
+                item(P, "data", "Built an API. **Cut** costs.")), Map.of(), CFG);
+        assertFalse(f.get(0).multiSentence());
+        assertTrue(f.get(1).multiSentence());
+    }
+
+    @Test
+    void openersIgnoreBold() {
+        EvalMetrics.Summary s = EvalMetrics.summarize(List.of(item(P, "backend", "**Architected** a pipeline.")),
+                Map.of(), CFG);
+        assertEquals(List.of("architected x1"), s.topOpeners());
     }
 
     @Test
