@@ -1,6 +1,8 @@
 package com.resumepipeline.jobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.resumepipeline.llm.KeywordScorer;
+import com.resumepipeline.profile.Profile;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -10,6 +12,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -18,6 +22,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -25,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * The shared job feed: verifies and stores postings pushed by the external Jobs API
@@ -34,6 +40,7 @@ import java.util.UUID;
 public class JobFeedService {
 
     static final int MAX_PAGE_SIZE = 100;
+    static final int TOP_TAGS = 30;
 
     private final JobPostingRepository repo;
     private final String secret;
@@ -91,9 +98,12 @@ public class JobFeedService {
     /**
      * Search filters shared by {@link #list} and {@link #counts}. {@code remote} widens the location
      * match to also take remote postings (alone it means remote only); {@code days} keeps postings
-     * received in the last that many days.
+     * received in the last that many days. {@code stack} keeps postings tagged with any of those
+     * techs; {@code skills} (null for off) does the same with the user's skill spellings, so an
+     * empty list matches nothing.
      */
-    public record JobFilter(String q, String location, boolean remote, Integer days) {}
+    public record JobFilter(String q, String location, boolean remote, Integer days,
+                            List<String> stack, List<String> skills) {}
 
     /** {@code savedBy} non-null limits the list to postings that user saved. */
     public Page<JobPosting> list(String source, JobFilter f, UUID savedBy, int page, int size) {
@@ -140,11 +150,63 @@ public class JobFeedService {
                 return hasLocation ? cb.or(cb.like(loc, like), remote) : remote;
             });
         }
+        if (f.stack() != null && f.stack().stream().anyMatch(t -> t != null && !t.isBlank())) {
+            spec = spec.and(anyTag(f.stack()));
+        }
+        if (f.skills() != null) spec = spec.and(anyTag(f.skills()));
         if (f.days() != null && f.days() > 0) {
             Instant since = Instant.now().minus(f.days(), ChronoUnit.DAYS);
             spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("receivedAt"), since));
         }
         return spec;
+    }
+
+    /** Postings whose stack holds any of {@code tags}, ignoring case. No usable tags matches nothing. */
+    private static Specification<JobPosting> anyTag(Collection<String> tags) {
+        List<String> patterns = tags.stream()
+                .filter(t -> t != null)
+                .map(t -> t.trim().toLowerCase(Locale.ROOT).replace(",", ""))
+                .filter(t -> !t.isEmpty())
+                .distinct()
+                .map(t -> "%," + t.replace("!", "!!").replace("%", "!%").replace("_", "!_") + ",%")
+                .toList();
+        return (root, query, cb) -> {
+            if (patterns.isEmpty()) return cb.disjunction();
+            // ",java,react," - the fencing commas keep "java" from matching "javascript".
+            Expression<String> joined = cb.lower(cb.concat(cb.concat(",",
+                    cb.function("array_to_string", String.class, root.get("stack"), cb.literal(","))), ","));
+            return cb.or(patterns.stream().map(p -> cb.like(joined, p, '!')).toArray(Predicate[]::new));
+        };
+    }
+
+    /** The most common stack tags, most used first; spelled as stored, merged across case. */
+    public List<String> topTags() {
+        return repo.topTags(TOP_TAGS);
+    }
+
+    /** The user's language, framework, database and devops skills from their profile. */
+    public static List<String> skillsOf(Profile p) {
+        if (p == null) return List.of();
+        return Stream.of(p.getSkillsLanguages(), p.getSkillsFrameworks(),
+                        p.getSkillsDatabases(), p.getSkillsDevops())
+                .filter(csv -> csv != null && !csv.isBlank())
+                .flatMap(csv -> Arrays.stream(csv.split(",")))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    /** Every lower-cased spelling of the skills a stack tag might use, for the skills filter. */
+    public static List<String> skillSpellings(List<String> skills) {
+        return skills.stream().flatMap(s -> KeywordScorer.variants(s).stream()).distinct().toList();
+    }
+
+    /** The tags in {@code stack} that one of {@code skills} names, alias-aware ("K8s" for "Kubernetes"). */
+    public static List<String> matchedTags(String[] stack, List<String> skills) {
+        if (stack == null || skills.isEmpty()) return List.of();
+        return Arrays.stream(stack)
+                .filter(tag -> skills.stream().anyMatch(s -> KeywordScorer.names(s, tag)))
+                .toList();
     }
 
     /** Which of {@code jobIds} the user has saved. */

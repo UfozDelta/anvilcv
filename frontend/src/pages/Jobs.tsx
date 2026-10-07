@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type JobPosting, type JobList, type JobCounts } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { EmptyState, PageTitle, ago } from '../components/ledger/shared';
+import { jobsQuery, SAVED, toggleTag, type JobFilters } from '../lib/jobQuery';
 
 const PAGE_SIZE = 50;
 /** New postings arrive by webhook; the list picks them up without a reload. */
@@ -13,8 +14,6 @@ const SOURCES = [
   { key: 'linkedin', label: 'LinkedIn' },
   { key: 'indeed', label: 'Indeed' },
 ];
-/** Not a source: a filter value meaning "my saved postings". Signed-in only. */
-const SAVED = 'saved';
 /** Filters on when the posting reached us; `posted` is free text from the source. */
 const ADDED = [
   { key: '', label: 'Added: any time' },
@@ -22,19 +21,10 @@ const ADDED = [
   { key: '7', label: 'Added: 7 days' },
   { key: '30', label: 'Added: 30 days' },
 ];
+/** Tag chips shown before "more"; the rest of the top tags stay one tap away. */
+const TAGS_SHOWN = 12;
 
-interface Filters { q: string; location: string; remote: boolean; days: string }
-
-function query(source: string, { q, location, remote, days }: Filters, page: number) {
-  const p = new URLSearchParams({ page: String(page), size: String(PAGE_SIZE) });
-  if (source === SAVED) p.set('saved', 'true');
-  else if (source) p.set('source', source);
-  if (q.trim()) p.set('q', q.trim());
-  if (location.trim()) p.set('location', location.trim());
-  if (remote) p.set('remote', 'true');
-  if (days) p.set('days', days);
-  return `/api/public/jobs?${p}`;
-}
+const query = (source: string, f: JobFilters, page: number) => jobsQuery(source, f, page, PAGE_SIZE);
 
 /** Public: anyone can browse. Tailoring a posting needs an account. */
 export function Jobs() {
@@ -48,12 +38,21 @@ export function Jobs() {
   const [location, setLocation] = useState('');
   const [remote, setRemote] = useState(false);
   const [days, setDays] = useState('');
+  const [stack, setStack] = useState<string[]>([]);
+  const [mine, setMine] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState(false);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<JobCounts | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Bumped by every load(); a poll or load-more that started under an older value is stale and ignored.
   const gen = useRef(0);
-  const filters: Filters = { q, location, remote, days };
+  const filters: JobFilters = { q, location, remote, days, stack, mine };
+
+  // The picker is a nicety: with no tags (or no answer) it just stays hidden.
+  useEffect(() => {
+    api.get<string[]>('/api/public/jobs/tags').then(setTags).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     const mine = ++gen.current;
@@ -71,7 +70,7 @@ export function Jobs() {
     } finally {
       if (mine === gen.current) setLoading(false);
     }
-  }, [source, q, location, remote, days]);
+  }, [source, q, location, remote, days, stack, mine]);
 
   // Debounced so typing in the search box doesn't fire a request per keystroke.
   useEffect(() => {
@@ -96,7 +95,7 @@ export function Jobs() {
       } catch { /* next tick retries */ }
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [source, q, location, remote, days]);
+  }, [source, q, location, remote, days, stack, mine]);
 
   async function loadMore() {
     const mine = gen.current;
@@ -143,7 +142,8 @@ export function Jobs() {
   }
 
   const none = !loading && jobs.length === 0;
-  const filtered = !!(source || q.trim() || location.trim() || remote || days);
+  const filtered = !!(source || q.trim() || location.trim() || remote || days || stack.length || mine);
+  const shownTags = allTags ? tags : tags.slice(0, TAGS_SHOWN);
 
   return (
     <div className="shell ap-page">
@@ -170,7 +170,26 @@ export function Jobs() {
         <select className="la-sort" value={days} aria-label="Added within" onChange={e => setDays(e.target.value)}>
           {ADDED.map(a => <option key={a.key || 'any'} value={a.key}>{a.label}</option>)}
         </select>
+        {username && (
+          <div className="la-tabs" role="group" aria-label="Skills">
+            <button type="button" aria-pressed={mine} title="Postings whose stack overlaps your profile skills" onClick={() => setMine(m => !m)}>My skills</button>
+          </div>
+        )}
       </div>
+      {tags.length > 0 && (
+        <div className="jb-tags" role="group" aria-label="Filter by tech (any)">
+          {shownTags.map(t => (
+            <button key={t} type="button" className="jb-chip" aria-pressed={stack.includes(t)} onClick={() => setStack(s => toggleTag(s, t))}>{t}</button>
+          ))}
+          {/* A picked tag stays visible even when the list is collapsed. */}
+          {!allTags && stack.filter(t => !shownTags.includes(t)).map(t => (
+            <button key={t} type="button" className="jb-chip" aria-pressed onClick={() => setStack(s => toggleTag(s, t))}>{t}</button>
+          ))}
+          {tags.length > TAGS_SHOWN && (
+            <button type="button" className="jb-tags__more" onClick={() => setAllTags(a => !a)}>{allTags ? 'Fewer' : `+${tags.length - TAGS_SHOWN} more`}</button>
+          )}
+        </div>
+      )}
 
       {err && <div className="err ap-err" role="alert">{err}</div>}
 
@@ -179,8 +198,10 @@ export function Jobs() {
       {none && (filtered
         ? (
           <div className="ap-nomatch">
-            {source === SAVED && !q.trim() && !location.trim() && !remote && !days ? 'Nothing saved yet. Tap ☆ on a posting.' : 'No jobs match.'}{' '}
-            <button type="button" onClick={() => { setQ(''); setLocation(''); setRemote(false); setDays(''); setSource(''); }}>Clear</button>
+            {source === SAVED && !q.trim() && !location.trim() && !remote && !days && !stack.length && !mine
+              ? 'Nothing saved yet. Tap ☆ on a posting.'
+              : mine ? 'No jobs match. Skills come from your profile.' : 'No jobs match.'}{' '}
+            <button type="button" onClick={() => { setQ(''); setLocation(''); setRemote(false); setDays(''); setStack([]); setMine(false); setSource(''); }}>Clear</button>
           </div>
         )
         : <EmptyState title="No postings yet." sub="New roles arrive here as they are posted." />)}
@@ -196,6 +217,14 @@ export function Jobs() {
                   <span className="jb-title">{j.title || 'Untitled role'}</span>
                   {j.role && <span className="jb-desc">{j.role}</span>}
                   <span className="ld-desc">{[j.location, j.posted || ago(j.receivedAt)].filter(Boolean).join(' · ')}</span>
+                  {j.stack.length > 0 && (
+                    <ul className="jb-stack" aria-label="Tech stack">
+                      {j.stack.map(t => {
+                        const hit = j.matched?.includes(t);
+                        return <li key={t} className="jb-chip" data-match={hit || undefined} title={hit ? 'On your profile' : undefined}>{t}</li>;
+                      })}
+                    </ul>
+                  )}
                 </div>
                 <div className="jb-actions">
                   <button

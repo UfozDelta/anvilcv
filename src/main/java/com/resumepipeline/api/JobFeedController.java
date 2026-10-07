@@ -6,6 +6,7 @@ import com.resumepipeline.auth.AppUserPrincipal;
 import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.jobs.JobFeedService;
 import com.resumepipeline.jobs.JobPosting;
+import com.resumepipeline.profile.ProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -31,18 +32,20 @@ public class JobFeedController {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final JobFeedService service;
+    private final ProfileRepository profiles;
 
-    public JobFeedController(JobFeedService service) {
+    public JobFeedController(JobFeedService service, ProfileRepository profiles) {
         this.service = service;
+        this.profiles = profiles;
     }
 
     public record JobDto(UUID id, String source, String title, String company, String location,
                          String posted, String spotted, String url, String companyUrl, String role,
-                         List<String> stack, Instant receivedAt, boolean saved) {
-        static JobDto of(JobPosting j, boolean saved) {
+                         List<String> stack, Instant receivedAt, boolean saved, List<String> matched) {
+        static JobDto of(JobPosting j, boolean saved, List<String> skills) {
             return new JobDto(j.getId(), j.getSource(), j.getTitle(), j.getCompany(), j.getLocation(),
                     j.getPosted(), j.getSpotted(), j.getUrl(), j.getCompanyUrl(), j.getRole(),
-                    List.of(j.getStack()), j.getReceivedAt(), saved);
+                    List.of(j.getStack()), j.getReceivedAt(), saved, JobFeedService.matchedTags(j.getStack(), skills));
         }
     }
 
@@ -55,21 +58,33 @@ public class JobFeedController {
                                 @RequestParam(required = false) String location,
                                 @RequestParam(defaultValue = "false") boolean remote,
                                 @RequestParam(required = false) Integer days,
+                                @RequestParam(required = false) List<String> stack,
+                                @RequestParam(defaultValue = "false") boolean mine,
                                 @RequestParam(defaultValue = "false") boolean saved,
                                 @RequestParam(defaultValue = "0") int page,
                                 @RequestParam(defaultValue = "50") int size,
                                 Authentication auth) {
         // permitAll still runs the session, so a logged-in user arrives with their principal.
         UUID userId = auth != null && auth.getPrincipal() instanceof AppUserPrincipal principal ? principal.getUserId() : null;
-        JobFeedService.JobFilter filter = new JobFeedService.JobFilter(q, location, remote, days);
+        // Signed-in callers get their skills matched on every card; "mine" also filters on them.
+        List<String> skills = userId == null ? List.of()
+                : JobFeedService.skillsOf(profiles.findByUserId(userId).orElse(null));
+        JobFeedService.JobFilter filter = new JobFeedService.JobFilter(q, location, remote, days, stack,
+                mine && userId != null ? JobFeedService.skillSpellings(skills) : null);
         JobFeedService.JobCounts counts = service.counts(filter, userId);
         if (saved && userId == null) return new JobListResponse(List.of(), 0, counts);
 
         Page<JobPosting> p = service.list(source, filter, saved ? userId : null, page, size);
         Set<UUID> savedIds = userId == null ? Set.of()
                 : service.savedAmong(userId, p.map(JobPosting::getId).getContent());
-        return new JobListResponse(p.map(j -> JobDto.of(j, savedIds.contains(j.getId()))).getContent(),
+        return new JobListResponse(p.map(j -> JobDto.of(j, savedIds.contains(j.getId()), skills)).getContent(),
                 p.getTotalElements(), counts);
+    }
+
+    /** The most common stack tags, for the filter picker. */
+    @GetMapping("/public/jobs/tags")
+    public List<String> tags() {
+        return service.topTags();
     }
 
     @PutMapping("/jobs/{id}/save")
