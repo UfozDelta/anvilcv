@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { api, type ApplicationResponse, type Bullet, type Project } from '../lib/api';
-import { groupRankedByProject } from '../lib/groupBullets';
+import { api, type ApplicationResponse, type Bullet, type Project, type SelectionWarning } from '../lib/api';
+import { groupRankedByProject, insertSelected, moveWithinProject } from '../lib/groupBullets';
 import { awkwardCount, estimatedLines } from '../lib/bulletLength';
 import { useBulletPreview } from './useBulletPreview';
 import { parseRanking } from '../lib/ranking';
@@ -46,6 +46,8 @@ export function useApplicationDetail(id: string | undefined) {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   /** Groups whose "more from bank" rows are open. */
   const [bankOpen, setBankOpen] = useState<Set<string>>(new Set());
+  /** Bullets that repeat one earlier on the page (server check), keyed by the later bullet's id. */
+  const [repeats, setRepeats] = useState<Record<string, SelectionWarning>>({});
   /** An on-page bullet or heading was edited since the last render, so the PDF shows old text.
    *  In-memory only: a reload forgets it. */
   const [textStale, setTextStale] = useState(false);
@@ -171,13 +173,34 @@ export function useApplicationDetail(id: string | undefined) {
     });
   }
 
+  const projectOf = (bid: string) => bullets[bid]?.projectId;
+
   function toggleBullet(bid: string) {
     setSelectedIds(prev => {
+      if (!prev.has(bid)) return new Set(insertSelected([...prev], bid, projectOf));
       const next = new Set(prev);
-      if (next.has(bid)) next.delete(bid); else next.add(bid);
+      next.delete(bid);
       return next;
     });
   }
+
+  /** Reorders within the entry; the Set's order is what rerender renders. */
+  function moveBullet(bid: string, dir: -1 | 1) {
+    setSelectedIds(prev => new Set(moveWithinProject([...prev], bid, dir, projectOf)));
+  }
+
+  // Hand-picks skip the selector's repeat checks, so ask the server (same Java rules) and warn.
+  // Debounced: a burst of toggles costs one request. Failures just leave the last warnings up.
+  useEffect(() => {
+    if (!bulletsReady) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      api.post<SelectionWarning[]>('/api/applications/selection-check', { selectedBulletIds: [...selectedIds] })
+        .then(ws => { if (!cancelled) setRepeats(Object.fromEntries(ws.map(w => [w.bulletId, w]))); })
+        .catch(() => {});
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [selectedIds, bulletsReady]);
 
   /** Render only this group's included bullets, leaving the saved resume untouched. */
   async function previewGroup(key: string, bulletIds: string[]) {
@@ -275,7 +298,7 @@ export function useApplicationDetail(id: string | undefined) {
     rescoreStreaming, setRescoreStreaming,
     pdfBlobUrl, pdfVersion, setPdfVersion, expandedWhys, showTail, setShowTail,
     expandedGroups, selectedIds, ranking, bulletsReady, grouped,
-    toggleGroup, setOutcome, toggleBullet, toggleWhy, load,
+    toggleGroup, setOutcome, toggleBullet, moveBullet, repeats, toggleWhy, load,
     editingId, setEditingId, saveBullet, cfg,
     editingProjectId, setEditingProjectId, saveProject,
     lockedIds, toggleLock, locksSaving, refitTarget, setRefitTarget,

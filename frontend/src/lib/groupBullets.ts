@@ -60,3 +60,39 @@ export function bankRows(
     .filter(b => b.projectId === projectId && b.status !== 'REJECTED' && !shown.has(b.id))
     .map(b => ({ bulletId: b.id, rank: 0, why: '' }));
 }
+
+/**
+ * Selection order is page order: the renderer groups entries and their bullets by first
+ * appearance in the submitted ids. A pick lands after the last selected bullet of its own
+ * project, not at the end of the list, so re-including a bullet doesn't move its whole entry.
+ */
+export function insertSelected(order: string[], bid: string, projectOf: (id: string) => string | undefined): string[] {
+  const pid = projectOf(bid);
+  let at = -1;
+  order.forEach((id, i) => { if (projectOf(id) === pid) at = i; });
+  if (at < 0) return [...order, bid];
+  return [...order.slice(0, at + 1), bid, ...order.slice(at + 1)];
+}
+
+/** Swap `bid` with the nearest selected bullet of the same project in direction `dir`. */
+export function moveWithinProject(order: string[], bid: string, dir: -1 | 1,
+                                  projectOf: (id: string) => string | undefined): string[] {
+  const i = order.indexOf(bid);
+  if (i < 0) return order;
+  const pid = projectOf(bid);
+  for (let j = i + dir; j >= 0 && j < order.length; j += dir) {
+    if (projectOf(order[j]) !== pid) continue;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  }
+  return order;
+}
+
+/** A group's rows as the page shows them: included bullets in page order, then the rest in rank order. */
+export function pageOrder(items: RankedBullet[], order: string[]): RankedBullet[] {
+  const pos = new Map(order.map((id, i) => [id, i]));
+  const inPage = items.filter(r => pos.has(r.bulletId))
+    .sort((a, b) => pos.get(a.bulletId)! - pos.get(b.bulletId)!);
+  return [...inPage, ...items.filter(r => !pos.has(r.bulletId))];
+}

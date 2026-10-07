@@ -1,10 +1,10 @@
-import type { Bullet, BulletVerdict, GenerationConfig, Project, RankedBullet } from '../../lib/api';
-import { bankRows, type BulletGroup } from '../../lib/groupBullets';
+import type { Bullet, BulletVerdict, GenerationConfig, Project, RankedBullet, SelectionWarning } from '../../lib/api';
+import { bankRows, pageOrder, type BulletGroup } from '../../lib/groupBullets';
 import { estimatedLines } from '../../lib/bulletLength';
 import { RankedBulletRow } from './RankedBulletRow';
 import { EditProjectHeader } from './EditProjectHeader';
 
-export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, refitBusy, editingId, cfg, editingProjectId, lockedIds, newIds, rankedIds, bankOpen, onToggleBank, onToggleOpen, onRefit, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock }: {
+export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets, verdicts, previewing, previewBusy, refitBusy, editingId, cfg, editingProjectId, lockedIds, newIds, rankedIds, repeats, bankOpen, onToggleBank, onToggleOpen, onRefit, onToggleSelect, onToggleWhy, onPreview, onEdit, onCancelEdit, onSaveBullet, onEditProject, onCancelEditProject, onSaveProject, onToggleLock, onMove }: {
   g: BulletGroup;
   open: boolean;
   selectedIds: Set<string>;
@@ -21,6 +21,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   lockedIds: Set<string>;
   newIds?: Set<string>;
   rankedIds: Set<string>;
+  repeats: Record<string, SelectionWarning>;
   bankOpen: boolean;
   onToggleBank: () => void;
   onToggleOpen: () => void;
@@ -35,16 +36,22 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
   onCancelEditProject: () => void;
   onSaveProject: (project: Project, patch: Partial<Project>) => void;
   onToggleLock: (bulletId: string) => void;
+  onMove: (bulletId: string, dir: -1 | 1) => void;
 }) {
   const name = g.project?.name ?? 'Other';
-  const selected = g.items.filter(r => selectedIds.has(r.bulletId));
+  // Included rows first, in the order they render on the page; ↑/↓ reorder within that block.
+  const items = pageOrder(g.items, [...selectedIds]);
+  const selected = items.filter(r => selectedIds.has(r.bulletId));
   // Rendered-line share this group contributes to the one-page budget.
   const lines = selected.reduce((n, r) => n + estimatedLines(bullets[r.bulletId]?.text ?? ''), 0);
   // The rest of this entry's bank, for picking by hand beyond the ranked shortlist. Picking one
   // moves it into g.items (it becomes a selected orphan row), so it leaves this list.
   const extra = g.project ? bankRows(g.project.id, bullets, new Set(g.items.map(r => r.bulletId))) : [];
   const headerEditing = g.project && editingProjectId === g.project.id;
-  const row = (r: RankedBullet) => (
+  const row = (r: RankedBullet) => {
+    const at = selected.findIndex(x => x.bulletId === r.bulletId);
+    const repeat = repeats[r.bulletId];
+    return (
     <RankedBulletRow
       key={r.bulletId}
       r={r}
@@ -57,6 +64,9 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
       locked={lockedIds.has(r.bulletId)}
       isNew={newIds?.has(r.bulletId)}
       unranked={!rankedIds.has(r.bulletId)}
+      repeatOf={repeat && { reason: repeat.reason, text: bullets[repeat.conflictId]?.text ?? '' }}
+      onMoveUp={at > 0 ? () => onMove(r.bulletId, -1) : undefined}
+      onMoveDown={at >= 0 && at < selected.length - 1 ? () => onMove(r.bulletId, 1) : undefined}
       onToggleSelect={() => onToggleSelect(r.bulletId)}
       onToggleWhy={() => onToggleWhy(r.bulletId)}
       onEdit={() => onEdit(r.bulletId)}
@@ -67,7 +77,8 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
       }}
       onToggleLock={() => onToggleLock(r.bulletId)}
     />
-  );
+    );
+  };
   return (
     <div style={{ marginBottom: 14 }}>
       {headerEditing && g.project ? (
@@ -129,7 +140,7 @@ export function BulletGroupSection({ g, open, selectedIds, expandedWhys, bullets
           </div>
         </div>
       )}
-      {open && g.items.map(row)}
+      {open && items.map(row)}
       {open && extra.length > 0 && (
         <button type="button" className={`minibtn ${bankOpen ? 'is-on' : ''}`} style={{ marginTop: 6 }} onClick={onToggleBank}>
           {bankOpen ? 'Hide bank' : `+ ${extra.length} more from bank`}

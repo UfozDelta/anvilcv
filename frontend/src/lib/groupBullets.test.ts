@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Bullet, Project, RankedBullet } from './api';
-import { bankRows, groupRankedByProject } from './groupBullets';
+import { bankRows, groupRankedByProject, insertSelected, moveWithinProject, pageOrder } from './groupBullets';
 
 // ---- test data builders ----
 
@@ -117,5 +117,36 @@ describe('bankRows', () => {
     const out = bankRows('pA', bullets, new Set(['a1']));
 
     expect(out.map(r => r.bulletId)).toEqual(['a2']);
+  });
+});
+
+// Bullet id prefix is its project: "a1" belongs to project "a".
+const projectOf = (id: string) => id[0];
+
+describe('insertSelected', () => {
+  it('places a pick after the last included bullet of its own entry, not at the end of the page', () => {
+    expect(insertSelected(['a1', 'a2', 'b1'], 'a3', projectOf)).toEqual(['a1', 'a2', 'a3', 'b1']);
+  });
+
+  it('appends a pick whose entry has nothing on the page yet', () => {
+    expect(insertSelected(['a1'], 'c1', projectOf)).toEqual(['a1', 'c1']);
+  });
+});
+
+describe('moveWithinProject', () => {
+  it('swaps with the nearest bullet of the same entry, leaving other entries in place', () => {
+    expect(moveWithinProject(['a1', 'b1', 'a2'], 'a2', -1, projectOf)).toEqual(['a2', 'b1', 'a1']);
+  });
+
+  it('is a no-op at the edge of its entry', () => {
+    const order = ['a1', 'a2', 'b1'];
+    expect(moveWithinProject(order, 'a2', 1, projectOf)).toBe(order);
+  });
+});
+
+describe('pageOrder', () => {
+  it('lists included rows in page order, then the rest in their given order', () => {
+    const items = [ranked('a1', 1), ranked('a2', 2), ranked('a3', 3), ranked('a4', 0)];
+    expect(pageOrder(items, ['a4', 'a1']).map(r => r.bulletId)).toEqual(['a4', 'a1', 'a2', 'a3']);
   });
 });

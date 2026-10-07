@@ -4,7 +4,6 @@ import { api, type ApplicationResponse, type BulletVerdict } from '../lib/api';
 import { EventStream } from '../components/EventStream';
 import { RichText } from '../components/RichText';
 import { Stat } from '../components/Stat';
-import { setsEqual } from '../lib/ranking';
 import { useApplicationDetail } from '../hooks/useApplicationDetail';
 import { RankedBulletRow } from '../components/ApplicationDetail/RankedBulletRow';
 import { BulletGroupSection } from '../components/ApplicationDetail/BulletGroupSection';
@@ -29,8 +28,8 @@ export function ApplicationDetail() {
   if (!s.app) return <div className="shell"><span className="spinner">LOADING</span></div>;
 
   const app = s.app;
-  const ogSelection = new Set(app.selectedBulletIds);
-  const selectionDirty = !setsEqual(s.selectedIds, ogSelection);
+  // Order-sensitive: the Set's order is the page order, so a reorder alone is unsaved too.
+  const selectionDirty = [...s.selectedIds].join() !== app.selectedBulletIds.join();
   // Either the selection changed or on-page text did — both mean the PDF no longer matches.
   const dirty = selectionDirty || s.textStale;
   const verdicts = Object.fromEntries(
@@ -203,6 +202,7 @@ export function ApplicationDetail() {
                     lockedIds={s.lockedIds}
                     newIds={s.justAddedIds}
                     rankedIds={s.rankedIds}
+                    repeats={s.repeats}
                     bankOpen={s.bankOpen.has(g.key)}
                     onToggleBank={() => s.toggleBank(g.key)}
                     onToggleOpen={() => s.toggleGroup(g.key)}
@@ -217,6 +217,7 @@ export function ApplicationDetail() {
                     onCancelEditProject={() => s.setEditingProjectId(null)}
                     onSaveProject={(p, patch) => s.saveProject(p, patch)}
                     onToggleLock={bid => s.toggleLock(bid)}
+                    onMove={s.moveBullet}
                   />
                 ))}
               </div>
