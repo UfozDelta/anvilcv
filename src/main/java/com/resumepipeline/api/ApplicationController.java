@@ -241,13 +241,13 @@ public class ApplicationController {
     /** Read-only lookup: a download must not create a profile as a side effect. */
     private String baseFilename(Authentication auth, Application a) {
         String name = profiles.findByUserId(AuthUtils.userId(auth)).map(Profile::getName).orElse(null);
-        return resumeBase(name, a.getRole(), a.getCompany());
+        return resumeBase(name, a.getCompany(), a.getRole());
     }
 
     private static final Set<String> NAME_SUFFIXES = Set.of("jr", "sr", "ii", "iii", "iv");
 
-    /** {Last}_{Role}_resume, ASCII-safe; role falls back to company, missing parts are dropped. */
-    static String resumeBase(String name, String role, String company) {
+    /** {Last}_{Company}_resume, ASCII-safe; company falls back to role, missing parts are dropped. */
+    static String resumeBase(String name, String company, String role) {
         String last = "";
         if (name != null) {
             String[] tokens = name.trim().split("\\s+");
@@ -255,7 +255,7 @@ public class ApplicationController {
                 if (!NAME_SUFFIXES.contains(tokens[i].replace(".", "").toLowerCase())) { last = tokens[i]; break; }
             }
         }
-        String what = role != null && !role.isBlank() ? role : company;
+        String what = company != null && !company.isBlank() ? company : role;
         List<String> parts = new ArrayList<>();
         for (String part : new String[]{safe(last, 30), safe(what, 40), "resume"}) {
             if (!part.isEmpty()) parts.add(part);
