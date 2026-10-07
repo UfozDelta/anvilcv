@@ -803,7 +803,8 @@ public class ApplicationService {
                   + locked.size() + " bullets pinned elsewhere";
         progress.emit("Refitting " + scope + " from " + allBullets.size() + " bank bullets ("
                 + userLocked.size() + " locked)...");
-        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked, excluded);
+        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower,
+                locked, excluded, onlyProjectId);
 
         if (onlyProjectId != null) {
             // The guarantee: pass 4's floor tops up every surviving project, so drop anything it

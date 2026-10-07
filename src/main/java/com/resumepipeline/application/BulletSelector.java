@@ -5,6 +5,8 @@ import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.project.Project;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.ToLongFunction;
@@ -21,7 +23,8 @@ import java.util.stream.Collectors;
  *   <li><b>min-fill</b> — pad thin projects up to the per-project cap from
  *       remaining ranked candidates, then from the raw bank by marginal keyword gain;</li>
  *   <li><b>floor</b> — top every surviving project up to {@link #MAX_PER_PROJECT} ignoring
- *       every budget, then trim whole projects until the page fits again.</li>
+ *       every budget, swap out entries still under two bullets for the next-best entry of the
+ *       same kind, then trim whole projects until the page fits again.</li>
  * </ol>
  *
  * <p>Every pass that adds a bullet first rejects it if {@link BulletTextRules#isNearDuplicate}
@@ -57,9 +60,12 @@ import java.util.stream.Collectors;
  * </ul>
  *
  * <p>No I/O, no Spring, deterministic. Callers do their own progress logging by
- * inspecting the returned list — this class emits nothing.
+ * inspecting the returned list — this class emits no progress events, only a log line when it
+ * has to keep a thin entry.
  */
 public final class BulletSelector {
+
+    private static final Logger log = LoggerFactory.getLogger(BulletSelector.class);
 
     private BulletSelector() {}
 
@@ -163,6 +169,21 @@ public final class BulletSelector {
                                       Set<String> keywordsLower,
                                       List<Bullet> locked,
                                       Set<UUID> excluded) {
+        return select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked, excluded, null);
+    }
+
+    /**
+     * Same, with one more entry the thin-entry swap must keep, like an entry holding a lock:
+     * a scoped refit's target, which the caller asked to re-pick, not to lose.
+     */
+    public static List<Bullet> select(List<LlmClient.RankedBullet> rankedSorted,
+                                      Map<UUID, Bullet> bulletById,
+                                      Map<UUID, Project> projectById,
+                                      List<Bullet> allBullets,
+                                      Set<String> keywordsLower,
+                                      List<Bullet> locked,
+                                      Set<UUID> excluded,
+                                      UUID keepProjectId) {
         ToLongFunction<Bullet> tagScore = tagScore(keywordsLower);
         Set<UUID> lockedProjectIds = locked.stream().map(Bullet::getProjectId)
                 .collect(Collectors.toCollection(HashSet::new));
@@ -333,36 +354,47 @@ public final class BulletSelector {
         Set<UUID> liveIds = selected.stream().map(Bullet::getId)
                 .collect(Collectors.toCollection(HashSet::new));
         for (UUID pid : selected.stream().map(Bullet::getProjectId).distinct().toList()) {
-            int have = (int) selected.stream().filter(b -> b.getProjectId().equals(pid)).count();
-            if (have >= MAX_PER_PROJECT) continue;
+            topUp(pid, rankedSorted, bulletById, allByProject, selected, selectedTexts, liveIds,
+                    covered, keywordsLower, tagScore);
+        }
 
-            // Source 1: this project's remaining ranked candidates, best-first.
-            for (LlmClient.RankedBullet rb : rankedSorted) {
-                if (have >= MAX_PER_PROJECT) break;
-                UUID bid = parseUuid(rb.bulletId());
-                if (bid == null || liveIds.contains(bid)) continue;
-                Bullet b = bulletById.get(bid);
-                if (b == null || !b.getProjectId().equals(pid)) continue;
-                if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts) || sameStory(b, selected)) continue;
-                selected.add(b); liveIds.add(bid); selectedTexts.add(b.getText()); have++;
-            }
-
-            // Source 2: the raw bank by tag score. This is the only source that reaches an
-            // *unranked* bullet, and therefore the one that supplies the depth to step past a
-            // near-duplicate instead of surrendering at the first collision — the caller's
-            // pre-filter admits at most 4 ranked candidates per project, so source 1 alone
-            // holds a single spare. Both loops stop at MAX_PER_PROJECT *or* exhaustion, which
-            // is what makes the result min(MAX_PER_PROJECT, admissible bank) by construction.
-            if (have < MAX_PER_PROJECT) {
-                List<Bullet> bank = new ArrayList<>(allByProject.getOrDefault(pid, List.of()).stream()
-                        .filter(b -> !liveIds.contains(b.getId()))
-                        .toList());
-                while (have < MAX_PER_PROJECT && !bank.isEmpty()) {
-                    Bullet b = bank.remove(bestByGainIndex(bank, covered, keywordsLower, tagScore));
-                    if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts) || sameStory(b, selected)) continue;
-                    selected.add(b); liveIds.add(b.getId()); selectedTexts.add(b.getText()); have++;
-                    covered.addAll(KeywordScorer.matched(b, keywordsLower));
+        // Thin entries. After the top-up an entry under two bullets has run its admissible bank
+        // dry, and a one-bullet entry reads as padding. Swap it for the next-best entry of the
+        // same kind not yet tried, topped up the same way, and repeat until nothing changes: a
+        // replacement that also comes up thin is swapped in turn. With no replacement the entry
+        // is dropped, unless that would break the kind floor; then it stays, and is logged.
+        //
+        // Never touched: entries holding a lock and keepProjectId (both promised to the caller).
+        // A swap is one for one and a drop only shrinks the page, so MAX_ENTRIES still holds.
+        // An entry once dropped or seated is never re-admitted, so the loop ends.
+        Set<UUID> keep = new HashSet<>(lockedProjectIds);
+        if (keepProjectId != null) keep.add(keepProjectId);
+        Set<UUID> tried = selected.stream().map(Bullet::getProjectId).collect(Collectors.toCollection(HashSet::new));
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            // Weakest entry first, as in the trim below.
+            for (UUID pid : selected.stream().map(Bullet::getProjectId).distinct().toList().reversed()) {
+                if (keep.contains(pid) || selected.stream().filter(b -> b.getProjectId().equals(pid)).count() >= 2) continue;
+                Project p = projectById.get(pid);
+                UUID next = p == null ? null
+                        : nextEntry(p.getKind(), tried, rankedSorted, bulletById, projectById, allBullets,
+                                liveIds, covered, keywordsLower, tagScore);
+                if (next == null && p != null
+                        && distinctProjectsOfKind(selected, projectById, p.getKind()) <= kindFloor(p.getKind())) {
+                    log.info("Keeping a thin {} entry {}: no replacement, and the kind floor needs it", p.getKind(), pid);
+                    continue;
                 }
+                List<Bullet> doomed = selected.stream().filter(b -> b.getProjectId().equals(pid)).toList();
+                selected.removeAll(doomed);
+                doomed.forEach(b -> { selectedTexts.remove(b.getText()); liveIds.remove(b.getId()); });
+                if (next != null) {
+                    tried.add(next);
+                    topUp(next, rankedSorted, bulletById, allByProject, selected, selectedTexts, liveIds,
+                            covered, keywordsLower, tagScore);
+                }
+                changed = true;
+                break;
             }
         }
 
@@ -383,9 +415,7 @@ public final class BulletSelector {
                 if (lockedProjectIds.contains(pid)) continue; // never drop a project holding a pin
                 Project p = projectById.get(pid);
                 if (p == null) { victim = pid; break; } // unknown kind holds no floor up
-                long floor = p.getKind() == Project.Kind.EXPERIENCE
-                        ? MIN_EXPERIENCE_PROJECTS : MIN_PROJECT_ENTRIES;
-                if (distinctProjectsOfKind(selected, projectById, p.getKind()) > floor) victim = pid;
+                if (distinctProjectsOfKind(selected, projectById, p.getKind()) > kindFloor(p.getKind())) victim = pid;
             }
             // Every remaining entry is holding up a kind floor (or a lock): overrun the page
             // rather than silently abandon the diversity guarantee or drop a pinned bullet.
@@ -407,6 +437,79 @@ public final class BulletSelector {
         }
 
         return selected;
+    }
+
+    private static long kindFloor(Project.Kind kind) {
+        return kind == Project.Kind.EXPERIENCE ? MIN_EXPERIENCE_PROJECTS : MIN_PROJECT_ENTRIES;
+    }
+
+    /**
+     * Pass 4's floor for one entry: tops it up to {@link #MAX_PER_PROJECT}, ignoring every budget,
+     * from its remaining ranked candidates and then its raw bank. Stops early only when the
+     * dedup-admissible bank runs out.
+     */
+    private static void topUp(UUID pid, List<LlmClient.RankedBullet> rankedSorted, Map<UUID, Bullet> bulletById,
+                              Map<UUID, List<Bullet>> allByProject, List<Bullet> selected,
+                              List<String> selectedTexts, Set<UUID> liveIds, Set<String> covered,
+                              Set<String> keywordsLower, ToLongFunction<Bullet> tagScore) {
+        int have = (int) selected.stream().filter(b -> b.getProjectId().equals(pid)).count();
+        if (have >= MAX_PER_PROJECT) return;
+
+        // Source 1: this project's remaining ranked candidates, best-first.
+        for (LlmClient.RankedBullet rb : rankedSorted) {
+            if (have >= MAX_PER_PROJECT) break;
+            UUID bid = parseUuid(rb.bulletId());
+            if (bid == null || liveIds.contains(bid)) continue;
+            Bullet b = bulletById.get(bid);
+            if (b == null || !b.getProjectId().equals(pid)) continue;
+            if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts) || sameStory(b, selected)) continue;
+            selected.add(b); liveIds.add(bid); selectedTexts.add(b.getText()); have++;
+        }
+
+        // Source 2: the raw bank by tag score. This is the only source that reaches an
+        // *unranked* bullet, and therefore the one that supplies the depth to step past a
+        // near-duplicate instead of surrendering at the first collision — the caller's
+        // pre-filter admits at most 4 ranked candidates per project, so source 1 alone
+        // holds a single spare. Both loops stop at MAX_PER_PROJECT *or* exhaustion, which
+        // is what makes the result min(MAX_PER_PROJECT, admissible bank) by construction.
+        if (have < MAX_PER_PROJECT) {
+            List<Bullet> bank = new ArrayList<>(allByProject.getOrDefault(pid, List.of()).stream()
+                    .filter(b -> !liveIds.contains(b.getId()))
+                    .toList());
+            while (have < MAX_PER_PROJECT && !bank.isEmpty()) {
+                Bullet b = bank.remove(bestByGainIndex(bank, covered, keywordsLower, tagScore));
+                if (BulletTextRules.isNearDuplicate(b.getText(), selectedTexts) || sameStory(b, selected)) continue;
+                selected.add(b); liveIds.add(b.getId()); selectedTexts.add(b.getText()); have++;
+                covered.addAll(KeywordScorer.matched(b, keywordsLower));
+            }
+        }
+    }
+
+    /**
+     * The next-best entry of {@code kind} not yet tried, among those with two or more bullets
+     * left: the project of the best-ranked bullet left, else the one whose bank bullet adds the
+     * most uncovered JD keywords ({@link #bestByGainIndex}). Null when there is none.
+     */
+    private static UUID nextEntry(Project.Kind kind, Set<UUID> tried, List<LlmClient.RankedBullet> rankedSorted,
+                                  Map<UUID, Bullet> bulletById, Map<UUID, Project> projectById,
+                                  List<Bullet> allBullets, Set<UUID> liveIds, Set<String> covered,
+                                  Set<String> keywordsLower, ToLongFunction<Bullet> tagScore) {
+        // Two bullets left at least, or the swap just trades one stub for another.
+        Map<UUID, Long> left = allBullets.stream().filter(b -> !liveIds.contains(b.getId()))
+                .collect(Collectors.groupingBy(Bullet::getProjectId, Collectors.counting()));
+        java.util.function.Predicate<UUID> eligible = pid -> {
+            Project p = projectById.get(pid);
+            return p != null && p.getKind() == kind && !tried.contains(pid) && left.getOrDefault(pid, 0L) >= 2;
+        };
+        for (LlmClient.RankedBullet rb : rankedSorted) {
+            UUID bid = parseUuid(rb.bulletId());
+            Bullet b = bid == null ? null : bulletById.get(bid);
+            if (b != null && !liveIds.contains(bid) && eligible.test(b.getProjectId())) return b.getProjectId();
+        }
+        List<Bullet> pool = allBullets.stream()
+                .filter(b -> eligible.test(b.getProjectId()) && !liveIds.contains(b.getId()))
+                .toList();
+        return pool.isEmpty() ? null : pool.get(bestByGainIndex(pool, covered, keywordsLower, tagScore)).getProjectId();
     }
 
     /**
