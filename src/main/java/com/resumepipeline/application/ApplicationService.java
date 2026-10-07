@@ -181,12 +181,12 @@ public class ApplicationService {
         // instead of stored and prompted as free text the bias never applied.
         final String emphasis = CategoryLenses.label(lenses);
         progress.emit("Lens: " + emphasis + (overridden ? " (manual)" : " (from JD)"));
-        // Keyword score stays primary; the lens boosts in-lens bullets by up to BIAS (so a close
-        // off-lens bullet can be outranked) and breaks ties between cross-lens framings of the
-        // same work, so collapseVariants keeps the framing that matches the role.
+        // Keyword score decides; the lens only breaks ties (0.1 * weight < one keyword hit), so a
+        // wrong lens guess can't push a stronger bullet out, but collapseVariants still keeps the
+        // framing that matches the role.
         java.util.function.ToDoubleFunction<Bullet> lensedScore = b -> {
             double w = CategoryLenses.weight(lenses, b.getCategory());
-            return keywordScore.applyAsLong(b) * (1 + CategoryLenses.BIAS * w) + 0.1 * w;
+            return keywordScore.applyAsLong(b) + 0.1 * w;
         };
         List<Bullet> candidates = allBullets.stream()
                 .collect(Collectors.groupingBy(Bullet::getProjectId))
