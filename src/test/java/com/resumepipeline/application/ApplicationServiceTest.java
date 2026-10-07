@@ -199,6 +199,22 @@ class ApplicationServiceTest {
             assertEquals(0, out.getFitStrengths().length);
         }
 
+        @Test
+        void llmSkillsNotInProfileAreDroppedWithANote() {
+            profileService.get(user).setSkillsLanguages("Java, Python");
+            when(llm.rankBullets(any(), any(), any())).thenReturn(new LlmClient.RankResult(
+                    List.of(new LlmClient.RankedBullet(bullet.getId().toString(), 1, "fits")),
+                    List.of("java"), List.of(), List.of(), Map.of("languages", List.of("Java", "Rust"))));
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            List<String> events = new java.util.ArrayList<>();
+
+            Application out = service.create(user, "jd text", null, "backend", false, events::add);
+
+            assertTrue(events.contains("Skills: dropped 1 not in your profile: Rust"), events.toString());
+            assertFalse(out.getSelectedSkills().contains("Rust"), out.getSelectedSkills());
+            assertTrue(out.getSelectedSkills().contains("Java"), out.getSelectedSkills());
+        }
+
         /** Two identical-prose framings of one project, categories security vs backend, equal keyword score. */
         private Bullet[] crossLensPair() {
             Bullet security = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"java"});
@@ -707,6 +723,27 @@ class ApplicationServiceTest {
             assertThrows(IllegalStateException.class,
                     () -> service.rescore(user, appId, ProgressLog.noOp()));
             verifyNoInteractions(llm);
+        }
+    }
+
+    @Nested
+    class AtsReportCorpus {
+
+        @Test
+        void countsProjectHeadingTermsAndAliasedSkills() {
+            UUID projId = UUID.randomUUID();
+            Project project = TestFixtures.project(projId, Project.Kind.PROJECT, "P");
+            project.setTechStack("Java, Kafka");
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), projId, new String[0]);
+            b.setText("Built REST APIs.");
+            List<String> keywords = List.of("Kafka", "SQL", "API", "Rust");
+
+            ApplicationService.AtsReport ats = ApplicationService.atsReport(keywords,
+                    java.util.Set.of("kafka", "sql", "api", "rust"), List.of(b),
+                    Map.of("databases", List.of("PostgreSQL")), List.of(), Map.of(projId, project), keywords);
+
+            assertEquals(List.of("Kafka", "SQL", "API"), ats.matched());
+            assertEquals(List.of("Rust"), ats.missing());
         }
     }
 }

@@ -471,6 +471,49 @@ public final class BulletSelector {
     public static final double MAX_SKILLS_FILL = 0.95;
 
     /**
+     * Keeps only the LLM-picked skills the profile actually lists, written the profile's way
+     * ("Postgres" becomes the user's "PostgreSQL"). Matching is alias-aware via
+     * {@link KeywordScorer}; the same category is searched first, then the others, so a skill the
+     * LLM filed under the wrong row moves to the user's row instead of vanishing. Anything with
+     * no profile counterpart is invented: it goes into {@code dropped} and never renders.
+     */
+    public static Map<String, List<String>> profileSkillsOnly(Map<String, List<String>> selectedSkills,
+                                                              Map<String, List<String>> rawSkills,
+                                                              List<String> dropped) {
+        Map<String, List<String>> kept = new LinkedHashMap<>();
+        for (String key : SKILL_KEYS) kept.put(key, new ArrayList<>());
+        if (selectedSkills == null) return kept;
+        for (String key : SKILL_KEYS) {
+            List<String> order = new ArrayList<>(List.of(key));
+            for (String other : SKILL_KEYS) if (!other.equals(key)) order.add(other);
+            for (String pick : selectedSkills.getOrDefault(key, List.of())) {
+                String[] hit = findProfileSkill(pick, order, rawSkills);
+                if (hit == null) {
+                    dropped.add(pick);
+                } else if (!kept.get(hit[0]).contains(hit[1])) {
+                    kept.get(hit[0]).add(hit[1]);
+                }
+            }
+        }
+        return kept;
+    }
+
+    /** {category, profile item} for {@code pick}: exact-equivalent spellings beat a looser
+     *  "named inside" match anywhere, so "React" prefers "React" over "React Native". */
+    private static String[] findProfileSkill(String pick, List<String> order, Map<String, List<String>> rawSkills) {
+        for (boolean exact : new boolean[]{true, false}) {
+            for (String cat : order) {
+                for (String item : rawSkills.getOrDefault(cat, List.of())) {
+                    if (exact ? KeywordScorer.sameTerm(item, pick) : KeywordScorer.names(item, pick)) {
+                        return new String[]{cat, item};
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Skill-floor pass: each category must carry at least {@link #MIN_SKILLS_PER_CATEGORY}
      * items. The LLM's selected skills come first; the remainder is padded from the raw
      * profile skills (in their original order), de-duplicated.

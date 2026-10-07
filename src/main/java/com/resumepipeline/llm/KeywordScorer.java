@@ -71,6 +71,26 @@ public final class KeywordScorer {
         ALIASES.put("ai", "artificialintelligence");
     }
 
+    /**
+     * One-directional: text naming a key also covers each value, never the reverse. A bullet
+     * on PostgreSQL shows SQL; one saying only "SQL" does not show PostgreSQL. Text side only.
+     */
+    private static final Map<String, String> IMPLIES = Map.of(
+            "postgresql", "sql",
+            "mysql", "sql",
+            "sqlite", "sql",
+            "mssql", "sql",
+            "sqlserver", "sql",
+            "mariadb", "sql");
+
+    /**
+     * Plurals that name a different thing than their singular — "Teams" is the product, "team"
+     * is prose. A keyword spelled like this is never folded, so it needs the plural in the text.
+     */
+    private static final Set<String> NO_FOLD = Set.of(
+            "teams", "windows", "rails", "sales", "requests", "pages", "functions",
+            "sheets", "docs", "actions", "ads", "pandas");
+
     /** The punctuation-bearing subset, pre-filtered so the hot path does not re-scan the table. */
     private static final List<Map.Entry<String, String>> PUNCTUATED = ALIASES.entrySet().stream()
             .filter(e -> !e.getKey().chars().allMatch(Character::isLetterOrDigit))
@@ -127,13 +147,31 @@ public final class KeywordScorer {
     }
 
     /**
+     * True when {@code item} (one entry of a user's skills list) names {@code term}: equal
+     * after normalisation, or {@code term} is a run inside it ("React" in "React/Redux").
+     * Unlike {@link #mentions}, implications do not count — knowing PostgreSQL does not put
+     * "SQL" on the user's skills list.
+     */
+    public static boolean names(String item, String term) {
+        String canonical = canonical(term);
+        return !canonical.isBlank() && forms(item, false).contains(canonical);
+    }
+
+    /** True when both spell the same thing after normalisation ("Postgres" / "PostgreSQL"). */
+    public static boolean sameTerm(String a, String b) {
+        String ca = canonical(a);
+        return !ca.isBlank() && ca.equals(canonical(b));
+    }
+
+    /**
      * The single normalised form of a keyword or tag: every token glued together, so
      * "Amazon Web Services" and "AWS" both reduce to "amazonwebservices".
      */
     private static String canonical(String s) {
         List<String> tokens = tokenize(s);
         if (tokens.isEmpty()) return "";
-        return alias(String.join("", tokens));
+        String a = alias(String.join("", tokens));
+        return NO_FOLD.contains(a) ? a : fold(a);
     }
 
     /**
@@ -141,6 +179,10 @@ public final class KeywordScorer {
      * matches the bullet when its canonical form appears in this set.
      */
     private static Set<String> forms(String text) {
+        return forms(text, true);
+    }
+
+    private static Set<String> forms(String text, boolean withImplies) {
         List<String> tokens = tokenize(text);
         Set<String> forms = new HashSet<>();
         for (int i = 0; i < tokens.size(); i++) {
@@ -149,7 +191,16 @@ public final class KeywordScorer {
                 run.append(tokens.get(i + n));
                 // Glue first, alias second: "node" + "js" must become "nodejs" rather than
                 // "node" + the aliased "javascript".
-                forms.add(alias(run.toString()));
+                // Both spellings: a plural keyword folds, so the text must offer the folded form;
+                // a NO_FOLD keyword stays plural, so it must offer the raw one too.
+                String a = alias(run.toString());
+                forms.add(a);
+                forms.add(fold(a));
+            }
+        }
+        if (withImplies) {
+            for (Map.Entry<String, String> e : IMPLIES.entrySet()) {
+                if (forms.contains(e.getKey())) forms.add(e.getValue());
             }
         }
         return forms;
@@ -171,6 +222,16 @@ public final class KeywordScorer {
             if (!tok.isEmpty()) tokens.add(tok);
         }
         return tokens;
+    }
+
+    /**
+     * Drops a plural "s" ("apis" -> "api", "microservices" -> "microservice"). Words of three
+     * letters or fewer and "-ss"/"-us" endings are left alone, so "aws" and "css" (which would
+     * become "CS") stay intact. Both sides fold the same way, so "redis" -> "redi" is harmless.
+     */
+    private static String fold(String s) {
+        if (s.length() < 4 || !s.endsWith("s") || s.endsWith("ss") || s.endsWith("us")) return s;
+        return s.substring(0, s.length() - 1);
     }
 
     private static String alias(String s) {

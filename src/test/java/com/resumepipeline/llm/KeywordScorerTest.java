@@ -182,4 +182,66 @@ class KeywordScorerTest {
             assertTrue(score(withText("Machine failure and deep learning."), "machine learning") == 0);
         }
     }
+
+    @Nested
+    class PluralsAndImplies {
+
+        @Test
+        void pluralsFoldBothWays() {
+            assertTrue(KeywordScorer.mentions("Split it into microservices.", "microservice"));
+            assertTrue(KeywordScorer.mentions("Split it into a microservice.", "Microservices"));
+            assertTrue(KeywordScorer.mentions("Built REST APIs.", "API"));
+            assertTrue(KeywordScorer.mentions("Built a REST API.", "APIs"));
+            assertTrue(KeywordScorer.mentions("Built REST APIs.", "REST API"));
+        }
+
+        @Test
+        void foldingKeepsShortAndSibilantWordsIntact() {
+            assertTrue(!KeywordScorer.mentions("Styled it with CSS.", "CS"));
+            assertTrue(KeywordScorer.mentions("Cached in Redis.", "redis"));
+            assertTrue(KeywordScorer.mentions("Ran the fleet on AWS.", "Amazon Web Services"));
+            assertTrue(KeywordScorer.mentions("Deployed on Kubernetes.", "k8s"));
+            assertTrue(KeywordScorer.mentions("Migrated to Postgres.", "PostgreSQL"));
+        }
+
+        @Test
+        void productPluralsDoNotFoldIntoProse() {
+            assertTrue(!KeywordScorer.mentions("Led a team of four.", "Teams"));
+            assertTrue(!KeywordScorer.mentions("Used a sliding window.", "Windows"));
+            assertTrue(!KeywordScorer.mentions("Sent an HTTP request.", "Requests"));
+            assertTrue(KeywordScorer.mentions("Integrated with Microsoft Teams.", "Teams"));
+        }
+
+        @Test
+        void sqlDialectsImplySqlButNotTheReverse() {
+            assertTrue(KeywordScorer.mentions("Tuned PostgreSQL queries.", "SQL"));
+            assertTrue(KeywordScorer.mentions("Ran MySQL replicas.", "SQL"));
+            assertTrue(KeywordScorer.mentions("Moved to Postgres.", "SQL"));
+            assertTrue(!KeywordScorer.mentions("Wrote SQL queries.", "PostgreSQL"));
+            assertTrue(!KeywordScorer.mentions("Stored it in a NoSQL store.", "SQL"));
+            assertEquals(2, score(withText("Tuned PostgreSQL queries."), "sql"));
+        }
+
+        @Test
+        void existingGuaranteesStillHold() {
+            assertTrue(!KeywordScorer.mentions("Wrote it in C++.", "C"));
+            assertTrue(!KeywordScorer.mentions("Wrote it in C.", "C++"));
+            assertTrue(!KeywordScorer.mentions("Built it in JavaScript.", "Java"));
+            assertTrue(!KeywordScorer.mentions("Deployed on Google Cloud.", "Go"));
+            assertTrue(!KeywordScorer.mentions("Stored records in MongoDB.", "Go"));
+            assertTrue(!KeywordScorer.mentions("Runs on Kubernetes.", "Go"));
+        }
+
+        @Test
+        void namesIgnoresImplicationsAndKeepsGuarantees() {
+            assertTrue(KeywordScorer.names("React/Redux", "React"));
+            assertTrue(KeywordScorer.names("PostgreSQL", "Postgres"));
+            assertTrue(!KeywordScorer.names("PostgreSQL", "SQL"));
+            assertTrue(!KeywordScorer.names("JavaScript", "Java"));
+            assertTrue(!KeywordScorer.names("Google Cloud", "Go"));
+            assertTrue(!KeywordScorer.names("C++", "C"));
+            assertTrue(KeywordScorer.sameTerm("k8s", "Kubernetes"));
+            assertTrue(!KeywordScorer.sameTerm("React Native", "React"));
+        }
+    }
 }
