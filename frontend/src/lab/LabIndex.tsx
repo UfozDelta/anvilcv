@@ -24,6 +24,30 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    iso: '2026-10-07',
+    title: 'Project page, story-first bank',
+    status: 'prototype',
+    summary: (
+      <>
+        Generation now finds stories first and writes wordings for each, but the project page
+        still lists bullets by category. This pass puts stories in front, shows bank health
+        against the 12-story cap, what a run reads and what it dropped, and runs two models side
+        by side: lenses picked up front, or one general wording with lenses as detected tags.
+      </>
+    ),
+    protos: [
+      { to: '/lab/stories', name: 'Story bank', line: 'Stories with evidence and wordings, 12-slot health meter, generate inputs and run summary. Picker switches A Lenses / B General (1 / 2).' },
+    ],
+    fixes: [
+      'Stories are the unit: title, evidence quotes, lenses, then the wordings that compete for one slot on the page',
+      'A rail and label on each story say how many wordings exist and that only one prints',
+      'Bank health: 12 slots, usable count, thin-bank warning under 3, bank-full state with no model call',
+      'Older storyless bullets and dismissed stories (all wordings rejected) sit in their own sections',
+      'Generate shows its inputs (source fields, repo map subsystems sent, lenses) and a compact last-run summary',
+      'Design-review table compares the two lens models on the same bank',
+    ],
+  },
+  {
     iso: '2026-10-02',
     title: 'Post-login home + app nav',
     status: 'prototype',
