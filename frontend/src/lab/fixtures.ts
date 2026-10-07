@@ -260,6 +260,7 @@ export const LAB_APP: ApplicationResponse = {
   recruiterPending: false,
   pageCount: 2,
   pdfAvailable: true,
+  pdfStale: false,
   tectonicLog: null,
   outcome: 'interview',
   createdAt: '2026-09-02T14:10:00Z',

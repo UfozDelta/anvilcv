@@ -47,7 +47,7 @@ export function useApplicationDetail(id: string | undefined) {
   /** Groups whose "more from bank" rows are open. */
   const [bankOpen, setBankOpen] = useState<Set<string>>(new Set());
   /** An on-page bullet or heading was edited since the last render, so the PDF shows old text.
-   *  In-memory only: a reload forgets it. */
+   *  Instant local echo of the server's app.pdfStale, which is what survives a reload. */
   const [textStale, setTextStale] = useState(false);
   const { cfg } = useGenerationConfig();
 

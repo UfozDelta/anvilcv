@@ -640,6 +640,7 @@ public class ApplicationService {
         }
         a.setPipelineDurationMs(tRerender.stop());
         Application saved = repo.save(a);
+        syncPdfStale(saved, r);
         log.info("APP_RERENDER app={} ms={}", shortId(saved.getId()), a.getPipelineDurationMs());
         return saved;
     }
@@ -803,7 +804,24 @@ public class ApplicationService {
             a.setTectonicLog("FAILED: " + r.error() + "\n\n" + r.log());
             progress.emit("PDF compile failed: " + r.error());
         }
-        return repo.save(a);
+        Application saved = repo.save(a);
+        syncPdfStale(saved, r);
+        return saved;
+    }
+
+    /**
+     * After a rerender or refit: a fresh PDF is current; a failed compile left the old PDF in
+     * place under a new selection and LaTeX, so that PDF is out of date. Written by its own
+     * statement because save() never writes pdf_stale (see Application#pdfStale).
+     */
+    private void syncPdfStale(Application a, PdfCompiler.Result r) {
+        boolean stale = !r.success() && a.getPdfBlob() != null;
+        try {
+            repo.setPdfStale(a.getId(), stale);
+            a.setPdfStale(stale);
+        } catch (RuntimeException e) {
+            log.warn("Could not update pdf_stale for app {}: {}", shortId(a.getId()), e.getMessage());
+        }
     }
 
     private record AtsReport(List<String> matched, List<String> missing) {}

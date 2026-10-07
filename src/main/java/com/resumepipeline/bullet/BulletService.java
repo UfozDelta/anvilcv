@@ -104,6 +104,17 @@ public class BulletService {
         } catch (RuntimeException e) {
             log.warn("Could not flag applications stale after bullet edit: {}", e.getMessage());
         }
+        markPdfStaleFor(userId, bulletIds);
+    }
+
+    /** The stored PDF of every page printing one of these bullets no longer matches. Never fails the write. */
+    private void markPdfStaleFor(UUID userId, List<UUID> bulletIds) {
+        try {
+            String joined = bulletIds.stream().map(UUID::toString).collect(Collectors.joining(","));
+            applicationRepo.markPdfStaleForBullets(userId, joined);
+        } catch (RuntimeException e) {
+            log.warn("Could not flag application PDFs stale after bullet edit: {}", e.getMessage());
+        }
     }
 
     /**
@@ -151,6 +162,8 @@ public class BulletService {
         Bullet saved = repo.save(b);
         // Tags do not print, but text does — only a text change can invalidate a scorecard.
         if (text != null) markStaleFor(userId, List.of(bulletId));
+        // ...but tags do print in a project heading when its tech stack is blank, so the PDF can.
+        else if (tags != null) markPdfStaleFor(userId, List.of(bulletId));
         return saved;
     }
 

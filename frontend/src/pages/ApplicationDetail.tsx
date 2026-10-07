@@ -31,8 +31,10 @@ export function ApplicationDetail() {
   const app = s.app;
   const ogSelection = new Set(app.selectedBulletIds);
   const selectionDirty = !setsEqual(s.selectedIds, ogSelection);
-  // Either the selection changed or on-page text did — both mean the PDF no longer matches.
-  const dirty = selectionDirty || s.textStale;
+  // Either the selection changed or printed text did (here, or anywhere per the server) —
+  // both mean the PDF no longer matches.
+  const pdfStale = s.textStale || app.pdfStale;
+  const dirty = selectionDirty || pdfStale;
   const verdicts = Object.fromEntries(
     app.recruiterBulletVerdicts.map(v => [v.bulletId, v]),
   ) as Record<string, BulletVerdict>;
@@ -229,7 +231,7 @@ export function ApplicationDetail() {
               <div className="actionbar__line">
                 <span>{s.selectedLines} of {s.MAX_TOTAL_LINES} lines used</span>
                 <span className={`savestate ${dirty ? 'savestate--dirty' : 'savestate--clean'}`}>
-                  {selectionDirty ? 'Unsaved changes' : s.textStale ? 'PDF out of date' : 'Saved'}
+                  {selectionDirty ? 'Unsaved changes' : pdfStale ? 'PDF out of date' : 'Saved'}
                 </span>
               </div>
               <div className="meter meter--thick">

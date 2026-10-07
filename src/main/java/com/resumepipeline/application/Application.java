@@ -125,6 +125,14 @@ public class Application {
     @Column(name = "recruiter_stale", nullable = false)
     private boolean recruiterStale = false;
 
+    /**
+     * The stored PDF predates an edit to something it prints. Never written by save(): every
+     * service save writes the whole row, so a save of a row loaded before an edit would wipe the
+     * flag. Only ApplicationRepository's pdf-stale updates touch the column.
+     */
+    @Column(name = "pdf_stale", nullable = false, insertable = false, updatable = false)
+    private boolean pdfStale = false;
+
     /** Post-create recruiter pass still running. Not persisted - see ApplicationService.scoring. */
     @Transient
     private boolean recruiterPending;
@@ -233,6 +241,8 @@ public class Application {
     public void setRecruiterWeakestBulletId(UUID id) { this.recruiterWeakestBulletId = id; }
     public boolean isRecruiterStale() { return recruiterStale; }
     public void setRecruiterStale(boolean recruiterStale) { this.recruiterStale = recruiterStale; }
+    public boolean isPdfStale() { return pdfStale; }
+    public void setPdfStale(boolean pdfStale) { this.pdfStale = pdfStale; }
     public boolean isRecruiterPending() { return recruiterPending; }
     public void setRecruiterPending(boolean recruiterPending) { this.recruiterPending = recruiterPending; }
     public Integer getPageCount() { return pageCount; }

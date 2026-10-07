@@ -4,6 +4,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,14 +44,67 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
      * for real against production. A single string parameter has no such ambiguity.
      * {@code cast(... as uuid[])} rather than {@code ::uuid[]} because Hibernate reads a
      * {@code ::} in native SQL as a parameter marker.
+     *
+     * <p>{@code @Transactional} here because callers (BulletService) run outside a transaction,
+     * and a modifying query without one throws.
      */
+    @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
-            update applications set recruiter_stale = true
+            update application set recruiter_stale = true
             where user_id = :userId
               and recruiter_score is not null
               and recruiter_stale = false
               and selected_bullet_ids && cast(string_to_array(:bulletIds, ',') as uuid[])
             """, nativeQuery = true)
     int markRecruiterStaleForBullets(@Param("userId") UUID userId, @Param("bulletIds") String bulletIds);
+
+    // pdf_stale is written only by these statements (it is updatable=false on the entity), so a
+    // whole-row save of an Application loaded before an edit cannot wipe it. Same native-SQL and
+    // comma-joined-id conventions as markRecruiterStaleForBullets above. Only rows that have a
+    // PDF are flagged: with no PDF there is nothing to be out of date.
+
+    /** Pages that print any of these bullets. */
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update application set pdf_stale = true
+            where user_id = :userId
+              and pdf_stale = false
+              and pdf_blob is not null
+              and selected_bullet_ids && cast(string_to_array(:bulletIds, ',') as uuid[])
+            """, nativeQuery = true)
+    int markPdfStaleForBullets(@Param("userId") UUID userId, @Param("bulletIds") String bulletIds);
+
+    /**
+     * Pages that print any bullet of this project, and so its heading. REQUIRES_NEW because
+     * ProjectService.delete calls it inside its own transaction and swallows a failure here;
+     * joining that transaction would mark it rollback-only and fail the delete anyway.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update application set pdf_stale = true
+            where user_id = :userId
+              and pdf_stale = false
+              and pdf_blob is not null
+              and selected_bullet_ids && array(select b.id from bullet b where b.project_id = :projectId)
+            """, nativeQuery = true)
+    int markPdfStaleForProject(@Param("userId") UUID userId, @Param("projectId") UUID projectId);
+
+    /** Every page of this user's: the profile header and education print on all of them. */
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update application set pdf_stale = true
+            where user_id = :userId
+              and pdf_stale = false
+              and pdf_blob is not null
+            """, nativeQuery = true)
+    int markPdfStaleForUser(@Param("userId") UUID userId);
+
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query(value = "update application set pdf_stale = :stale where id = :id", nativeQuery = true)
+    int setPdfStale(@Param("id") UUID id, @Param("stale") boolean stale);
 }
