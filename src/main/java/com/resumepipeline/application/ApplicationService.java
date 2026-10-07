@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class ApplicationService {
@@ -318,7 +319,7 @@ public class ApplicationService {
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
         PipelineTimer tRender = PipelineTimer.start("LaTeX render");
-        String tex = renderer.render(userId, selected, projectById, selectedCourses, filledSkills);
+        String tex = renderer.render(userId, selected, projectById, selectedCourses, filledSkills, clean.keywords());
         tRender.stop();
 
         // Fire cover letter in parallel with tectonic compile — cover letter gets
@@ -594,7 +595,9 @@ public class ApplicationService {
         progress.emit("Re-rendering LaTeX with " + selected.size() + " selected bullets...");
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
         Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
-        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills);
+        // Stored JD keywords (matched + missing = the full list), read before they are recomputed below.
+        List<String> keywords = Stream.concat(Arrays.stream(a.getAtsMatched()), Arrays.stream(a.getAtsMissing())).toList();
+        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills, keywords);
         progress.emit("Compiling PDF via tectonic...");
         PdfCompiler.Result r = compiler.compile(tex);
 
@@ -772,7 +775,7 @@ public class ApplicationService {
 
         List<String> selectedCourses = a.getSelectedCourses() == null ? List.of() : Arrays.asList(a.getSelectedCourses());
         Map<String, List<String>> selectedSkills = parseSelectedSkills(a.getSelectedSkills());
-        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills);
+        String tex = renderer.render(userId, selected, projectById, selectedCourses, selectedSkills, keywordsLower);
         progress.emit("Compiling PDF via tectonic...");
         PdfCompiler.Result r = compiler.compile(tex);
 

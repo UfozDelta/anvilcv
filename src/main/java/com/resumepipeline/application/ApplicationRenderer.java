@@ -41,7 +41,8 @@ public class ApplicationRenderer {
     }
 
     public String render(UUID userId, List<Bullet> selectedInOrder, Map<UUID, Project> projectById,
-                         List<String> selectedCourses, Map<String, List<String>> selectedSkills) {
+                         List<String> selectedCourses, Map<String, List<String>> selectedSkills,
+                         Collection<String> keywords) {
         Profile p = profileService.get(userId);
         List<EducationEntry> education = profileService.readEducation(p);
 
@@ -71,7 +72,7 @@ public class ApplicationRenderer {
                 Map.entry("PORTFOLIO_LINK",   portfolioLatex(p.getPortfolioUrl())),
                 Map.entry("EDUCATION_ITEMS",  renderEducation(education, selectedCourses)),
                 Map.entry("EXPERIENCE_ITEMS", renderExperience(experienceBullets, projectById)),
-                Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById)),
+                Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById, keywords)),
                 Map.entry("SKILLS_LANGUAGES", selectedSkillValue(selectedSkills, "languages", p.getSkillsLanguages())),
                 Map.entry("SKILLS_FRAMEWORKS",selectedSkillValue(selectedSkills, "frameworks", p.getSkillsFrameworks())),
                 Map.entry("SKILLS_DATABASES", selectedSkillValue(selectedSkills, "databases", p.getSkillsDatabases())),
@@ -112,7 +113,7 @@ public class ApplicationRenderer {
                 Map.entry("PORTFOLIO_LINK",   ""),
                 Map.entry("EDUCATION_ITEMS",  ""),
                 Map.entry("EXPERIENCE_ITEMS", renderExperience(experienceBullets, projectById)),
-                Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById)),
+                Map.entry("PROJECT_ITEMS",    renderProjects(projectBullets, projectById, null)),
                 Map.entry("SKILLS_LANGUAGES", ""),
                 Map.entry("SKILLS_FRAMEWORKS",""),
                 Map.entry("SKILLS_DATABASES", ""),
@@ -186,7 +187,8 @@ public class ApplicationRenderer {
         return sb.toString();
     }
 
-    private String renderProjects(List<Bullet> selected, Map<UUID, Project> projectById) {
+    private String renderProjects(List<Bullet> selected, Map<UUID, Project> projectById,
+                                  Collection<String> keywords) {
         if (selected.isEmpty()) return "";
 
         LinkedHashMap<UUID, List<Bullet>> grouped = new LinkedHashMap<>();
@@ -199,8 +201,10 @@ public class ApplicationRenderer {
             Project p = projectById.get(g.getKey());
             String name = p == null ? "Project" : p.getName();
             // The raw techStack is prose written for the bullet-generation prompt; the heading
-            // needs the handful of technology names inside it. See TechStackSummary.
-            String shortStack = p == null ? "" : TechStackSummary.shorten(p.getTechStack());
+            // needs the handful of technology names inside it. See TechStackSummary. JD-matched
+            // terms go first so they survive its cap (no keywords: author's order).
+            String shortStack = p == null ? "" : TechStackSummary.shorten(p.getTechStack(),
+                    terms -> BulletSelector.keywordFirst(terms, keywords));
             String tagSummary = !shortStack.isBlank()
                     ? shortStack
                     : g.getValue().stream()

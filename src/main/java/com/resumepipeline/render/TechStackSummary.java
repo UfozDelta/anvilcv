@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,9 +88,18 @@ public final class TechStackSummary {
 
     /** Null/blank in, empty out — the caller falls back to bullet tags. */
     public static String shorten(String raw) {
+        return shorten(raw, UnaryOperator.identity());
+    }
+
+    /**
+     * Same, but {@code reorder} may rearrange the matched terms before the cap — e.g. JD
+     * keywords first, so a matched term wins one of the four slots. It must only reorder,
+     * never add. The unmatched fallback is left as is.
+     */
+    public static String shorten(String raw, UnaryOperator<List<String>> reorder) {
         if (raw == null || raw.isBlank()) return "";
 
-        List<String> all = matchAll(raw);
+        List<String> all = reorder.apply(matchAll(raw));
         if (!all.isEmpty()) {
             return String.join(", ", all.subList(0, Math.min(MAX_TERMS, all.size())));
         }
