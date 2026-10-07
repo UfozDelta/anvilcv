@@ -1042,7 +1042,7 @@ public class ApplicationService {
      * "120 commits", "40 unit tests"). The bank still holds PENDING bullets generated before the
      * vanity filter existed. APPROVED ones stay: the user chose them. Hand-picks and locks bypass this.
      */
-    static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
+    public static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
         List<Bullet> kept = bank.stream()
                 .filter(b -> "APPROVED".equals(b.getStatus()) || BulletTextRules.vanityCount(b.getText()) == null)
                 .toList();

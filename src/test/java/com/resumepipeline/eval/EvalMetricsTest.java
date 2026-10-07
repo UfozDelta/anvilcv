@@ -16,7 +16,7 @@ class EvalMetricsTest {
     private static final GenerationConfig CFG = new GenerationConfig();
 
     private static EvalItem item(UUID project, String category, String text) {
-        return new EvalItem(project, "p", "PROJECT", category, "PENDING", List.of(), text);
+        return new EvalItem(project, "p", "PROJECT", category, "PENDING", List.of(), text, null);
     }
 
     /** ~85-char single-line bullet: inside the default one-line band. */

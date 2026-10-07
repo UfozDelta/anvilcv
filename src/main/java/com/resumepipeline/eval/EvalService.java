@@ -86,7 +86,7 @@ public class EvalService {
         for (Project p : projects.findAllByUserIdOrderByCreatedAtDesc(userId)) {
             for (Bullet b : bullets.findByProjectIdOrderByCreatedAtAsc(p.getId())) {
                 items.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
-                        Arrays.asList(b.getTags()), b.getText()));
+                        Arrays.asList(b.getTags()), b.getText(), b.getStoryId()));
             }
         }
         if (items.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No bullets to snapshot");
@@ -135,7 +135,7 @@ public class EvalService {
                 log.info("EVAL_GEN set={} project={} lenses={}", run.getLabel(), p.getName(), lenses);
                 for (Bullet b : generator.generate(p.getUserId(), p.getId(), lenses, ProgressLog.noOp())) {
                     out.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
-                            Arrays.asList(b.getTags()), b.getText()));
+                            Arrays.asList(b.getTags()), b.getText(), b.getStoryId()));
                 }
             }
             run.setItems(write(out));
@@ -234,12 +234,20 @@ public class EvalService {
         return out;
     }
 
+    /** Same bank the generate pipeline ranks from: no REJECTED, no unreviewed vanity, variants collapsed. */
     static double coverage(List<EvalItem> items, UUID userId, Map<UUID, UUID> ownerOf,
                            Set<String> kw, List<String> lenses) {
         List<Bullet> bank = items.stream()
                 .filter(i -> userId.equals(ownerOf.get(i.projectId())))
-                .map(i -> new Bullet(i.projectId(), i.text(), i.tags().toArray(new String[0]), i.category()))
+                .filter(i -> !"REJECTED".equals(i.status()))
+                .map(i -> {
+                    Bullet b = new Bullet(i.projectId(), i.text(), i.tags().toArray(new String[0]), i.category());
+                    b.setStatus(i.status());
+                    b.setStoryId(i.storyId());
+                    return b;
+                })
                 .toList();
+        bank = ApplicationService.autoSelectable(bank, ProgressLog.noOp());
         Set<String> covered = new HashSet<>();
         for (Bullet c : ApplicationService.preFilter(bank, kw, lenses)) covered.addAll(KeywordScorer.matched(c, kw));
         return (double) covered.size() / kw.size();
