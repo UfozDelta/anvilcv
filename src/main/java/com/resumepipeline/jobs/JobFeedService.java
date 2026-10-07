@@ -41,6 +41,10 @@ public class JobFeedService {
 
     static final int MAX_PAGE_SIZE = 100;
     static final int TOP_TAGS = 30;
+    /** Public query params, so bounded: stack filter values and their length, and q/location. */
+    static final int MAX_STACK_FILTERS = 20;
+    static final int MAX_TAG_CHARS = 50;
+    static final int MAX_SEARCH_CHARS = 100;
 
     private final JobPostingRepository repo;
     private final String secret;
@@ -80,9 +84,10 @@ public class JobFeedService {
         }
         if (repo.existsBySourceAndExternalId(source, externalId)) return false;
 
-        List<String> stack = new ArrayList<>();
+        List<String> raw = new ArrayList<>();
         JsonNode s = job.get("stack");
-        if (s != null && s.isArray()) s.forEach(n -> { if (n.isTextual() && !n.asText().isBlank()) stack.add(n.asText()); });
+        if (s != null && s.isArray()) s.forEach(n -> { if (n.isTextual()) raw.add(n.asText()); });
+        List<String> stack = cleanStack(raw);
 
         try {
             repo.save(new JobPosting(source, externalId, text(job, "title"), text(job, "company"),
@@ -131,7 +136,7 @@ public class JobFeedService {
         if (source != null && !source.isBlank()) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("source"), source));
         }
-        String q = f.q();
+        String q = cap(f.q(), MAX_SEARCH_CHARS);
         if (q != null && !q.isBlank()) {
             String like = "%" + q.toLowerCase(Locale.ROOT) + "%";
             spec = spec.and((root, query, cb) -> cb.or(
@@ -139,7 +144,7 @@ public class JobFeedService {
                     cb.like(cb.lower(root.get("company")), like),
                     cb.like(cb.lower(root.get("role")), like)));
         }
-        String location = f.location();
+        String location = cap(f.location(), MAX_SEARCH_CHARS);
         boolean hasLocation = location != null && !location.isBlank();
         if (hasLocation || f.remote()) {
             String like = hasLocation ? "%" + location.toLowerCase(Locale.ROOT) + "%" : null;
@@ -151,7 +156,8 @@ public class JobFeedService {
             });
         }
         if (f.stack() != null && f.stack().stream().anyMatch(t -> t != null && !t.isBlank())) {
-            spec = spec.and(anyTag(f.stack()));
+            spec = spec.and(anyTag(normalizedTags(f.stack()).stream()
+                    .limit(MAX_STACK_FILTERS).map(t -> cap(t, MAX_TAG_CHARS)).toList()));
         }
         if (f.skills() != null) spec = spec.and(anyTag(f.skills()));
         if (f.days() != null && f.days() > 0) {
@@ -163,11 +169,7 @@ public class JobFeedService {
 
     /** Postings whose stack holds any of {@code tags}, ignoring case. No usable tags matches nothing. */
     private static Specification<JobPosting> anyTag(Collection<String> tags) {
-        List<String> patterns = tags.stream()
-                .filter(t -> t != null)
-                .map(t -> t.trim().toLowerCase(Locale.ROOT).replace(",", ""))
-                .filter(t -> !t.isEmpty())
-                .distinct()
+        List<String> patterns = normalizedTags(tags).stream()
                 .map(t -> "%," + t.replace("!", "!!").replace("%", "!%").replace("_", "!_") + ",%")
                 .toList();
         return (root, query, cb) -> {
@@ -177,6 +179,35 @@ public class JobFeedService {
                     cb.function("array_to_string", String.class, root.get("stack"), cb.literal(","))), ","));
             return cb.or(patterns.stream().map(p -> cb.like(joined, p, '!')).toArray(Predicate[]::new));
         };
+    }
+
+    /** Trimmed, lower-cased, comma-free and distinct; blanks dropped. */
+    private static List<String> normalizedTags(Collection<String> tags) {
+        return tags.stream()
+                .filter(t -> t != null)
+                .map(t -> t.trim().toLowerCase(Locale.ROOT).replace(",", ""))
+                .filter(t -> !t.isEmpty())
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * Stack tags as stored and shown: comma-free (the tag filter fences tags with commas),
+     * trimmed, blanks dropped, and the first spelling of each case-insensitive repeat kept.
+     */
+    public static List<String> cleanStack(Collection<String> tags) {
+        Set<String> seen = new HashSet<>();
+        List<String> out = new ArrayList<>();
+        for (String t : tags) {
+            if (t == null) continue;
+            String c = t.replace(",", "").trim();
+            if (!c.isEmpty() && seen.add(c.toLowerCase(Locale.ROOT))) out.add(c);
+        }
+        return out;
+    }
+
+    private static String cap(String s, int max) {
+        return s == null || s.length() <= max ? s : s.substring(0, max);
     }
 
     /** The most common stack tags, most used first; spelled as stored, merged across case. */

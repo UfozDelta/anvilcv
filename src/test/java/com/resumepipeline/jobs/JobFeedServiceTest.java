@@ -244,6 +244,40 @@ class JobFeedServiceTest {
     }
 
     @Test
+    void ingestCleansStackTags() throws Exception {
+        service.ingest(json("""
+                {"source":"linkedin","id":"43","url":"https://x.test/43",
+                 "stack":[" Java ","java","C,C++","  ","React","REACT"]}"""));
+
+        ArgumentCaptor<JobPosting> saved = ArgumentCaptor.forClass(JobPosting.class);
+        verify(repo).save(saved.capture());
+        assertThat(saved.getValue().getStack()).containsExactly("Java", "CC++", "React");
+    }
+
+    @Test
+    void stackFilterIsCappedAfterDedup() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        List<String> stack = new java.util.ArrayList<>();
+        for (int i = 0; i < 30; i++) stack.add(" Tag" + (i / 2) + " ");   // 15 distinct, each twice
+        for (int i = 0; i < 10; i++) stack.add("x".repeat(80) + i);
+        service.spec(null, new JobFeedService.JobFilter(null, null, false, null, stack, null), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        // 20 kept: 15 short tags, then 5 long ones cut to 50 chars, which collapse into one pattern.
+        verify(cb, times(16)).like(any(), anyString(), anyChar());
+        verify(cb).like(any(), eq("%," + "x".repeat(JobFeedService.MAX_TAG_CHARS) + ",%"), eq('!'));
+    }
+
+    @Test
+    void searchTextIsCapped() {
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        service.spec(null, new JobFeedService.JobFilter("a".repeat(150), null, false, null, null, null), null)
+                .toPredicate(root(cb), mock(CriteriaQuery.class), cb);
+
+        verify(cb, times(3)).like(any(), eq("%" + "a".repeat(JobFeedService.MAX_SEARCH_CHARS) + "%"));
+    }
+
+    @Test
     void skillsOfIncludesTheAiAndIntegrationsRow() {
         com.resumepipeline.profile.Profile p = new com.resumepipeline.profile.Profile();
         p.setSkillsLanguages("Java");

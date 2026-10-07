@@ -43,9 +43,11 @@ public class JobFeedController {
                          String posted, String spotted, String url, String companyUrl, String role,
                          List<String> stack, Instant receivedAt, boolean saved, List<String> matched) {
         static JobDto of(JobPosting j, boolean saved, List<String> skills) {
+            // Rows stored before ingest cleaned tags can still repeat one in another case.
+            List<String> stack = JobFeedService.cleanStack(List.of(j.getStack()));
             return new JobDto(j.getId(), j.getSource(), j.getTitle(), j.getCompany(), j.getLocation(),
                     j.getPosted(), j.getSpotted(), j.getUrl(), j.getCompanyUrl(), j.getRole(),
-                    List.of(j.getStack()), j.getReceivedAt(), saved, JobFeedService.matchedTags(j.getStack(), skills));
+                    stack, j.getReceivedAt(), saved, JobFeedService.matchedTags(stack.toArray(String[]::new), skills));
         }
     }
 
