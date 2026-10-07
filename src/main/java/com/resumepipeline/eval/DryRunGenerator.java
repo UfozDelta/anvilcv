@@ -9,7 +9,9 @@ import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.BulletService;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.LlmUsageLogRepository;
 import com.resumepipeline.llm.LlmUsageService;
+import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.ProjectRepository;
 import com.resumepipeline.project.ProjectService;
@@ -40,15 +42,21 @@ import java.util.UUID;
  * <p>The real line measurer is replaced too: shadow-mode diagnostics would queue a tectonic
  * compile on the semaphore user previews share, for rows the stand-in repo throws away.
  *
+ * <p>Token spend is logged as {@value #USAGE_SOURCE}, not bullet_generation, so admin cost
+ * views keep eval runs apart from real users' generation. The per-lens fallback is off: an eval
+ * must score the story generator, not quietly score the old path when the story pass fails.
+ *
  * <p>Coupling to the generation code is only BulletService's constructor and generateBank's
  * signature; a change to either is a compile error here, not a silent behavior change.
  */
 @Component
 public class DryRunGenerator {
 
+    static final String USAGE_SOURCE = "eval_generation";
+
     private final BulletService generator;
 
-    public DryRunGenerator(ProjectService projectService, LlmClient llm, LlmUsageService usage,
+    public DryRunGenerator(ProjectService projectService, LlmClient llm, LlmUsageLogRepository usageRepo,
                            GenerationConfigService configService, ProjectRepository projectRepo,
                            ApplicationRenderer renderer, PdfCompiler compiler,
                            ApplicationRepository applicationRepo) {
@@ -58,10 +66,17 @@ public class DryRunGenerator {
                 return Map.of();
             }
         };
+        LlmUsageService usage = new LlmUsageService(usageRepo) {
+            @Override
+            public void record(UUID userId, String source, TokenAccumulator tokens, UUID applicationId, UUID projectId) {
+                super.record(userId, USAGE_SOURCE, tokens, applicationId, projectId);
+            }
+        };
         this.generator = new BulletService(
                 inMemory(BulletRepository.class), projectService, llm, usage, configService,
                 projectRepo, renderer, compiler, noMeasure,
                 inMemory(BulletMeasureDiagnosticRepository.class), applicationRepo);
+        this.generator.disableLensFallback();
     }
 
     /** Unsaved bullets the current generator writes for this project and these lenses. */

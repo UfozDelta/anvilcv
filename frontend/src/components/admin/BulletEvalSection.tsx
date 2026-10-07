@@ -214,7 +214,7 @@ export function BulletEvalSection() {
         {reference && (
           <div style={{ marginTop: 20 }}>
             <p style={note}>
-              Dry-run generate (spends LLM tokens, logged as bullet_generation) over the lenses
+              Dry-run generate (spends LLM tokens, logged as eval_generation) over the lenses
               <b> {reference.label}</b> has for each picked project:
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>

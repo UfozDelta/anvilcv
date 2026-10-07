@@ -86,6 +86,22 @@ public abstract class BaseLlmClient implements LlmClient {
         }
     }
 
+    /**
+     * One extra plain call when a reply came back but would not parse. callJsonWithRetry only
+     * covers failed calls; a malformed reply (the OpenAI-compatible path has no schema
+     * enforcement) used to lose the whole step. Plain callJson, not the retrying one, so a
+     * site makes at most three calls.
+     */
+    private String retryMalformed(String model, String prompt, SchemaSpec schema, double temperature,
+                                  ProgressLog progress, TokenAccumulator tokens, String label, LlmParseException e) {
+        log.warn("LLM_RETRY label={} cause=malformed {}", label, LogText.abbreviate(e.getMessage(), 120));
+        progress.emit(label + ": unreadable reply, retrying once...");
+        long start = System.currentTimeMillis();
+        String json = callJson(model, prompt, schema, temperature, progress, tokens, false, label);
+        logLlmCall(model, label, tokens, start);
+        return json;
+    }
+
     private void logLlmCall(String model, String label, TokenAccumulator tokens, long start) {
         long ms = System.currentTimeMillis() - start;
         TokenAccumulator.CallTokens t = tokens != null ? tokens.lastCall() : null;
@@ -248,7 +264,7 @@ public abstract class BaseLlmClient implements LlmClient {
         progress.emit("Calling LLM for category: " + req.category() + "...");
         int target = experience ? 8 : 4;
         String sourceContext = contextBlock + repoBlock + focusBlock;
-        FilterResult first = callAndFilter(prompt, schema, target, cfg, progress, tokens, sourceContext);
+        FilterResult first = callAndFilter(prompt, schema, target, cfg, progress, tokens, sourceContext, false);
         List<GeneratedBullet> kept = new ArrayList<>(first.kept());
 
         // One recovery pass when the filter left us short: repair what it rejected — wrong
@@ -283,7 +299,7 @@ public abstract class BaseLlmClient implements LlmClient {
                     + first.repairable().size() + " rejected, requesting " + newNeeded + " new...");
 
             String recoveryPrompt = prompt + recoveryNote(first.repairable(), kept, newNeeded, cfg);
-            FilterResult second = callAndFilter(recoveryPrompt, schema, deficit, cfg, progress, tokens, sourceContext);
+            FilterResult second = callAndFilter(recoveryPrompt, schema, deficit, cfg, progress, tokens, sourceContext, false);
 
             List<String> keptTexts = new ArrayList<>(kept.stream().map(GeneratedBullet::text).toList());
             int added = 0;
@@ -382,7 +398,13 @@ public abstract class BaseLlmClient implements LlmClient {
         progress.emit("Finding the project's strongest stories...");
         String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(),
                 progress, tokens, false, "Stories");
-        StoriesEnvelope env = readLenient(json, StoriesEnvelope.class, "stories");
+        StoriesEnvelope env;
+        try {
+            env = readLenient(json, StoriesEnvelope.class, "stories");
+        } catch (LlmParseException e) {
+            env = readLenient(retryMalformed(generateModel(), prompt, schema, cfg.getTemperature(),
+                    progress, tokens, "Stories", e), StoriesEnvelope.class, "stories");
+        }
         StoryResult result = validateStories(env.stories, req.lenses(), sourceContext(src));
         int returned = env.stories == null ? 0 : env.stories.size();
         log.info("BULLET_STORIES kind={} returned={} kept={} unsupported={} in_tok={} out_tok={}",
@@ -489,7 +511,7 @@ public abstract class BaseLlmClient implements LlmClient {
         // Numbers are checked against the whole source, not just the story's quotes: a true metric
         // the model forgot to quote as evidence must not be cut as invented.
         String sourceContext = sourceContext(src);
-        FilterResult first = callAndFilter(prompt, schema, expected, cfg, progress, tokens, sourceContext);
+        FilterResult first = callAndFilter(prompt, schema, expected, cfg, progress, tokens, sourceContext, true);
         List<GeneratedBullet> kept = new ArrayList<>(first.kept());
         Cuts cuts = first.cuts();
         int repaired = 0;
@@ -498,16 +520,22 @@ public abstract class BaseLlmClient implements LlmClient {
         // sentence). Never a top-up: asking for N more bullets is how padding gets in.
         if (!first.repairable().isEmpty()) {
             progress.emit("Recovery: repairing " + first.repairable().size() + " rejected bullet(s)...");
-            FilterResult second = callAndFilter(prompt + recoveryNote(first.repairable(), kept, 0, cfg),
-                    schema, first.repairable().size(), cfg, progress, tokens, sourceContext);
-            List<String> keptTexts = new ArrayList<>(kept.stream().map(GeneratedBullet::text).toList());
-            for (GeneratedBullet g : second.kept()) {
-                if (BulletTextRules.isNearDuplicate(g.text(), keptTexts, BulletTextRules.CROSS_LENS_THRESHOLD)) continue;
-                keptTexts.add(g.text());
-                kept.add(g);
-                repaired++;
+            // A failed repair must not throw away the first pass, which is already paid for.
+            try {
+                FilterResult second = callAndFilter(prompt + recoveryNote(first.repairable(), kept, 0, cfg),
+                        schema, first.repairable().size(), cfg, progress, tokens, sourceContext, false);
+                List<String> keptTexts = new ArrayList<>(kept.stream().map(GeneratedBullet::text).toList());
+                for (GeneratedBullet g : second.kept()) {
+                    if (BulletTextRules.isNearDuplicate(g.text(), keptTexts, BulletTextRules.CROSS_LENS_THRESHOLD)) continue;
+                    keptTexts.add(g.text());
+                    kept.add(g);
+                    repaired++;
+                }
+                cuts = cuts.plus(second.cuts());
+            } catch (RuntimeException e) {
+                log.warn("BULLET_REPAIR_FAILED cause={}", LogText.abbreviate(e.getMessage(), 120));
+                progress.emit("Recovery failed - keeping the " + kept.size() + " bullet(s) that already passed.");
             }
-            cuts = cuts.plus(second.cuts());
         }
 
         List<GeneratedBullet> out = attachToStories(kept, stories);
@@ -776,13 +804,15 @@ public abstract class BaseLlmClient implements LlmClient {
     // progress param lets us emit per-bullet filter decisions without exposing bullet text.
     private FilterResult callAndFilter(String prompt, SchemaSpec schema,
                                        int target, GenerationConfig cfg, ProgressLog progress, TokenAccumulator tokens,
-                                       String sourceContext) {
+                                       String sourceContext, boolean retryMalformed) {
         String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Bullets");
         BulletsEnvelope env;
         try {
-            env = mapper.readValue(json, BulletsEnvelope.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse LLM bullet response: " + json, e);
+            env = parseBullets(json);
+        } catch (LlmParseException e) {
+            if (!retryMalformed) throw e;
+            env = parseBullets(retryMalformed(generateModel(), prompt, schema, cfg.getTemperature(),
+                    progress, tokens, "Bullets", e));
         }
         if (env.bullets == null) {
             log.warn("LLM bullet response had no 'bullets' array: {}", LogText.abbreviate(json, 80));
@@ -1594,13 +1624,21 @@ public abstract class BaseLlmClient implements LlmClient {
         return readLenient(json, ProjectSummaryResult.class, "project summary");
     }
 
+    private BulletsEnvelope parseBullets(String json) {
+        try {
+            return mapper.readValue(json, BulletsEnvelope.class);
+        } catch (Exception e) {
+            throw new LlmParseException("Failed to parse LLM bullet response: " + json, e);
+        }
+    }
+
     private <T> T readLenient(String json, Class<T> type, String what) {
         try {
             return mapper.readerFor(type)
                     .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                     .readValue(json);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse " + what + ": " + json, e);
+            throw new LlmParseException("Failed to parse " + what + ": " + json, e);
         }
     }
 

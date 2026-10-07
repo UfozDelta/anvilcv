@@ -8,6 +8,7 @@ import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.LlmParseException;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.obs.LogText;
@@ -53,6 +54,8 @@ public class BulletService {
     // Editing a bullet changes what is printed on every page that already renders it, so the
     // recruiter scorecard for those pages stops describing reality — see markStaleFor below.
     private final ApplicationRepository applicationRepo;
+    // See generateBank: off for the eval dry run, which must measure the story generator only.
+    private boolean lensFallback = true;
 
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
                          LlmUsageService llmUsageService, GenerationConfigService configService,
@@ -70,6 +73,11 @@ public class BulletService {
         this.renderer = renderer;
         this.compiler = compiler;
         this.applicationRepo = applicationRepo;
+    }
+
+    /** Story-pass failures then fail the run instead of falling back to per-lens generation. */
+    public void disableLensFallback() {
+        lensFallback = false;
     }
 
     /**
@@ -477,6 +485,11 @@ public class BulletService {
      * every lens the project barely touched. A lens no story fits now gets no bullets.
      *
      * <p>Additive like before: nothing already in the bank, APPROVED or not, is changed.
+     *
+     * <p>If either story call still returns unreadable JSON after its one retry, the run falls
+     * back to the old one-call-per-lens path rather than returning nothing. Only on parse
+     * failures: a timeout, quota or auth error would just fail N more times. Nothing is saved
+     * before both story calls succeed, so a fallback never stacks on partial story output.
      */
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, List<String> subsystems,
                                      ProgressLog progress) {
@@ -508,6 +521,13 @@ public class BulletService {
                 return List.of();
             }
             result = llm.writeStoryBullets(req, stories, progress, tokens);
+        } catch (LlmParseException e) {
+            if (!lensFallback) throw e;
+            log.warn("BULLET_FALLBACK project={} lenses={} cause={}", projectId, categories,
+                    LogText.abbreviate(e.getMessage(), 120));
+            progress.emit("Story pass returned unreadable output - falling back to one call per lens.");
+            return generatePerLens(userId, projectId, categories, subsystems,
+                    existing.stream().map(Bullet::getText).toList(), progress, e);
         } finally {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
         }
@@ -522,6 +542,37 @@ public class BulletService {
         List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(),
                 existing.stream().map(Bullet::getText).toList(), progress);
         progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
+        return saved;
+    }
+
+    /**
+     * The pre-story bank path, kept as generateBank's fallback. Lenses run one after another;
+     * a lens whose reply is still unreadable is skipped, any other failure ends the run. Every
+     * lens is judged against the same stored-bank snapshot at the strict floor, and against its
+     * siblings' output only at {@link BulletTextRules#CROSS_LENS_THRESHOLD} (see saveDeduped).
+     */
+    private List<Bullet> generatePerLens(UUID userId, UUID projectId, List<String> categories,
+                                         List<String> subsystems, List<String> bankSnapshot,
+                                         ProgressLog progress, LlmParseException storyFailure) {
+        List<RawGeneration> results = new ArrayList<>();
+        for (String c : categories) {
+            try {
+                results.add(generateBulletsOnly(userId, projectId, c,
+                        categories.stream().filter(o -> !o.equals(c)).toList(), subsystems, progress));
+            } catch (LlmParseException e) {
+                log.warn("BULLET_FALLBACK_LENS_FAILED project={} lens={}", projectId, c);
+                progress.emit("Lens " + c + ": unreadable output - skipped.");
+            }
+        }
+        if (results.isEmpty()) throw storyFailure;
+        recordMeasureDiagnostics(userId, projectId, results, progress);
+        List<String> siblingTexts = new ArrayList<>();
+        List<Bullet> saved = new ArrayList<>();
+        for (RawGeneration gen : results) {
+            saved.addAll(saveDeduped(userId, projectId, gen, new ArrayList<>(bankSnapshot), siblingTexts, progress));
+        }
+        progress.emit("Done (per-lens fallback) - generated " + saved.size() + " bullets across "
+                + results.size() + " of " + categories.size() + " lenses.");
         return saved;
     }
 

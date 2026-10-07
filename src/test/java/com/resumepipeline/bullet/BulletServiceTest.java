@@ -2,6 +2,7 @@ package com.resumepipeline.bullet;
 
 import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.llm.LlmClient;
+import com.resumepipeline.llm.LlmParseException;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.progress.ProgressLog;
@@ -244,6 +245,67 @@ class BulletServiceTest {
         assertNotNull(out.get(0).getStoryId());
         assertEquals(out.get(0).getStoryId(), out.get(1).getStoryId());
         assertNotEquals(out.get(0).getStoryId(), out.get(2).getStoryId());
+    }
+
+    @Test
+    void unreadableStoryPassFallsBackToOneCallPerLens() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        when(measurer.measure(any())).thenReturn(java.util.Map.of());
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        when(llm.writeStoryBullets(any(), any(), any(), any())).thenThrow(new LlmParseException("bad json", null));
+        when(llm.generateBullets(argThat(r -> r != null && "backend".equals(r.category())), any(), any()))
+                .thenReturn(new LlmClient.BulletGenerationResult(List.of(new LlmClient.GeneratedBullet(
+                        "Built a ledger service that settles payouts nightly.", List.of(), null, null))));
+        when(llm.generateBullets(argThat(r -> r != null && "data".equals(r.category())), any(), any()))
+                .thenThrow(new LlmParseException("bad json", null));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        List<String> progress = new java.util.ArrayList<>();
+
+        List<Bullet> out = service.generateBank(user, proj, List.of("backend", "data"), progress::add);
+
+        assertEquals(1, out.size(), "the unreadable lens is skipped, the other one is kept");
+        assertEquals("backend", out.get(0).getCategory());
+        verify(llm, times(2)).generateBullets(any(), any(), any());
+        assertTrue(progress.stream().anyMatch(m -> m.contains("falling back")));
+        assertTrue(progress.stream().anyMatch(m -> m.contains("data") && m.contains("skipped")));
+    }
+
+    @Test
+    void fallbackRethrowsWhenEveryLensFails() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        LlmParseException storyFailure = new LlmParseException("bad", null);
+        when(llm.findStories(any(), any(), any())).thenThrow(storyFailure);
+        when(llm.generateBullets(any(), any(), any())).thenThrow(new LlmParseException("bad", null));
+
+        assertSame(storyFailure, assertThrows(LlmParseException.class,
+                () -> service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())));
+        verify(repo, never()).save(any());
+    }
+
+    @Test
+    void nonParseStoryFailureDoesNotFallBack() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(llm.findStories(any(), any(), any())).thenThrow(new RuntimeException("LLM call timed out"));
+
+        assertThrows(RuntimeException.class,
+                () -> service.generateBank(user, proj, List.of("backend", "data"), ProgressLog.noOp()));
+        verify(llm, never()).generateBullets(any(), any(), any());
+    }
+
+    @Test
+    void fallbackCanBeDisabled() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(llm.findStories(any(), any(), any())).thenThrow(new LlmParseException("bad", null));
+        service.disableLensFallback();
+
+        assertThrows(LlmParseException.class,
+                () -> service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp()));
+        verify(llm, never()).generateBullets(any(), any(), any());
     }
 
     @Test

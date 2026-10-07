@@ -100,7 +100,7 @@ public class EvalService {
      * Starts a dry-run generation for these projects, each over the lenses the reference set
      * holds for it, so the two sets cover the same ground. Returns at once; the set flips to
      * DONE or FAILED when the background run ends. Spends real LLM tokens (logged as
-     * bullet_generation under the project owner).
+     * eval_generation under the project owner).
      */
     public EvalSet startGeneration(UUID referenceSetId, List<UUID> projectIds, String note) {
         if (projectIds == null || projectIds.isEmpty()) {
