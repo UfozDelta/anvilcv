@@ -1012,22 +1012,6 @@ public class ApplicationService {
     }
 
     /**
-     * Drop bullets that restate a claim an earlier bullet in {@code byScoreDesc} already makes,
-     * keeping the first — which, given the caller sorts by keyword score, is the framing that
-     * matches THIS job description best.
-     *
-     * <p>The bank deliberately holds several framings of the same work, one per category lens
-     * (see {@code BulletTextRules.CROSS_LENS_THRESHOLD}). That is what makes a project reusable
-     * across different jobs, but all of those framings score similarly on raw keyword overlap,
-     * so without this the per-project top-4 could be four wordings of one achievement — spending
-     * the ranking LLM's candidate slots on a choice it has already been made for it, and starving
-     * the other work on the project.
-     *
-     * <p>This is where the variant set collapses, and it is the right place: the JD is known
-     * here and it is what decides which framing survives. {@code BulletSelector} still runs its
-     * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
-     */
-    /**
      * The deterministic half of selection: what the ranking LLM gets to choose from. Top 4 per
      * project by lensed keyword score (variants collapsed), then global top 25. Public so the
      * admin bullet eval can replay it on a candidate bank without an LLM call.
@@ -1070,6 +1054,22 @@ public class ApplicationService {
         return kept;
     }
 
+    /**
+     * Drop bullets that restate a claim an earlier bullet in {@code byScoreDesc} already makes,
+     * keeping the first — which, given the caller sorts by keyword score, is the framing that
+     * matches THIS job description best.
+     *
+     * <p>The bank deliberately holds several framings of the same work, one per category lens
+     * (see {@code BulletTextRules.CROSS_LENS_THRESHOLD}). That is what makes a project reusable
+     * across different jobs, but all of those framings score similarly on raw keyword overlap,
+     * so without this the per-project top-4 could be four wordings of one achievement — spending
+     * the ranking LLM's candidate slots on a choice it has already been made for it, and starving
+     * the other work on the project.
+     *
+     * <p>This is where the variant set collapses, and it is the right place: the JD is known
+     * here and it is what decides which framing survives. {@code BulletSelector} still runs its
+     * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
+     */
     static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
         List<Bullet> kept = new ArrayList<>();
         List<String> keptTexts = new ArrayList<>();

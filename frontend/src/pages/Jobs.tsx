@@ -55,20 +55,20 @@ export function Jobs() {
   }, []);
 
   const load = useCallback(async () => {
-    const mine = ++gen.current;
+    const token = ++gen.current;
     setLoading(true);
     setErr(null);
     try {
       const r = await api.get<JobList>(query(source, filters, 0));
-      if (mine !== gen.current) return;
+      if (token !== gen.current) return;
       setJobs(r.jobs);
       setTotal(r.total);
       setCounts(r.counts ?? null);
       setPage(0);
     } catch (e) {
-      if (mine === gen.current) setErr(`Could not load jobs: ${(e as Error).message}`);
+      if (token === gen.current) setErr(`Could not load jobs: ${(e as Error).message}`);
     } finally {
-      if (mine === gen.current) setLoading(false);
+      if (token === gen.current) setLoading(false);
     }
   }, [source, q, location, remote, days, stack, mine]);
 
@@ -81,10 +81,10 @@ export function Jobs() {
   // Poll the first page and put anything unseen on top; loaded pages below stay put.
   useEffect(() => {
     const t = setInterval(async () => {
-      const mine = gen.current;
+      const token = gen.current;
       try {
         const r = await api.get<JobList>(query(source, filters, 0));
-        if (mine !== gen.current) return;
+        if (token !== gen.current) return;
         setJobs(js => {
           const seen = new Set(js.map(j => j.id));
           const fresh = r.jobs.filter(j => !seen.has(j.id));
@@ -98,10 +98,10 @@ export function Jobs() {
   }, [source, q, location, remote, days, stack, mine]);
 
   async function loadMore() {
-    const mine = gen.current;
+    const token = gen.current;
     try {
       const r = await api.get<JobList>(query(source, filters, page + 1));
-      if (mine !== gen.current) return;
+      if (token !== gen.current) return;
       setJobs(js => {
         const seen = new Set(js.map(j => j.id));
         return [...js, ...r.jobs.filter(j => !seen.has(j.id))];
@@ -109,7 +109,7 @@ export function Jobs() {
       setTotal(r.total);
       setPage(page + 1);
     } catch (e) {
-      if (mine === gen.current) setErr(`Could not load more: ${(e as Error).message}`);
+      if (token === gen.current) setErr(`Could not load more: ${(e as Error).message}`);
     }
   }
 
