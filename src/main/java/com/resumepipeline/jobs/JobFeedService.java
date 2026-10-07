@@ -184,11 +184,11 @@ public class JobFeedService {
         return repo.topTags(TOP_TAGS);
     }
 
-    /** The user's language, framework, database and devops skills from their profile. */
+    /** The user's language, framework, database, devops and AI &amp; integrations skills from their profile. */
     public static List<String> skillsOf(Profile p) {
         if (p == null) return List.of();
         return Stream.of(p.getSkillsLanguages(), p.getSkillsFrameworks(),
-                        p.getSkillsDatabases(), p.getSkillsDevops())
+                        p.getSkillsDatabases(), p.getSkillsDevops(), p.getSkillsInterests())
                 .filter(csv -> csv != null && !csv.isBlank())
                 .flatMap(csv -> Arrays.stream(csv.split(",")))
                 .map(String::trim)

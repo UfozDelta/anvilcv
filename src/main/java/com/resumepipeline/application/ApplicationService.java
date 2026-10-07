@@ -285,12 +285,7 @@ public class ApplicationService {
         List<String> selectedCourses = rank.selectedCourses() == null ? List.of() : rank.selectedCourses();
 
         // Skill-floor pass: pad each category up to the minimum from raw profile skills.
-        Map<String, List<String>> rawSkills = Map.of(
-                "languages",  splitCsv(profile.getSkillsLanguages()),
-                "frameworks", splitCsv(profile.getSkillsFrameworks()),
-                "databases",  splitCsv(profile.getSkillsDatabases()),
-                "devops",     splitCsv(profile.getSkillsDevops())
-        );
+        Map<String, List<String>> rawSkills = rawSkills(profile);
         List<String> inventedSkills = new ArrayList<>();
         Map<String, List<String>> profileSkills = BulletSelector.profileSkillsOnly(rank.selectedSkills(), rawSkills, inventedSkills);
         if (!inventedSkills.isEmpty()) {
@@ -319,8 +314,8 @@ public class ApplicationService {
         // (which only looks at bullets) never claims it.
         Set<String> llmMatched = rank.atsMatched().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, filledSkills, selectedCourses,
-                projectById, clean.keywords());
+        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, printedSkills(filledSkills, profile),
+                selectedCourses, projectById, clean.keywords());
         progress.emit("ATS on rendered page: " + ats.matched().size() + "/" + clean.keywords().size()
                 + " matched (LLM claimed " + rank.atsMatched().size() + ")");
 
@@ -626,7 +621,7 @@ public class ApplicationService {
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
         AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
-                selectedSkills, selectedCourses, projectById, keywords);
+                printedSkills(selectedSkills, profileService.get(userId)), selectedCourses, projectById, keywords);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -838,8 +833,8 @@ public class ApplicationService {
         priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected, selectedSkills, selectedCourses,
-                projectById, keywordsLower);
+        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
+                printedSkills(selectedSkills, profileService.get(userId)), selectedCourses, projectById, keywordsLower);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -910,6 +905,34 @@ public class ApplicationService {
             }
         }
         return new AtsReport(matched, missing);
+    }
+
+    /** The four selectable skill rows, straight from the profile. */
+    private static Map<String, List<String>> rawSkills(com.resumepipeline.profile.Profile p) {
+        return Map.of(
+                "languages",  splitCsv(p.getSkillsLanguages()),
+                "frameworks", splitCsv(p.getSkillsFrameworks()),
+                "databases",  splitCsv(p.getSkillsDatabases()),
+                "devops",     splitCsv(p.getSkillsDevops())
+        );
+    }
+
+    /**
+     * The skills rows as they print, for the ATS report: each saved row, or the raw profile row
+     * when the saved one is empty (the renderer's own fallback, ApplicationRenderer
+     * selectedSkillValue), plus the AI &amp; Integrations row, which always prints as entered. A
+     * fresh copy for scoring only: it is never saved back as selectedSkills.
+     */
+    static Map<String, List<String>> printedSkills(Map<String, List<String>> saved,
+                                                   com.resumepipeline.profile.Profile profile) {
+        Map<String, List<String>> raw = rawSkills(profile);
+        Map<String, List<String>> printed = new LinkedHashMap<>();
+        for (String key : BulletSelector.SKILL_KEYS) {
+            List<String> row = saved == null ? null : saved.get(key);
+            printed.put(key, row == null || row.isEmpty() ? raw.get(key) : row);
+        }
+        printed.put("interests", splitCsv(profile.getSkillsInterests()));
+        return printed;
     }
 
     private List<LlmClient.SkillCategory> buildSkillCategories(com.resumepipeline.profile.Profile p) {

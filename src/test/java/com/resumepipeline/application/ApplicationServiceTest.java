@@ -53,6 +53,12 @@ class ApplicationServiceTest {
     @Mock SkillRowMeasurer skillRowMeasurer;
     @InjectMocks ApplicationService service;
 
+    @BeforeEach
+    void anyProfile() {
+        // rerender/refit read the profile for the ATS skills rows; tests that care stub their own.
+        lenient().when(profileService.get(any())).thenReturn(new Profile());
+    }
+
     @Nested
     class Crud {
 
@@ -229,6 +235,24 @@ class ApplicationServiceTest {
             assertTrue(events.contains("Skills: dropped 1 not in your profile: Rust"), events.toString());
             assertFalse(out.getSelectedSkills().contains("Rust"), out.getSelectedSkills());
             assertTrue(out.getSelectedSkills().contains("Java"), out.getSelectedSkills());
+            // Nor does it reach the page.
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, List<String>>> skills = ArgumentCaptor.forClass(Map.class);
+            verify(renderer).render(any(), any(), any(), any(), skills.capture(), any());
+            assertFalse(skills.getValue().toString().contains("Rust"), skills.getValue().toString());
+        }
+
+        @Test
+        void aiRowKeywordIsMatchedButNeverSavedAsASelectedSkill() {
+            profileService.get(user).setSkillsInterests("LangChain, OpenAI API");
+            when(llm.cleanJd(any(), any(), any()))
+                    .thenReturn(new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("LangChain")));
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            assertArrayEquals(new String[]{"LangChain"}, out.getAtsMatched());
+            assertFalse(out.getSelectedSkills().contains("interests"), out.getSelectedSkills());
         }
 
         /** Two identical-prose framings of one project, categories security vs backend, equal keyword score. */
@@ -471,6 +495,31 @@ class ApplicationServiceTest {
 
             assertArrayEquals(new String[]{"Docker"}, out.getAtsMatched());
             assertEquals(0, out.getAtsMissing().length);
+        }
+
+        @Test
+        void rerenderScoresTheProfileFallbackAndTheAiRowWhenSavedSkillsAreEmpty() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Application a = new Application();
+            a.setAtsMissing(new String[]{"Docker", "LangChain"});
+            a.setSelectedSkills("{}");
+            Profile profile = new Profile();
+            profile.setSkillsDevops("Docker, Terraform");
+            profile.setSkillsInterests("LangChain");
+            when(profileService.get(user)).thenReturn(profile);
+
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(TestFixtures.project(proj, Project.Kind.PROJECT, "P")));
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
+
+            assertArrayEquals(new String[]{"Docker", "LangChain"}, out.getAtsMatched());
+            assertEquals("{}", out.getSelectedSkills());
         }
 
         @Test
@@ -862,6 +911,22 @@ class ApplicationServiceTest {
             // Docker/K8s from skills (alias-aware); Go only in unclaimed prose; SQL only implied.
             assertEquals(List.of("Docker", "K8s"), ats.matched());
             assertEquals(List.of("Go", "SQL"), ats.missing());
+        }
+
+        @Test
+        void printedSkillsFallsBackPerRowAndAddsTheAiRow() {
+            Profile profile = new Profile();
+            profile.setSkillsLanguages("Java, Go");
+            profile.setSkillsDevops("Docker");
+            profile.setSkillsInterests("LangChain, RAG");
+
+            Map<String, List<String>> printed = ApplicationService.printedSkills(
+                    Map.of("languages", List.of("Java"), "devops", List.of()), profile);
+
+            assertEquals(List.of("Java"), printed.get("languages"));   // saved row wins
+            assertEquals(List.of("Docker"), printed.get("devops"));    // empty row: profile fallback
+            assertEquals(List.of(), printed.get("frameworks"));
+            assertEquals(List.of("LangChain", "RAG"), printed.get("interests"));
         }
     }
 }

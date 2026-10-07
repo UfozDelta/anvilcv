@@ -242,4 +242,12 @@ class JobFeedServiceTest {
                 .containsExactly("K8s", "PostgreSQL", "React");
         assertThat(JobFeedService.matchedTags(stack, List.of())).isEmpty();
     }
+
+    @Test
+    void skillsOfIncludesTheAiAndIntegrationsRow() {
+        com.resumepipeline.profile.Profile p = new com.resumepipeline.profile.Profile();
+        p.setSkillsLanguages("Java");
+        p.setSkillsInterests("LangChain, OpenAI API");
+        assertThat(JobFeedService.skillsOf(p)).containsExactly("Java", "LangChain", "OpenAI API");
+    }
 }
