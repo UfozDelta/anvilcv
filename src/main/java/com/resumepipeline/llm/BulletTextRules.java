@@ -119,7 +119,7 @@ public final class BulletTextRules {
      */
     public static boolean isQuotedIn(String quote, String source) {
         String q = normalizeForQuote(quote);
-        if (q.length() < 8) return false;
+        if (q.length() < 12) return false;
         String s = normalizeForQuote(source);
         if (s.contains(q)) return true;
         Set<String> srcWords = Arrays.stream(s.split(" ")).collect(Collectors.toSet());

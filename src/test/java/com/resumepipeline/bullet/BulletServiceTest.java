@@ -34,6 +34,8 @@ class BulletServiceTest {
     @Mock LlmUsageService llmUsageService;
     @Mock GenerationConfigService configService;
     @Mock ApplicationRepository applicationRepo;
+    @Mock BulletLineMeasurer measurer;
+    @Mock BulletMeasureDiagnosticRepository diagnosticRepo;
     @InjectMocks BulletService service;
 
     private static Project project(UUID user, Project.Kind kind) {
@@ -209,23 +211,74 @@ class BulletServiceTest {
                 () -> service.generateBank(user, proj, List.of("not-a-real-lens"), ProgressLog.noOp()));
     }
 
+    private static LlmClient.Story story(String id, String... lenses) {
+        return new LlmClient.Story(id, "title " + id, List.of("quote"), List.of(lenses));
+    }
+
     @Test
-    void generateBankTellsEachCategoryAboutItsSiblings() {
+    void generateBankMakesTwoCallsWhateverTheLensCount() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
         when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
-        when(llm.generateBullets(any(), any(), any())).thenReturn(
-                new LlmClient.BulletGenerationResult(List.of()));
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        when(measurer.measure(any())).thenReturn(java.util.Map.of());
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(
+                List.of(story("s1", "backend", "security"), story("s2", "data")), List.of()));
+        when(llm.writeStoryBullets(any(), any(), any(), any())).thenReturn(new LlmClient.BulletGenerationResult(List.of(
+                new LlmClient.GeneratedBullet("Built a ledger service that settles payouts nightly.", List.of(), "s1", "backend"),
+                new LlmClient.GeneratedBullet("Locked payout approvals behind a two-person review rule.", List.of(), "s1", "security"),
+                new LlmClient.GeneratedBullet("Ingested exchange fills from three brokers into one schema.", List.of(), "s2", "data"))));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<String> cats = List.of("backend", "data", "security");
-        service.generateBank(user, proj, cats, ProgressLog.noOp());
+        List<String> cats = List.of("backend", "data", "security", "devops");
+        List<Bullet> out = service.generateBank(user, proj, cats, ProgressLog.noOp());
 
-        ArgumentCaptor<LlmClient.GenerateBulletsRequest> req =
-                ArgumentCaptor.forClass(LlmClient.GenerateBulletsRequest.class);
-        verify(llm, times(3)).generateBullets(req.capture(), any(), any());
-        for (LlmClient.GenerateBulletsRequest r : req.getAllValues()) {
-            assertFalse(r.siblingCategories().contains(r.category()));
-            assertEquals(cats.stream().filter(c -> !c.equals(r.category())).toList(),
-                    r.siblingCategories());
-        }
+        ArgumentCaptor<LlmClient.StoryRequest> req = ArgumentCaptor.forClass(LlmClient.StoryRequest.class);
+        verify(llm).findStories(req.capture(), any(), any());
+        verify(llm).writeStoryBullets(any(), any(), any(), any());
+        verify(llm, never()).generateBullets(any(), any(), any());
+        assertEquals(cats, req.getValue().lenses());
+
+        assertEquals(3, out.size());
+        // Category = the lens a wording was written for; wordings of one story share a storyId.
+        assertEquals(List.of("backend", "security", "data"), out.stream().map(Bullet::getCategory).toList());
+        assertNotNull(out.get(0).getStoryId());
+        assertEquals(out.get(0).getStoryId(), out.get(1).getStoryId());
+        assertNotEquals(out.get(0).getStoryId(), out.get(2).getStoryId());
+    }
+
+    @Test
+    void generateBankWritesNothingWhenNoStorySurvives() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(), List.of("backend")));
+
+        assertTrue(service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp()).isEmpty());
+        verify(llm, never()).writeStoryBullets(any(), any(), any(), any());
+        verify(repo, never()).save(any());
+    }
+
+    @Test
+    void storyDedupKeepsTwoWordingsOfOneStoryButDropsARepeatAcrossStories() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        String a = "Built a ledger service in Go that settles marketplace payouts nightly.";
+        String aAlt = "Built a Go ledger service settling marketplace payouts nightly for sellers.";
+        List<Bullet> out = service.saveStoryBullets(user, proj, List.of(
+                new LlmClient.GeneratedBullet(a, List.of(), "s1", "backend"),
+                new LlmClient.GeneratedBullet(aAlt, List.of(), "s1", "data"),
+                new LlmClient.GeneratedBullet(aAlt, List.of(), "s2", "backend")), List.of(), ProgressLog.noOp());
+
+        assertEquals(List.of(a, aAlt), out.stream().map(Bullet::getText).toList());
+    }
+
+    @Test
+    void storyDedupNeverRepeatsTheStoredBank() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        String a = "Built a ledger service in Go that settles marketplace payouts nightly.";
+        List<Bullet> out = service.saveStoryBullets(user, proj, List.of(
+                new LlmClient.GeneratedBullet(a, List.of(), "s1", "backend")), List.of(a), ProgressLog.noOp());
+        assertTrue(out.isEmpty());
     }
 }
