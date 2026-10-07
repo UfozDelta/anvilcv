@@ -40,6 +40,7 @@ import { LabSettings } from './lab/app/LabSettings';
 import { LabFlow } from './lab/app/LabFlow';
 import { LabLandingV2 } from './lab/landing-v2/LabLandingV2';
 import { LabStories } from './lab/stories/LabStories';
+import { LabStoriesLean } from './lab/stories-lean/LabStoriesLean';
 
 /** The router keeps the old scroll position across navigation, so a link clicked at the bottom of a page opened the next one mid-way. */
 function ScrollToTop() {
@@ -108,6 +109,7 @@ export function App() {
         <Route path="/lab/flow"             element={<LabFlow />} />
         <Route path="/lab/landing-v2"       element={<LabLandingV2 />} />
         <Route path="/lab/stories"          element={<LabStories />} />
+        <Route path="/lab/stories-lean"     element={<LabStoriesLean />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

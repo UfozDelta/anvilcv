@@ -25,6 +25,22 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-10-07',
+    title: 'Story bank, lean',
+    status: 'prototype',
+    summary: <>Same story model as the bank above with almost no copy: glyphs, chips, counts and tooltips. Four layouts.</>,
+    protos: [
+      { to: '/lab/stories-lean', name: 'Story bank, lean', line: 'Rows / Cards / Split / Board (1-4), one Lenses toggle.' },
+    ],
+    fixes: [
+      'Prose, captions and the review table cut; detail lives in tooltips',
+      'Evidence folded behind a quote chip',
+      'Status as a ✓ / ✕ pair, length as 1L / 2L, printed wording marked ▶',
+      '12-slot meter with usable count, turns rust under 3',
+      'Generate result as +new / −dropped chips',
+    ],
+  },
+  {
+    iso: '2026-10-07',
     title: 'Project page, story-first bank',
     status: 'prototype',
     summary: (
