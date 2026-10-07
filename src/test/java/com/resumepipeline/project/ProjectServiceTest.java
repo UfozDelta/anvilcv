@@ -1,7 +1,10 @@
 package com.resumepipeline.project;
 
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
+import com.resumepipeline.bullet.Story;
+import com.resumepipeline.bullet.StoryRepository;
 import com.resumepipeline.llm.GithubContextFetcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +35,58 @@ class ProjectServiceTest {
     @Mock BulletRepository bulletRepo;
     @Mock GithubContextFetcher githubFetcher;
     @Mock ApplicationRepository applicationRepo;
+    @Mock StoryRepository storyRepo;
     @InjectMocks ProjectService service;
+
+    @Test
+    void usableStoriesCountsDistinctLiveSelectableStories() {
+        UUID proj = UUID.randomUUID(), story = UUID.randomUUID();
+        Bullet a = new Bullet(proj, "Built the ledger.", new String[0], "backend");
+        a.setStoryId(story);
+        Bullet b = new Bullet(proj, "Settled payouts nightly.", new String[0], "data");
+        b.setStoryId(story);                                                            // same story: counts once
+        Bullet loose = new Bullet(proj, "Hand-written bullet.", new String[0], "general");
+        org.springframework.test.util.ReflectionTestUtils.setField(loose, "id", UUID.randomUUID());
+        Bullet vanity = new Bullet(proj, "Shipped across 87 commits.", new String[0], "general");
+        org.springframework.test.util.ReflectionTestUtils.setField(vanity, "id", UUID.randomUUID());
+        Bullet rejected = new Bullet(proj, "Rejected bullet.", new String[0], "general");
+        org.springframework.test.util.ReflectionTestUtils.setField(rejected, "id", UUID.randomUUID());
+        rejected.setStatus("REJECTED");
+        when(bulletRepo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(a, b, loose, vanity, rejected));
+
+        assertEquals(2, service.usableStoryCount(proj));
+    }
+
+    @Test
+    void duplicateCopiesStoriesAndRepointsTheCopiedWordings() {
+        UUID user = UUID.randomUUID(), srcId = UUID.randomUUID(), copyId = UUID.randomUUID();
+        Project src = new Project(user, Project.Kind.PROJECT, "P", "desc", null, null, null, null, null);
+        org.springframework.test.util.ReflectionTestUtils.setField(src, "id", srcId);
+        Story story = new Story(UUID.randomUUID(), srcId, "Ledger service", new String[]{"q"}, new String[]{"backend"});
+        Bullet told = new Bullet(srcId, "Built the ledger.", new String[0], "backend");
+        told.setStoryId(story.getId());
+        Bullet loose = new Bullet(srcId, "Hand-written bullet.", new String[0], "general");
+        when(repo.findByUserIdAndId(user, srcId)).thenReturn(Optional.of(src));
+        when(repo.save(any())).thenAnswer(inv -> {
+            Project p = inv.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(p, "id", copyId);
+            return p;
+        });
+        when(storyRepo.findByProjectIdOrderByCreatedAtAsc(srcId)).thenReturn(List.of(story));
+        when(bulletRepo.findByProjectIdOrderByCreatedAtAsc(srcId)).thenReturn(List.of(told, loose));
+
+        service.duplicate(user, srcId);
+
+        org.mockito.ArgumentCaptor<Story> storyCopy = org.mockito.ArgumentCaptor.forClass(Story.class);
+        verify(storyRepo).save(storyCopy.capture());
+        assertEquals(copyId, storyCopy.getValue().getProjectId());
+        assertNotEquals(story.getId(), storyCopy.getValue().getId());
+        assertEquals("Ledger service", storyCopy.getValue().getTitle());
+        org.mockito.ArgumentCaptor<Bullet> clones = org.mockito.ArgumentCaptor.forClass(Bullet.class);
+        verify(bulletRepo, times(2)).save(clones.capture());
+        assertEquals(storyCopy.getValue().getId(), clones.getAllValues().get(0).getStoryId());
+        assertNull(clones.getAllValues().get(1).getStoryId());
+    }
 
     @Test
     void getThrows404WhenMissing() {

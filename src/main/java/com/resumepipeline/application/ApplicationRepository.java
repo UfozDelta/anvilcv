@@ -62,15 +62,15 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     // pdf_stale is written only by these statements (it is updatable=false on the entity), so a
     // whole-row save of an Application loaded before an edit cannot wipe it. Same native-SQL and
     // comma-joined-id conventions as markRecruiterStaleForBullets above. Only rows that have a
-    // PDF are flagged: with no PDF there is nothing to be out of date.
+    // PDF are flagged: with no PDF there is nothing to be out of date. Every mark bumps
+    // pdf_stale_seq, even on a row already stale, so clearPdfStale can tell a mark landed.
 
     /** Pages that print any of these bullets. */
     @Transactional
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            update application set pdf_stale = true
+            update application set pdf_stale = true, pdf_stale_seq = pdf_stale_seq + 1
             where user_id = :userId
-              and pdf_stale = false
               and pdf_blob is not null
               and selected_bullet_ids && cast(string_to_array(:bulletIds, ',') as uuid[])
             """, nativeQuery = true)
@@ -84,9 +84,8 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            update application set pdf_stale = true
+            update application set pdf_stale = true, pdf_stale_seq = pdf_stale_seq + 1
             where user_id = :userId
-              and pdf_stale = false
               and pdf_blob is not null
               and selected_bullet_ids && array(select b.id from bullet b where b.project_id = :projectId)
             """, nativeQuery = true)
@@ -96,15 +95,22 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     @Transactional
     @Modifying(flushAutomatically = true)
     @Query(value = """
-            update application set pdf_stale = true
+            update application set pdf_stale = true, pdf_stale_seq = pdf_stale_seq + 1
             where user_id = :userId
-              and pdf_stale = false
               and pdf_blob is not null
             """, nativeQuery = true)
     int markPdfStaleForUser(@Param("userId") UUID userId);
 
+    /** After a good compile: clears the flag unless a mark landed since {@code seen} was read. */
     @Transactional
     @Modifying(flushAutomatically = true)
-    @Query(value = "update application set pdf_stale = :stale where id = :id", nativeQuery = true)
-    int setPdfStale(@Param("id") UUID id, @Param("stale") boolean stale);
+    @Query(value = "update application set pdf_stale = false where id = :id and pdf_stale_seq = :seen",
+            nativeQuery = true)
+    int clearPdfStale(@Param("id") UUID id, @Param("seen") long seen);
+
+    /** After a failed compile: the old PDF, if any, now sits under a new selection. */
+    @Transactional
+    @Modifying(flushAutomatically = true)
+    @Query(value = "update application set pdf_stale = (pdf_blob is not null) where id = :id", nativeQuery = true)
+    int markPdfStaleAfterFailedCompile(@Param("id") UUID id);
 }

@@ -25,13 +25,20 @@ public class BulletDtos {
             String category,
             String status,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            UUID storyId,
+            /** Null for a storyless bullet, and on every endpoint but the project's bullet list. */
+            String storyTitle
     ) {
         public static BulletResponse from(Bullet b) {
+            return from(b, null);
+        }
+
+        public static BulletResponse from(Bullet b, String storyTitle) {
             return new BulletResponse(b.getId(), b.getProjectId(), b.getText(),
                     b.getTags() == null ? List.of() : List.of(b.getTags()),
                     b.getCategory(), b.getStatus(),
-                    b.getCreatedAt(), b.getUpdatedAt());
+                    b.getCreatedAt(), b.getUpdatedAt(), b.getStoryId(), storyTitle);
         }
     }
 }

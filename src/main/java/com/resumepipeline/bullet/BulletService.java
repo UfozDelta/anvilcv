@@ -21,14 +21,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -54,14 +58,28 @@ public class BulletService {
     // Editing a bullet changes what is printed on every page that already renders it, so the
     // recruiter scorecard for those pages stops describing reality — see markStaleFor below.
     private final ApplicationRepository applicationRepo;
+    private final StoryRepository storyRepo;
+    // A story build's bullets and story rows commit together (see saveStoryBullets).
+    private final TransactionOperations tx;
     // See generateBank: off for the eval dry run, which must measure the story generator only.
     private boolean lensFallback = true;
+    // Projects with a generateBank in flight. In memory, like ApplicationService.scoring: one
+    // instance, and a restart ends the run anyway.
+    private final Set<UUID> generating = ConcurrentHashMap.newKeySet();
+
+    /** Live stories a project may hold; a build on a full bank makes no LLM call. */
+    static final int STORY_CAP = 12;
+    /** Most new stories one build asks for. */
+    static final int MAX_NEW_STORIES = 8;
+    /** Evidence quotes shorter than this prove too little to call two stories the same work. */
+    static final int MIN_OVERLAP_QUOTE = 40;
 
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
                          LlmUsageService llmUsageService, GenerationConfigService configService,
                          ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler,
                          BulletLineMeasurer measurer, BulletMeasureDiagnosticRepository diagnosticRepo,
-                         ApplicationRepository applicationRepo) {
+                         ApplicationRepository applicationRepo, StoryRepository storyRepo,
+                         TransactionOperations tx) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
@@ -73,6 +91,8 @@ public class BulletService {
         this.renderer = renderer;
         this.compiler = compiler;
         this.applicationRepo = applicationRepo;
+        this.storyRepo = storyRepo;
+        this.tx = tx;
     }
 
     /** Story-pass failures then fail the run instead of falling back to per-lens generation. */
@@ -146,6 +166,13 @@ public class BulletService {
     public List<Bullet> listForProject(UUID userId, UUID projectId) {
         projectService.get(userId, projectId); // verify ownership
         return repo.findByProjectIdOrderByCreatedAtAsc(projectId);
+    }
+
+    /** Story titles of this project, by story id. */
+    public Map<UUID, String> storyTitles(UUID userId, UUID projectId) {
+        projectService.get(userId, projectId); // verify ownership
+        return storyRepo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .collect(Collectors.toMap(Story::getId, Story::getTitle));
     }
 
     public Bullet create(UUID userId, UUID projectId, String text, String[] tags, String category) {
@@ -518,21 +545,51 @@ public class BulletService {
         progress.emit("Lenses: " + String.join(", ", categories));
 
         Project p = projectService.get(userId, projectId);
+        if (!generating.add(projectId)) {
+            throw new IllegalStateException("Bullets are already being generated for this project — wait for that run to finish.");
+        }
+        try {
+            return generateStories(userId, projectId, p, categories, subsystems, progress);
+        } finally {
+            generating.remove(projectId);
+        }
+    }
+
+    private List<Bullet> generateStories(UUID userId, UUID projectId, Project p, List<String> categories,
+                                         List<String> subsystems, ProgressLog progress) {
         List<Bullet> existing = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
+        List<Story> storyRows = storyRepo.findByProjectIdOrderByCreatedAtAsc(projectId);
+        Set<UUID> liveIds = liveStoryIds(existing);
+        List<Story> liveStories = storyRows.stream().filter(s -> liveIds.contains(s.getId())).toList();
+        int room = Math.min(MAX_NEW_STORIES, STORY_CAP - liveIds.size());
+        if (room <= 0) {
+            progress.emit("Story bank full (" + STORY_CAP + ") — nothing generated. Reject a story's wordings to make room.");
+            return List.of();
+        }
         LlmClient.GenerateBulletsRequest source = sourceRequest(p, "general",
                 existing.stream().map(Bullet::getText).toList(), List.of(),
                 RepoMapRenderer.lensFocus(RepoMapRenderer.parse(p.getRepoMap()), categories, subsystems));
-        LlmClient.StoryRequest req = new LlmClient.StoryRequest(source, categories);
+        LlmClient.StoryRequest req = new LlmClient.StoryRequest(source, categories,
+                bankCoverage(existing, storyRows), room);
 
         TokenAccumulator tokens = new TokenAccumulator();
         LlmClient.BulletGenerationResult result;
         List<LlmClient.Story> stories;
         try {
-            stories = llm.findStories(req, progress, tokens).stories();
-            if (stories.isEmpty()) {
-                progress.emit("No story in the source is backed by evidence — nothing generated.");
+            List<LlmClient.Story> found = llm.findStories(req, progress, tokens).stories();
+            if (found.isEmpty()) {
+                progress.emit("No new stories found — nothing generated.");
                 return List.of();
             }
+            stories = dropRepeats(found, liveStories);
+            if (stories.isEmpty()) {
+                progress.emit("All stories duplicated existing ones — nothing generated.");
+                return List.of();
+            }
+            if (stories.size() < found.size()) {
+                progress.emit("Dropped " + (found.size() - stories.size()) + " story(ies) repeating the bank.");
+            }
+            if (stories.size() > room) stories = stories.subList(0, room);
             result = llm.writeStoryBullets(req, stories, progress, tokens);
         } catch (LlmParseException e) {
             if (!lensFallback) throw e;
@@ -552,10 +609,73 @@ public class BulletService {
                 .map(e -> new RawGeneration(e.getKey(), new LlmClient.BulletGenerationResult(e.getValue())))
                 .toList(), progress);
 
-        List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(),
+        List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(), stories,
                 existing.stream().map(Bullet::getText).toList(), progress);
         progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
         return saved;
+    }
+
+    /** How evidence quotes are compared: lowercased, markdown stripped, whitespace collapsed. */
+    static String normalizeQuote(String quote) {
+        return quote.toLowerCase(Locale.ROOT).replaceAll("[*_`#>]", "").replaceAll("\\s+", " ").strip();
+    }
+
+    /**
+     * Drops found stories that repeat a saved live story or an earlier story of this run: at
+     * least half of its quotes of {@value #MIN_OVERLAP_QUOTE}+ chars sit inside one of their
+     * quotes, or its title is a near-duplicate of theirs ({@link BulletTextRules#isNearDuplicate}).
+     */
+    static List<LlmClient.Story> dropRepeats(List<LlmClient.Story> found, List<Story> live) {
+        List<String> seenQuotes = new ArrayList<>();
+        List<String> seenTitles = new ArrayList<>();
+        for (Story s : live) {
+            for (String e : s.getEvidence()) seenQuotes.add(normalizeQuote(e));
+            seenTitles.add(s.getTitle());
+        }
+        List<LlmClient.Story> kept = new ArrayList<>();
+        for (LlmClient.Story s : found) {
+            List<String> quotes = s.evidence().stream().map(BulletService::normalizeQuote)
+                    .filter(q -> q.length() >= MIN_OVERLAP_QUOTE).toList();
+            long inside = quotes.stream().filter(q -> seenQuotes.stream().anyMatch(o -> o.contains(q))).count();
+            if ((!quotes.isEmpty() && inside * 2 >= quotes.size())
+                    || BulletTextRules.isNearDuplicate(s.title(), seenTitles)) {
+                continue;
+            }
+            kept.add(s);
+            s.evidence().forEach(e -> seenQuotes.add(normalizeQuote(e)));
+            seenTitles.add(s.title());
+        }
+        return kept;
+    }
+
+    static final int COVERED_WORK_MAX = 30;
+    static final int COVERED_WORK_CHARS = 200;
+
+    /**
+     * A story is live while at least one of its wordings is not REJECTED. The one definition of
+     * "live": used for what findStories is shown, the overlap check and the story cap.
+     */
+    static Set<UUID> liveStoryIds(List<Bullet> bullets) {
+        return bullets.stream()
+                .filter(b -> b.getStoryId() != null && !"REJECTED".equals(b.getStatus()))
+                .map(Bullet::getStoryId)
+                .collect(Collectors.toSet());
+    }
+
+    /** What findStories is shown of the bank: live stories, storyless bullets, dismissed stories. */
+    static LlmClient.BankCoverage bankCoverage(List<Bullet> bank, List<Story> storyRows) {
+        Set<UUID> live = liveStoryIds(bank);
+        Set<UUID> withBullets = bank.stream().map(Bullet::getStoryId).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return new LlmClient.BankCoverage(
+                storyRows.stream().filter(s -> live.contains(s.getId()))
+                        .map(s -> new LlmClient.KnownStory(s.getTitle(), List.of(s.getLenses()))).toList(),
+                bank.stream().filter(b -> b.getStoryId() == null && !"REJECTED".equals(b.getStatus()))
+                        .map(b -> LogText.abbreviate(b.getText(), COVERED_WORK_CHARS))
+                        .limit(COVERED_WORK_MAX).toList(),
+                // Every wording rejected: the user dismissed the work itself.
+                storyRows.stream().filter(s -> withBullets.contains(s.getId()) && !live.contains(s.getId()))
+                        .map(Story::getTitle).toList());
     }
 
     /**
@@ -590,7 +710,9 @@ public class BulletService {
     }
 
     /**
-     * Persist a story run. Each model story id becomes one fresh UUID shared by its wordings.
+     * Persist a story run. Each model story id becomes one fresh UUID shared by its wordings,
+     * and a story row under that UUID once at least one of its wordings is kept. One
+     * transaction, bullets first: bullet.story_id's foreign key is checked at commit (V41).
      *
      * <p>Dedup against the stored bank and against OTHER stories is the normal strict check —
      * a different story restating a claim is a repeat. Against the same story only near-identical
@@ -598,7 +720,13 @@ public class BulletService {
      * are meant to share facts, and selection keeps them off the same resume by storyId.
      */
     List<Bullet> saveStoryBullets(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
-                                  List<String> bankTexts, ProgressLog progress) {
+                                  List<LlmClient.Story> stories, List<String> bankTexts, ProgressLog progress) {
+        return tx.execute(status -> saveStoryBulletsNow(userId, projectId, bullets, stories, bankTexts, progress));
+    }
+
+    private List<Bullet> saveStoryBulletsNow(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
+                                             List<LlmClient.Story> stories, List<String> bankTexts,
+                                             ProgressLog progress) {
         GenerationConfig cfg = configService.get(userId);
         Map<String, UUID> storyUuid = new LinkedHashMap<>();
         Map<String, List<String>> textsByStory = new LinkedHashMap<>();
@@ -619,6 +747,16 @@ public class BulletService {
             b.setStoryId(storyUuid.computeIfAbsent(g.storyId(), k -> UUID.randomUUID()));
             saved.add(repo.save(b));
         }
+        Map<String, LlmClient.Story> storyById = new LinkedHashMap<>();
+        stories.forEach(s -> storyById.put(s.id(), s));
+        List<Story> rows = new ArrayList<>();
+        storyUuid.forEach((key, uuid) -> {
+            LlmClient.Story s = storyById.get(key);
+            if (s == null) return;
+            rows.add(new Story(uuid, projectId, s.title(), s.evidence().toArray(new String[0]),
+                    s.lenses().toArray(new String[0])));
+        });
+        storyRepo.saveAll(rows);
         if (dupDropped > 0) progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
         log.info("BULLET_PERSIST project={} stories={} generated={} saved={} dup_dropped={}",
                 projectId, storyUuid.size(), bullets.size(), saved.size(), dupDropped);

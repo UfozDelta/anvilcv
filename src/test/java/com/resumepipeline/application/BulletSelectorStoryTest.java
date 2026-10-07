@@ -117,6 +117,85 @@ class BulletSelectorStoryTest {
         assertEquals(6, out.size());
     }
 
+    // ---- thin-entry swap ----
+
+    /** Four PROJECT entries ranked onto the page (D holds one bullet), E only in the raw bank. */
+    private record Page(Map<UUID, Project> projects, List<Bullet> bank, List<Bullet> ranked,
+                        UUID a, UUID d, UUID e) {}
+
+    private static Page page(int eBullets) {
+        Map<UUID, Project> projects = new java.util.LinkedHashMap<>();
+        List<Bullet> bank = new ArrayList<>(), ranked = new ArrayList<>();
+        UUID[] ids = new UUID[5];
+        for (int i = 0; i < 5; i++) {
+            ids[i] = UUID.randomUUID();
+            projects.put(ids[i], TestFixtures.project(ids[i], Project.Kind.PROJECT, "P" + i));
+        }
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) ranked.add(TestFixtures.bullet(UUID.randomUUID(), ids[i], new String[0]));
+        }
+        ranked.add(TestFixtures.bullet(UUID.randomUUID(), ids[3], new String[0]));   // D: a one-bullet bank
+        bank.addAll(ranked);
+        for (int j = 0; j < eBullets; j++) bank.add(TestFixtures.bullet(UUID.randomUUID(), ids[4], new String[0]));
+        return new Page(projects, bank, ranked, ids[0], ids[3], ids[4]);
+    }
+
+    private static List<Bullet> select(Page pg, List<Bullet> locked, UUID keep) {
+        return BulletSelector.select(ranked(pg.ranked()),
+                pg.ranked().stream().collect(Collectors.toMap(Bullet::getId, b -> b)),
+                pg.projects(), pg.bank(), Set.of(), locked, Set.of(), keep);
+    }
+
+    private static long count(List<Bullet> out, UUID pid) {
+        return out.stream().filter(b -> b.getProjectId().equals(pid)).count();
+    }
+
+    @Test
+    void aThinEntryIsSwappedForTheNextBestEntryOfItsKind() {
+        Page pg = page(3);
+
+        List<Bullet> out = select(pg, List.of(), null);
+
+        assertEquals(0, count(out, pg.d()), "the one-bullet entry is gone");
+        assertEquals(3, count(out, pg.e()), "its replacement is topped up to three");
+    }
+
+    @Test
+    void aThinEntryWithNoReplacementIsDroppedAboveTheFloor() {
+        Page pg = page(1);   // E has too little left to replace D
+
+        List<Bullet> out = select(pg, List.of(), null);
+
+        assertEquals(0, count(out, pg.d()));
+        assertEquals(0, count(out, pg.e()));
+        assertEquals(9, out.size());
+    }
+
+    @Test
+    void aThinEntryHoldingALockOrTheRefitTargetStays() {
+        Page pg = page(3);
+        Bullet dOnly = pg.ranked().get(9);
+
+        assertEquals(1, count(select(pg, List.of(dOnly), null), pg.d()), "locked");
+        assertEquals(1, count(select(pg, List.of(), pg.d()), pg.d()), "scoped refit target");
+    }
+
+    @Test
+    void aThinEntryHoldingUpTheKindFloorStays() {
+        Page pg = page(0);
+        // Only D and two full entries of its kind: dropping D would break the PROJECT floor.
+        Map<UUID, Project> three = new java.util.LinkedHashMap<>(pg.projects());
+        three.remove(pg.a());
+        three.remove(pg.e());
+        List<Bullet> ranked = pg.ranked().stream().filter(b -> !b.getProjectId().equals(pg.a())).toList();
+        Page small = new Page(three, ranked, ranked, null, pg.d(), null);
+
+        List<Bullet> out = select(small, List.of(), null);
+
+        assertEquals(1, count(out, pg.d()));
+        assertEquals(7, out.size());
+    }
+
     @Test
     void collapseKeepsTheBestScoringWordingOfAStory() {
         UUID pid = UUID.randomUUID();

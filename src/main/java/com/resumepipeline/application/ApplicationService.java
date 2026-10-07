@@ -285,12 +285,7 @@ public class ApplicationService {
         List<String> selectedCourses = rank.selectedCourses() == null ? List.of() : rank.selectedCourses();
 
         // Skill-floor pass: pad each category up to the minimum from raw profile skills.
-        Map<String, List<String>> rawSkills = Map.of(
-                "languages",  splitCsv(profile.getSkillsLanguages()),
-                "frameworks", splitCsv(profile.getSkillsFrameworks()),
-                "databases",  splitCsv(profile.getSkillsDatabases()),
-                "devops",     splitCsv(profile.getSkillsDevops())
-        );
+        Map<String, List<String>> rawSkills = rawSkills(profile);
         List<String> inventedSkills = new ArrayList<>();
         Map<String, List<String>> profileSkills = BulletSelector.profileSkillsOnly(rank.selectedSkills(), rawSkills, inventedSkills);
         if (!inventedSkills.isEmpty()) {
@@ -319,8 +314,8 @@ public class ApplicationService {
         // (which only looks at bullets) never claims it.
         Set<String> llmMatched = rank.atsMatched().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, filledSkills, selectedCourses,
-                projectById, clean.keywords());
+        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, printedSkills(filledSkills, profile),
+                selectedCourses, projectById, clean.keywords());
         progress.emit("ATS on rendered page: " + ats.matched().size() + "/" + clean.keywords().size()
                 + " matched (LLM claimed " + rank.atsMatched().size() + ")");
 
@@ -589,6 +584,7 @@ public class ApplicationService {
     /** Override selection and re-render. Does NOT re-call the LLM. */
     public Application rerender(UUID userId, UUID applicationId, List<UUID> selectedBulletIds, ProgressLog progress) {
         Application a = get(userId, applicationId);
+        long seenStaleSeq = a.getPdfStaleSeq();
         Map<UUID, Bullet> bulletById = bulletRepo.findByIdsAndProjectUserId(
                 selectedBulletIds.toArray(new UUID[0]), userId).stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
@@ -626,7 +622,7 @@ public class ApplicationService {
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
         AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
-                selectedSkills, selectedCourses, projectById, keywords);
+                printedSkills(selectedSkills, profileService.get(userId)), selectedCourses, projectById, keywords);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -648,7 +644,7 @@ public class ApplicationService {
         }
         a.setPipelineDurationMs(tRerender.stop());
         Application saved = repo.save(a);
-        syncPdfStale(saved, r);
+        syncPdfStale(saved, r, seenStaleSeq);
         log.info("APP_RERENDER app={} ms={}", shortId(saved.getId()), a.getPipelineDurationMs());
         return saved;
     }
@@ -739,6 +735,7 @@ public class ApplicationService {
      */
     public Application refitSelection(UUID userId, UUID applicationId, UUID onlyProjectId, ProgressLog progress) {
         Application a = get(userId, applicationId);
+        long seenStaleSeq = a.getPdfStaleSeq();
         List<Bullet> bank = bulletRepo.findSelectableByProjectUserId(userId);
         // Locked and on-page ids resolve against the whole bank, so a pin is never dropped; only
         // what the selector may pick on its own is narrowed.
@@ -806,7 +803,8 @@ public class ApplicationService {
                   + locked.size() + " bullets pinned elsewhere";
         progress.emit("Refitting " + scope + " from " + allBullets.size() + " bank bullets ("
                 + userLocked.size() + " locked)...");
-        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower, locked, excluded);
+        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, keywordsLower,
+                locked, excluded, onlyProjectId);
 
         if (onlyProjectId != null) {
             // The guarantee: pass 4's floor tops up every surviving project, so drop anything it
@@ -838,8 +836,8 @@ public class ApplicationService {
         priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected, selectedSkills, selectedCourses,
-                projectById, keywordsLower);
+        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
+                printedSkills(selectedSkills, profileService.get(userId)), selectedCourses, projectById, keywordsLower);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -852,7 +850,7 @@ public class ApplicationService {
             progress.emit("PDF compile failed: " + r.error());
         }
         Application saved = repo.save(a);
-        syncPdfStale(saved, r);
+        syncPdfStale(saved, r, seenStaleSeq);
         return saved;
     }
 
@@ -860,12 +858,19 @@ public class ApplicationService {
      * After a rerender or refit: a fresh PDF is current; a failed compile left the old PDF in
      * place under a new selection and LaTeX, so that PDF is out of date. Written by its own
      * statement because save() never writes pdf_stale (see Application#pdfStale).
+     *
+     * <p>{@code seenStaleSeq} is pdf_stale_seq as loaded before the compile. An edit marked
+     * during the compile bumps it, so the clear misses and the page stays flagged: the new PDF
+     * may predate that edit.
      */
-    private void syncPdfStale(Application a, PdfCompiler.Result r) {
-        boolean stale = !r.success() && a.getPdfBlob() != null;
+    private void syncPdfStale(Application a, PdfCompiler.Result r, long seenStaleSeq) {
         try {
-            repo.setPdfStale(a.getId(), stale);
-            a.setPdfStale(stale);
+            if (r.success()) {
+                a.setPdfStale(repo.clearPdfStale(a.getId(), seenStaleSeq) == 0);
+            } else {
+                repo.markPdfStaleAfterFailedCompile(a.getId());
+                a.setPdfStale(a.getPdfBlob() != null);
+            }
         } catch (RuntimeException e) {
             log.warn("Could not update pdf_stale for app {}: {}", shortId(a.getId()), e.getMessage());
         }
@@ -910,6 +915,34 @@ public class ApplicationService {
             }
         }
         return new AtsReport(matched, missing);
+    }
+
+    /** The four selectable skill rows, straight from the profile. */
+    private static Map<String, List<String>> rawSkills(com.resumepipeline.profile.Profile p) {
+        return Map.of(
+                "languages",  splitCsv(p.getSkillsLanguages()),
+                "frameworks", splitCsv(p.getSkillsFrameworks()),
+                "databases",  splitCsv(p.getSkillsDatabases()),
+                "devops",     splitCsv(p.getSkillsDevops())
+        );
+    }
+
+    /**
+     * The skills rows as they print, for the ATS report: each saved row, or the raw profile row
+     * when the saved one is empty (the renderer's own fallback, ApplicationRenderer
+     * selectedSkillValue), plus the AI &amp; Integrations row, which always prints as entered. A
+     * fresh copy for scoring only: it is never saved back as selectedSkills.
+     */
+    static Map<String, List<String>> printedSkills(Map<String, List<String>> saved,
+                                                   com.resumepipeline.profile.Profile profile) {
+        Map<String, List<String>> raw = rawSkills(profile);
+        Map<String, List<String>> printed = new LinkedHashMap<>();
+        for (String key : BulletSelector.SKILL_KEYS) {
+            List<String> row = saved == null ? null : saved.get(key);
+            printed.put(key, row == null || row.isEmpty() ? raw.get(key) : row);
+        }
+        printed.put("interests", splitCsv(profile.getSkillsInterests()));
+        return printed;
     }
 
     private List<LlmClient.SkillCategory> buildSkillCategories(com.resumepipeline.profile.Profile p) {
@@ -980,22 +1013,6 @@ public class ApplicationService {
     }
 
     /**
-     * Drop bullets that restate a claim an earlier bullet in {@code byScoreDesc} already makes,
-     * keeping the first — which, given the caller sorts by keyword score, is the framing that
-     * matches THIS job description best.
-     *
-     * <p>The bank deliberately holds several framings of the same work, one per category lens
-     * (see {@code BulletTextRules.CROSS_LENS_THRESHOLD}). That is what makes a project reusable
-     * across different jobs, but all of those framings score similarly on raw keyword overlap,
-     * so without this the per-project top-4 could be four wordings of one achievement — spending
-     * the ranking LLM's candidate slots on a choice it has already been made for it, and starving
-     * the other work on the project.
-     *
-     * <p>This is where the variant set collapses, and it is the right place: the JD is known
-     * here and it is what decides which framing survives. {@code BulletSelector} still runs its
-     * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
-     */
-    /**
      * The deterministic half of selection: what the ranking LLM gets to choose from. Top 4 per
      * project by lensed keyword score (variants collapsed), then global top 25. Public so the
      * admin bullet eval can replay it on a candidate bank without an LLM call.
@@ -1026,9 +1043,9 @@ public class ApplicationService {
      * "120 commits", "40 unit tests"). The bank still holds PENDING bullets generated before the
      * vanity filter existed. APPROVED ones stay: the user chose them. Hand-picks and locks bypass this.
      */
-    static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
+    public static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
         List<Bullet> kept = bank.stream()
-                .filter(b -> "APPROVED".equals(b.getStatus()) || BulletTextRules.vanityCount(b.getText()) == null)
+                .filter(b -> BulletTextRules.autoSelectable(b.getStatus(), b.getText()))
                 .toList();
         int dropped = bank.size() - kept.size();
         if (dropped > 0) {
@@ -1038,6 +1055,22 @@ public class ApplicationService {
         return kept;
     }
 
+    /**
+     * Drop bullets that restate a claim an earlier bullet in {@code byScoreDesc} already makes,
+     * keeping the first — which, given the caller sorts by keyword score, is the framing that
+     * matches THIS job description best.
+     *
+     * <p>The bank deliberately holds several framings of the same work, one per category lens
+     * (see {@code BulletTextRules.CROSS_LENS_THRESHOLD}). That is what makes a project reusable
+     * across different jobs, but all of those framings score similarly on raw keyword overlap,
+     * so without this the per-project top-4 could be four wordings of one achievement — spending
+     * the ranking LLM's candidate slots on a choice it has already been made for it, and starving
+     * the other work on the project.
+     *
+     * <p>This is where the variant set collapses, and it is the right place: the JD is known
+     * here and it is what decides which framing survives. {@code BulletSelector} still runs its
+     * own near-duplicate check, so this is an efficiency pass, not the correctness guard.
+     */
     static List<Bullet> collapseVariants(List<Bullet> byScoreDesc) {
         List<Bullet> kept = new ArrayList<>();
         List<String> keptTexts = new ArrayList<>();

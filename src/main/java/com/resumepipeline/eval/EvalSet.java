@@ -40,8 +40,9 @@ public class EvalSet {
     @Column(columnDefinition = "jsonb", nullable = false)
     private String items = "[]";
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
-    private Instant createdAt;
+    /** Set here rather than by the column default, so a just-saved set already carries it. */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt = Instant.now();
 
     protected EvalSet() {}
 

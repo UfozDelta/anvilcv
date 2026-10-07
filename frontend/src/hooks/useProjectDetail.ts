@@ -17,7 +17,7 @@ export function useProjectDetail(id: string | undefined) {
   const [deletingBulletIds, setDeletingBulletIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set(['ai-ml', 'backend']));
-  const [sortMode, setSortMode] = useState<'category' | 'date'>('category');
+  const [sortMode, setSortMode] = useState<'category' | 'date' | 'story'>('category');
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [statusTab, setStatusTab] = useState<'bank' | 'approved'>('bank');
   const [enrichOpen, setEnrichOpen] = useState(false);
@@ -243,11 +243,26 @@ export function useProjectDetail(id: string | undefined) {
     return [...src].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tabBullets, filterCat]);
 
-  // Exactly what the page is showing, in display order — the two views read from
-  // different sources, so the rendered PDF has to follow whichever is on screen.
+  // Newest first, wordings of one story under its title; storyless bullets after, ungrouped.
+  const byStory = useMemo(() => {
+    const groups = new Map<string, { title: string; rows: Bullet[] }>();
+    const loose: Bullet[] = [];
+    for (const b of flatByDate) {
+      if (!b.storyId) { loose.push(b); continue; }
+      const g = groups.get(b.storyId) ?? { title: b.storyTitle || 'Untitled story', rows: [] };
+      g.rows.push(b);
+      groups.set(b.storyId, g);
+    }
+    return { groups: [...groups.entries()].map(([id, g]) => ({ id, ...g })), loose };
+  }, [flatByDate]);
+
+  // Exactly what the page is showing, in display order — the views read from different
+  // sources, so the rendered PDF has to follow whichever is on screen.
   const displayed = useMemo(
-    () => (sortMode === 'date' ? flatByDate : visibleGroups.flatMap(g => g.rows)),
-    [sortMode, flatByDate, visibleGroups],
+    () => (sortMode === 'date' ? flatByDate
+      : sortMode === 'story' ? [...byStory.groups.flatMap(g => g.rows), ...byStory.loose]
+      : visibleGroups.flatMap(g => g.rows)),
+    [sortMode, flatByDate, byStory, visibleGroups],
   );
   const displayedLines = useMemo(
     () => displayed.reduce((n, b) => n + estimatedLines(b.text), 0),
@@ -284,7 +299,7 @@ export function useProjectDetail(id: string | undefined) {
     editDescription, setEditDescription,
     load, generateBank, addBullet, saveBullet, delBullet, setBulletStatus,
     cfg, offBandIds, refitting, refitMsg, refitBullets,
-    categoryMap, grouped, visibleGroups, flatByDate, presentCats,
+    categoryMap, grouped, visibleGroups, flatByDate, byStory, presentCats,
     displayed, displayedLines, preview,
   };
 }

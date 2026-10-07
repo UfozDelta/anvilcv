@@ -59,7 +59,9 @@ public class ProjectDtos {
             Instant createdAt,
             Instant updatedAt,
             long bulletCount,
-            boolean current
+            boolean current,
+            /** Distinct usable stories (ProjectService.usableStoryCount); only the single-project read fills it. */
+            Long usableStories
     ) {
         /** For callers that don't have a bullet count at hand (a just-created project has none). */
         public static ProjectResponse from(Project p) {
@@ -67,6 +69,10 @@ public class ProjectDtos {
         }
 
         public static ProjectResponse from(Project p, long bulletCount) {
+            return from(p, bulletCount, null);
+        }
+
+        public static ProjectResponse from(Project p, long bulletCount, Long usableStories) {
             return new ProjectResponse(
                     p.getId(), p.getKind(), p.getName(), p.getDescription(), p.getContextDescription(),
                     p.getGithubUrl(), p.getRepoContext() != null,
@@ -75,7 +81,7 @@ public class ProjectDtos {
                     p.getScaleImpact(), p.getHardestProblem(),
                     p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                     p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
-                    p.getCreatedAt(), p.getUpdatedAt(), bulletCount, p.isCurrent());
+                    p.getCreatedAt(), p.getUpdatedAt(), bulletCount, p.isCurrent(), usableStories);
         }
     }
 }

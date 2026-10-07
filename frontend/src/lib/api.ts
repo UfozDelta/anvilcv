@@ -103,6 +103,8 @@ export interface Project {
   updatedAt?: string | null;
   /** Bullets in this project's bank (the list endpoint counts them in one grouped query). */
   bulletCount?: number;
+  /** Distinct stories a resume can draw on; only GET /api/projects/{id} fills it. */
+  usableStories?: number | null;
 }
 
 export interface Bullet {
@@ -114,6 +116,10 @@ export interface Bullet {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   updatedAt: string;
+  /** Wordings of one story share it; null for a bullet of its own. */
+  storyId?: string | null;
+  /** Only the project's bullet list fills it. */
+  storyTitle?: string | null;
 }
 
 export interface GithubStatus {

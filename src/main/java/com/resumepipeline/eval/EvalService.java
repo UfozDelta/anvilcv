@@ -25,6 +25,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -86,12 +88,11 @@ public class EvalService {
         for (Project p : projects.findAllByUserIdOrderByCreatedAtDesc(userId)) {
             for (Bullet b : bullets.findByProjectIdOrderByCreatedAtAsc(p.getId())) {
                 items.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
-                        Arrays.asList(b.getTags()), b.getText()));
+                        Arrays.asList(b.getTags()), b.getText(), b.getStoryId()));
             }
         }
         if (items.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No bullets to snapshot");
-        EvalSet s = new EvalSet("bank-" + Instant.now().toString().substring(0, 19).replace(':', '-'),
-                EvalSet.BASELINE, "bullet bank snapshot " + LocalDate.now(), EvalSet.DONE);
+        EvalSet s = new EvalSet(label("bank"), EvalSet.BASELINE, "bullet bank snapshot " + LocalDate.now(), EvalSet.DONE);
         s.setItems(write(items));
         return sets.save(s);
     }
@@ -105,6 +106,9 @@ public class EvalService {
     public EvalSet startGeneration(UUID referenceSetId, List<UUID> projectIds, String note) {
         if (projectIds == null || projectIds.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick at least one project");
+        }
+        if (referenceSetId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick a reference set");
         }
         EvalSet reference = get(referenceSetId);
         Map<UUID, List<String>> lensesByProject = items(reference).stream().collect(Collectors.groupingBy(
@@ -120,8 +124,7 @@ public class EvalService {
                         "Reference set has no lens bullets for " + byId.get(id).getName());
             }
         }
-        EvalSet run = sets.save(new EvalSet("gen-" + Instant.now().toString().substring(0, 19).replace(':', '-'),
-                EvalSet.GENERATED, note, EvalSet.RUNNING));
+        EvalSet run = sets.save(new EvalSet(label("gen"), EvalSet.GENERATED, note, EvalSet.RUNNING));
         Thread.ofVirtual().name("eval-" + run.getId()).start(() ->
                 generate(run, projectIds.stream().map(byId::get).toList(), lensesByProject));
         return run;
@@ -135,7 +138,7 @@ public class EvalService {
                 log.info("EVAL_GEN set={} project={} lenses={}", run.getLabel(), p.getName(), lenses);
                 for (Bullet b : generator.generate(p.getUserId(), p.getId(), lenses, ProgressLog.noOp())) {
                     out.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
-                            Arrays.asList(b.getTags()), b.getText()));
+                            Arrays.asList(b.getTags()), b.getText(), b.getStoryId()));
                 }
             }
             run.setItems(write(out));
@@ -234,12 +237,20 @@ public class EvalService {
         return out;
     }
 
+    /** Same bank the generate pipeline ranks from: no REJECTED, no unreviewed vanity, variants collapsed. */
     static double coverage(List<EvalItem> items, UUID userId, Map<UUID, UUID> ownerOf,
                            Set<String> kw, List<String> lenses) {
         List<Bullet> bank = items.stream()
                 .filter(i -> userId.equals(ownerOf.get(i.projectId())))
-                .map(i -> new Bullet(i.projectId(), i.text(), i.tags().toArray(new String[0]), i.category()))
+                .filter(i -> !"REJECTED".equals(i.status()))
+                .map(i -> {
+                    Bullet b = new Bullet(i.projectId(), i.text(), i.tags().toArray(new String[0]), i.category());
+                    b.setStatus(i.status());
+                    b.setStoryId(i.storyId());
+                    return b;
+                })
                 .toList();
+        bank = ApplicationService.autoSelectable(bank, ProgressLog.noOp());
         Set<String> covered = new HashSet<>();
         for (Bullet c : ApplicationService.preFilter(bank, kw, lenses)) covered.addAll(KeywordScorer.matched(c, kw));
         return (double) covered.size() / kw.size();
@@ -279,6 +290,14 @@ public class EvalService {
                         p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(), p.getRepoMap())
                 .filter(Objects::nonNull)
                 .collect(Collectors.joining("\n"));
+    }
+
+    private static final DateTimeFormatter LABEL_TIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss.SSS").withZone(ZoneOffset.UTC);
+
+    /** Unique label: label is a unique column, and two sets started in one second used to collide. */
+    static String label(String prefix) {
+        return prefix + "-" + LABEL_TIME.format(Instant.now()) + "-" + UUID.randomUUID().toString().substring(0, 4);
     }
 
     private EvalSet get(UUID id) {

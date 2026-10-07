@@ -2,6 +2,9 @@ package com.resumepipeline.project;
 
 import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.bullet.BulletRepository;
+import com.resumepipeline.bullet.Story;
+import com.resumepipeline.bullet.StoryRepository;
+import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.GithubContextFetcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,13 +31,15 @@ public class ProjectService {
     private final GithubContextFetcher githubFetcher;
     // A heading edit changes every PDF that prints this entry — see markPdfStale.
     private final ApplicationRepository applicationRepo;
+    private final StoryRepository storyRepo;
 
     public ProjectService(ProjectRepository repo, BulletRepository bulletRepo, GithubContextFetcher githubFetcher,
-                          ApplicationRepository applicationRepo) {
+                          ApplicationRepository applicationRepo, StoryRepository storyRepo) {
         this.repo = repo;
         this.bulletRepo = bulletRepo;
         this.githubFetcher = githubFetcher;
         this.applicationRepo = applicationRepo;
+        this.storyRepo = storyRepo;
     }
 
     public List<Project> list(UUID userId) {
@@ -57,6 +62,18 @@ public class ProjectService {
 
     public long bulletCount(UUID projectId) {
         return bulletRepo.countByProjectId(projectId);
+    }
+
+    /**
+     * Distinct stories a resume can draw on: non-REJECTED bullets selection may pick on its own
+     * ({@link BulletTextRules#autoSelectable}), a storyless bullet counting as its own story.
+     */
+    public long usableStoryCount(UUID projectId) {
+        return bulletRepo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .filter(b -> !"REJECTED".equals(b.getStatus())
+                        && BulletTextRules.autoSelectable(b.getStatus(), b.getText()))
+                .map(b -> b.getStoryId() != null ? b.getStoryId() : b.getId())
+                .distinct().count();
     }
 
     public Project get(UUID userId, UUID id) {
@@ -193,9 +210,17 @@ public class ProjectService {
         copy.setSecurityPosture(src.getSecurityPosture());
         Project saved = repo.save(copy);
 
+        // Stories get fresh ids, and the copied wordings point at the copies.
+        Map<UUID, UUID> storyCopy = new HashMap<>();
+        for (Story s : storyRepo.findByProjectIdOrderByCreatedAtAsc(src.getId())) {
+            UUID newId = UUID.randomUUID();
+            storyCopy.put(s.getId(), newId);
+            storyRepo.save(new Story(newId, saved.getId(), s.getTitle(), s.getEvidence(), s.getLenses()));
+        }
         for (var b : bulletRepo.findByProjectIdOrderByCreatedAtAsc(src.getId())) {
             var clone = new com.resumepipeline.bullet.Bullet(saved.getId(), b.getText(), b.getTags(), b.getCategory());
             clone.setStatus(b.getStatus());
+            clone.setStoryId(b.getStoryId() == null ? null : storyCopy.get(b.getStoryId()));
             bulletRepo.save(clone);
         }
         return saved;

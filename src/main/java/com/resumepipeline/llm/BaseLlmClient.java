@@ -351,14 +351,14 @@ public abstract class BaseLlmClient implements LlmClient {
         boolean experience = src.kind() == SourceKind.EXPERIENCE;
         GenerationConfig cfg = configService.get(src.userId());
 
-        String prompt = sourceMaterial(src) + """
+        String prompt = sourceMaterial(src) + bankBlock(req.bank()) + """
 
                 ─────────────────────────────────────────────────────────────
                 ## TASK — pick the stories
 
-                You are choosing what a resume should say about this %s. Pick %s STORIES from the
-                source material above: distinct pieces of work a hiring manager would want to ask about
-                in an interview — a hard problem solved, a system built for real users, a design
+                You are choosing what a resume should say about this %s. Pick up to %d NEW STORIES from
+                the source material above: distinct pieces of work a hiring manager would want to ask
+                about in an interview — a hard problem solved, a system built for real users, a design
                 decision with a clear tradeoff, a measured result.
 
                 For each story return:
@@ -373,6 +373,8 @@ public abstract class BaseLlmClient implements LlmClient {
                     no story fits should stay untagged — never stretch a story to cover it.
 
                 Rules:
+                  - Up to %d new stories. Never repeat or split work listed as already in the bank.
+                  - %s
                   - Fewer, stronger stories beat more. Two stories about the same work are one story.
                   - Skip routine work every project has (CRUD screens, login, config, setup, a plain
                     test suite or CI) unless the source shows something unusual about it.
@@ -382,9 +384,14 @@ public abstract class BaseLlmClient implements LlmClient {
                 Lens definitions:
 
                 %s
-                """.formatted(experience ? "role" : "project",
-                        experience ? "4 to 10" : "up to 8 (fewer for a small project)",
-                        String.join(", ", req.lenses()), lensDefinitions(req.lenses()));
+                """.formatted(experience ? "role" : "project", req.maxStories(),
+                        String.join(", ", req.lenses()), req.maxStories(),
+                        experience
+                                ? "A role usually spans several distinct pieces of work: aim for 3 or more stories in"
+                                  + " total, the bank's included, only if the source supports them. Fewer or none is valid."
+                                : "Aim for 3 or more stories in total, the bank's included, only if the source supports"
+                                  + " them; a small project may have fewer. Fewer or none is valid.",
+                        lensDefinitions(req.lenses()));
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "stories", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
@@ -414,6 +421,39 @@ public abstract class BaseLlmClient implements LlmClient {
                 + (result.unsupportedLenses().isEmpty() ? ""
                         : " — no real work for: " + String.join(", ", result.unsupportedLenses())));
         return result;
+    }
+
+    /**
+     * What the bank already covers, for {@link #findStories} only: after the shared source
+     * prefix, so writeStoryBullets still caches it. Same wording style as generateBullets'
+     * ALREADY COVERED block. Empty when the bank holds nothing.
+     */
+    static String bankBlock(BankCoverage bank) {
+        if (bank == null || (bank.live().isEmpty() && bank.coveredWork().isEmpty() && bank.dismissed().isEmpty())) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("""
+
+                ─────────────────────────────────────────────────────────────
+                ## ALREADY IN THE BANK — do not pick these again
+
+                The bank already holds the work below. Pick DIFFERENT work. Do not repeat, lightly
+                reword, or split any of it into smaller stories — repeats are discarded.
+                """);
+        if (!bank.live().isEmpty()) {
+            sb.append("\nStories:\n");
+            bank.live().forEach(s -> sb.append("  - ").append(s.title())
+                    .append("   [lenses: ").append(String.join(", ", s.lenses())).append("]\n"));
+        }
+        if (!bank.coveredWork().isEmpty()) {
+            sb.append("\nCovered work (bullets written without a story):\n");
+            bank.coveredWork().forEach(t -> sb.append("  - ").append(t).append("\n"));
+        }
+        if (!bank.dismissed().isEmpty()) {
+            sb.append("\nDismissed by the user — do not pick:\n");
+            bank.dismissed().forEach(t -> sb.append("  - ").append(t).append("\n"));
+        }
+        return sb.toString();
     }
 
     /**

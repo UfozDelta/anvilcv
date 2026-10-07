@@ -7,6 +7,7 @@ import com.resumepipeline.bullet.BulletLineMeasurer;
 import com.resumepipeline.bullet.BulletMeasureDiagnosticRepository;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.BulletService;
+import com.resumepipeline.bullet.StoryRepository;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmUsageLogRepository;
@@ -17,6 +18,7 @@ import com.resumepipeline.project.ProjectRepository;
 import com.resumepipeline.project.ProjectService;
 import com.resumepipeline.render.PdfCompiler;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -75,7 +77,8 @@ public class DryRunGenerator {
         this.generator = new BulletService(
                 inMemory(BulletRepository.class), projectService, llm, usage, configService,
                 projectRepo, renderer, compiler, noMeasure,
-                inMemory(BulletMeasureDiagnosticRepository.class), applicationRepo);
+                inMemory(BulletMeasureDiagnosticRepository.class), applicationRepo,
+                inMemory(StoryRepository.class), TransactionOperations.withoutTransaction());
         this.generator.disableLensFallback();
     }
 
