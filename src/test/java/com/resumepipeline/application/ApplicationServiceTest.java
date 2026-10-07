@@ -452,6 +452,28 @@ class ApplicationServiceTest {
         }
 
         @Test
+        void rerenderRecoversASkillsOnlyKeywordStoredAsMissing() {
+            UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
+            Application a = new Application();
+            a.setAtsMissing(new String[]{"Docker"});
+            a.setSelectedSkills("{\"devops\":[\"Docker\"]}");
+
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), proj, new String[0]);
+            Project p = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
+            when(repo.findByUserIdAndId(user, appId)).thenReturn(Optional.of(a));
+            when(bulletRepo.findByIdsAndProjectUserId(any(), eq(user))).thenReturn(List.of(b));
+            when(projectRepo.findByIdIn(any())).thenReturn(List.of(p));
+            when(renderer.render(any(), any(), any(), any(), any(), any())).thenReturn("\\doc");
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Application out = service.rerender(user, appId, List.of(b.getId()), ProgressLog.noOp());
+
+            assertArrayEquals(new String[]{"Docker"}, out.getAtsMatched());
+            assertEquals(0, out.getAtsMissing().length);
+        }
+
+        @Test
         void aSuccessfulRebuildClearsPdfStale() {
             UUID user = UUID.randomUUID(), appId = UUID.randomUUID(), proj = UUID.randomUUID();
             Application a = new Application();
@@ -823,6 +845,23 @@ class ApplicationServiceTest {
 
             assertEquals(List.of("Kafka", "SQL", "API"), ats.matched());
             assertEquals(List.of("Rust"), ats.missing());
+        }
+
+        @Test
+        void skillsRowKeywordCountsWithoutLlmClaim() {
+            // The LLM only claims keywords it saw in bullets; a keyword shown only in the
+            // skills rows is still on the page.
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), UUID.randomUUID(), new String[0]);
+            b.setText("Shipped a Go service.");
+            List<String> keywords = List.of("Docker", "K8s", "Go", "SQL");
+
+            ApplicationService.AtsReport ats = ApplicationService.atsReport(keywords, java.util.Set.of(),
+                    List.of(b), Map.of("devops", List.of("Docker", "Kubernetes"), "databases", List.of("PostgreSQL")),
+                    List.of(), Map.of(), keywords);
+
+            // Docker/K8s from skills (alias-aware); Go only in unclaimed prose; SQL only implied.
+            assertEquals(List.of("Docker", "K8s"), ats.matched());
+            assertEquals(List.of("Go", "SQL"), ats.missing());
         }
     }
 }
