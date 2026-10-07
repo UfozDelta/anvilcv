@@ -9,15 +9,23 @@ Turn your code into resume bullets, then tailor a one-page PDF to each job.
 - **Reads your repos.** Connect GitHub (read-only, private OK) and import a repo. AnvilCV maps
   the code: it ranks the modules, counts facts like tests and endpoints, and summarizes it from
   modules up to the whole project.
-- **Writes grounded bullets.** Eight lenses (AI/ML, backend, frontend, data, security, DevOps,
-  systems, comms) each write from their own part of the code. Claims without code behind them
-  are cut, and each bullet links to its source.
+- **Writes grounded bullets.** Two LLM calls per project: the first picks its strongest
+  stories, each backed by quotes checked against the source; the second writes one or two
+  wordings per story for each lens it fits (AI/ML, backend, frontend, data, security, DevOps,
+  systems, comms). Code filters cut vanity counts, filler, invented numbers, and bad lengths,
+  then one repair pass rewrites what it can. Approved bullets are never touched.
 - **Keeps you in control.** Approve or reject bullets, pin or exclude files, add notes, and pick
   which parts of the project to write about.
-- **Tailors per job.** Paste a job description or URL. AnvilCV ranks your bullets and builds a
-  one-page LaTeX PDF (≤15 bullets) plus a cover letter in 1-3 minutes.
+- **Tailors per job.** Paste a job description or URL. AnvilCV pulls keywords and a role lens,
+  pre-filters the bank by keyword, has the LLM rank the rest, then picks bullets in code (one page,
+  no two wordings of one story) and builds a LaTeX PDF plus a cover letter in 1-3 minutes. Skills
+  and tech lines lead with the job's keywords, and an ATS check counts what is on the page.
+- **Lets you edit the result.** Add any bank bullet, reorder, see duplicate and awkward-wrap
+  warnings, and a flag when the PDF is out of date.
+- **Finds jobs.** A job feed filtered by remote, date added, tech stack, or overlap with your skills.
 - **Tracks outcomes.** Application history as a sankey chart, with LLM cost per run.
-- **Bullet style:** Google XYZ format, mostly one line, one bold, and numbers only when real.
+- **Bullet style:** Google XYZ format, mostly one line, one bold, and a measured result only
+  when the source states one.
 
 More: [repo explorer flow](docs/github-repo-explorer.html) · [adding a project](NEW_PROJECT.md) ·
 [full reference](docs/REFERENCE.md) (config, API, data model, gotchas).

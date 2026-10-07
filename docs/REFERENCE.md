@@ -9,8 +9,9 @@ template with Tectonic, and tracks what happened to every application you send.
 Repo is `resuforge`; the Maven artifact and Java package are `resume-pipeline`. Same thing.
 
 ```
-JD text or URL  ->  clean JD (LLM)  ->  keyword prefilter  ->  rank bullets (LLM)
-                ->  select <=15 bullets, skills, courses  ->  resume.tex  ->  tectonic  ->  PDF
+JD text or URL  ->  clean JD + keywords + 1-2 lenses (LLM)  ->  keyword pre-filter
+                ->  rank bullets (LLM)  ->  select bullets, skills, courses (code)
+                ->  resume.tex  ->  tectonic  ->  PDF  ->  recruiter pass (LLM, background)
 ```
 
 Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in parallel.
@@ -36,19 +37,39 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
 ## Features
 
 **Bullet bank**
-- Per-project bullet generation through eight "category lenses" (`ai-ml`, `backend`, `frontend`,
-  `data`, `security`, `devops`, `systems`, `comms`), fanned out on virtual threads.
-- Word-count rules enforced in code: 22-26 words for a one-line bullet, 42-50 for two lines;
-  27-40 lands in a dead zone and is rejected. Failing bullets are repaired, not discarded.
+- Story-based generation, two LLM calls per project whatever the lens count. `findStories`
+  picks the strongest pieces of work and tags each with up to 3 of the eight "category lenses"
+  (`ai-ml`, `backend`, `frontend`, `data`, `security`, `devops`, `systems`, `comms`); evidence
+  quotes not found in the source are dropped, and a lens no story fits gets no bullets.
+  `writeStoryBullets` then writes one wording per story-lens pair (two for a single-lens story).
+  Wordings of one story share a `story_id`.
+- XYZ format, with the Y (a measured result) only when the source states it.
+- Deterministic filters: activity counts (commits, lines, tests...), filler sentences, numbers
+  absent from the source, and lengths outside the one-line / two-line bands (a dead zone between
+  is rejected; bands are per-user config, checked in rendered characters). One repair pass
+  rewrites what was cut on form.
+- Additive: generation never changes a bullet already in the bank, approved or not. If the
+  story pass returns unreadable JSON, it falls back to one call per lens.
 - Triage workflow — every bullet is `PENDING`, `APPROVED`, or `REJECTED`.
 - Manual create/edit/tag, plus a rule-based importer for pasting in an existing resume.
 
 **Tailoring pipeline**
 - Accepts raw JD text or a JD URL. The scraper reads schema.org `JobPosting` JSON-LD, so
   Greenhouse / Lever / Workday / LinkedIn postings parse cleanly.
-- Cheap keyword scorer prefilters the bank before the expensive ranking call.
-- Selection caps: 15 bullets total, 3 per project, minimum 2 experience and 3 project entries.
-- LLM also picks the relevant skill categories and coursework per JD.
+- JD cleanup also infers 1-2 role lenses (overridable on the new-application form). The lens
+  only breaks ties; keywords decide.
+- Keyword pre-filter (plural- and alias-aware, e.g. `c++`, `c#`): top 4 per project, one
+  wording per story, 25 total, then the LLM ranks them.
+- Selection is code: up to 6 entries at 3 bullets each under a one-page line budget, minimum 2
+  experience and 3 project entries, no near-duplicates, one wording per story, no repeated
+  opening verb within an entry, and unreviewed bullets with vanity counts skipped.
+- LLM also picks the relevant skill categories and coursework per JD. Skills not in your profile
+  are dropped; skills rows and each project's tech line list JD keywords first. The ATS report
+  counts keywords in bullets, skills rows, and heading tech lines.
+- A recruiter-style review scores the page in the background after the PDF is ready.
+- PDF downloads as `Last_Company_resume.pdf`.
+- Application page: add any bank bullet, reorder, see duplicate and awkward-wrap warnings, and a
+  persistent "PDF out of date" flag after edits until the next rerender.
 - Async: submit returns a job UUID immediately, frontend polls progress every 1.5s.
 
 **Tracking**
@@ -74,16 +95,21 @@ Full writeup: [github-repo-explorer.html](github-repo-explorer.html).
 - **Repo map**, built once per pinned commit from a single tarball download:
   - *Deterministic (no LLM):* per-language symbol/route skeletons, module links from
     cross-module references, PageRank so the code everything depends on ranks first, and facts
-    counted from the code (tests, endpoints, migrations, dependencies, lines of code). Counted
-    facts give XYZ bullets a sourced Y.
+    counted from the code (tests, endpoints, migrations, dependencies, lines of code). These
+    ground the explorer and summaries; the bullet filters cut activity counts used as results.
   - *LLM, bottom-up:* the top 15 modules get a what/how/why summary. Then the project gets an
     overview, its audience, 3-7 subsystems tagged with the lenses they feed, and 2-3 end-to-end
     flows.
-  - Generation shares the overview across lenses. Each lens then writes from its own
-    subsystems' modules (or the subsystems you tick), so bullets cover different parts of the
-    system instead of rewording one summary.
+  - Generation gets the overview plus the modules of the requested lenses' subsystems (or the
+    subsystems you tick) as source material for the story pass.
+
+**Jobs**
+- `/jobs` feed with remote, added-within, tech-stack chip, and "My skills" (stack overlaps your
+  profile) filters.
 
 **Admin**
+- Bullet Eval (admin only): snapshot the live bank, dry-run the current generator on chosen
+  projects without saving, and compare two sets side by side with deterministic metrics.
 - `/admin` — LLM provider, API keys, base URLs, and per-call models. Keys encrypted at rest
   (AES-256-GCM), masked on read, live-tested against the provider before save.
 - Enforced server-side with `hasRole("ADMIN")`; the nav-link gate is cosmetic.
@@ -277,7 +303,7 @@ stored key undecryptable — they have to be re-entered.
 | Path | Contents |
 |---|---|
 | `src/main/java/com/resumepipeline/` | Spring Boot backend |
-| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V31` |
+| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V39` |
 | `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
 | `src/main/resources/repo-explorer-instructions.md` | System prompt for the server-side repo explorer |
@@ -328,8 +354,11 @@ apps     GET /api/applications           GET /api/applications/outcome-history
          POST /api/applications/{id}/rerender[/submit]
          GET  /api/applications/{id}/pdf            (application/pdf)
          GET  /api/applications/{id}/cover-letter   (text/plain)
+jobs     GET /api/public/jobs  /api/public/jobs/tags     PUT|DELETE /api/jobs/{id}/save
 import   POST /api/resume/parse          POST /api/resume/import
 admin    GET /api/admin/stats            GET|PUT /api/admin/llm   POST /api/admin/llm/test
+         GET /api/admin/eval/sets  /compare   POST /api/admin/eval/snapshot  /generate
+         DELETE /api/admin/eval/sets/{id}
 github   GET /api/github/status  /connect  /callback  /repos      DELETE /api/github
          POST /api/github/link           GET /api/github/projects/{id}/tree|file|map|bullet-sources
          POST /api/github/projects/{id}/explore/submit[?rebuildMap=true]   (polls /api/projects/jobs/{jobId}/progress)
@@ -340,7 +369,7 @@ Session-cookie auth (`JSESSIONID`, httpOnly), BCrypt passwords, `/api/admin/**` 
 
 ### Frontend routes
 
-`/` landing, `/login`, `/register`, and `/docs` are public. `/projects`, `/experiences`,
+`/` landing, `/login`, `/register`, `/docs`, and `/jobs` are public. `/projects`, `/experiences`,
 `/projects/:id`, `/experiences/:id`, `/new`, `/applications`, `/applications/:id`, `/flow`,
 `/profile`, `/settings`, `/admin`, `/upload` sit behind `RequireAuth`.
 
@@ -357,15 +386,16 @@ jobs, and it does not survive horizontal scaling.
 | Table | Notes |
 |---|---|
 | `app_user` | UUID pk, unique username/email, bcrypt hash, `is_admin` |
-| `profile` | one per user; education JSONB, five skill-category columns |
+| `profile` | one per user; education JSONB, five skill-category columns (one renders as "AI & Integrations") |
 | `project` | `kind` = PROJECT \| EXPERIENCE; GitHub URL + repo context; enrichment fields (tech stack, role, ownership, scale/impact, hardest problem) |
-| `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED — cascades from project |
-| `application` | JD text/URL, ranking JSONB, selected bullet IDs, cover letter, ATS matched/missing, `tex_blob` + `pdf_blob`, tectonic log, token counts and cost, pipeline duration |
+| `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED, `story_id` (groups wordings of one story) — cascades from project |
+| `application` | JD text/URL, ranking JSONB, selected bullet IDs, cover letter, ATS matched/missing, `tex_blob` + `pdf_blob`, `pdf_stale`, tectonic log, token counts and cost, pipeline duration |
 | `outcome_history` | one row per outcome change — feeds the sankey; cascades from application |
 | `generation_config` | per-user word-filter bounds, temperature, bold density, tone, verb style |
 | `llm_usage_log` | per-call tokens and cost, nullable app/project FKs |
 | `llm_settings` | singleton row: provider, encrypted keys, base URLs, per-call models |
 | `github_installation` | one per user: GitHub App installation id + account login. No tokens |
+| `eval_set` | admin bullet eval: frozen bank snapshots and dry-run generations, items as JSONB |
 
 `project` also carries `repo_branch`, `repo_commit_sha` (the pinned snapshot),
 `repo_evidence` (JSON of the explorer's verified spans, used for bullet tracing), and
