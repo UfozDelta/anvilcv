@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -526,10 +527,11 @@ public class BulletService {
 
         Project p = projectService.get(userId, projectId);
         List<Bullet> existing = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
+        List<Story> storyRows = storyRepo.findByProjectIdOrderByCreatedAtAsc(projectId);
         LlmClient.GenerateBulletsRequest source = sourceRequest(p, "general",
                 existing.stream().map(Bullet::getText).toList(), List.of(),
                 RepoMapRenderer.lensFocus(RepoMapRenderer.parse(p.getRepoMap()), categories, subsystems));
-        LlmClient.StoryRequest req = new LlmClient.StoryRequest(source, categories);
+        LlmClient.StoryRequest req = new LlmClient.StoryRequest(source, categories, bankCoverage(existing, storyRows));
 
         TokenAccumulator tokens = new TokenAccumulator();
         LlmClient.BulletGenerationResult result;
@@ -563,6 +565,36 @@ public class BulletService {
                 existing.stream().map(Bullet::getText).toList(), progress);
         progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
         return saved;
+    }
+
+    static final int COVERED_WORK_MAX = 30;
+    static final int COVERED_WORK_CHARS = 200;
+
+    /**
+     * A story is live while at least one of its wordings is not REJECTED. The one definition of
+     * "live": used for what findStories is shown, the overlap check and the story cap.
+     */
+    static Set<UUID> liveStoryIds(List<Bullet> bullets) {
+        return bullets.stream()
+                .filter(b -> b.getStoryId() != null && !"REJECTED".equals(b.getStatus()))
+                .map(Bullet::getStoryId)
+                .collect(Collectors.toSet());
+    }
+
+    /** What findStories is shown of the bank: live stories, storyless bullets, dismissed stories. */
+    static LlmClient.BankCoverage bankCoverage(List<Bullet> bank, List<Story> storyRows) {
+        Set<UUID> live = liveStoryIds(bank);
+        Set<UUID> withBullets = bank.stream().map(Bullet::getStoryId).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return new LlmClient.BankCoverage(
+                storyRows.stream().filter(s -> live.contains(s.getId()))
+                        .map(s -> new LlmClient.KnownStory(s.getTitle(), List.of(s.getLenses()))).toList(),
+                bank.stream().filter(b -> b.getStoryId() == null && !"REJECTED".equals(b.getStatus()))
+                        .map(b -> LogText.abbreviate(b.getText(), COVERED_WORK_CHARS))
+                        .limit(COVERED_WORK_MAX).toList(),
+                // Every wording rejected: the user dismissed the work itself.
+                storyRows.stream().filter(s -> withBullets.contains(s.getId()) && !live.contains(s.getId()))
+                        .map(Story::getTitle).toList());
     }
 
     /**

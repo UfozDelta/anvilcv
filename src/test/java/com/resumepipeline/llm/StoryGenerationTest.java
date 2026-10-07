@@ -15,6 +15,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -149,6 +152,49 @@ class StoryGenerationTest {
                 ProgressLog.noOp(), new TokenAccumulator());
         assertEquals(2, out.bullets().size());
         assertTrue(out.bullets().stream().allMatch(b -> "s1".equals(b.storyId()) && "systems".equals(b.lens())));
+        server.verify();
+    }
+
+    @Test
+    void bankBlockListsLiveCoveredAndDismissedWork() {
+        String block = BaseLlmClient.bankBlock(new LlmClient.BankCoverage(
+                List.of(new LlmClient.KnownStory("Order book resync", List.of("systems", "backend"))),
+                List.of("Wrote the venue adapters."),
+                List.of("Dark mode toggle")));
+        assertTrue(block.contains("ALREADY IN THE BANK"));
+        assertTrue(block.contains("  - Order book resync   [lenses: systems, backend]"));
+        assertTrue(block.contains("  - Wrote the venue adapters."));
+        assertTrue(block.contains("do not pick:\n  - Dark mode toggle"));
+        assertEquals("", BaseLlmClient.bankBlock(LlmClient.BankCoverage.EMPTY));
+    }
+
+    @Test
+    void onlyTheStoryPassIsShownTheBank() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GenerationConfig cfg = new GenerationConfig();
+        cfg.setWordFilterEnabled(false);
+        OpenCodeLlmClient client = new OpenCodeLlmClient(builder, "g", "m", "c", new GenerationConfigService(null) {
+            @Override public GenerationConfig get(UUID userId) { return cfg; }
+        });
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andExpect(content().string(containsString("Venue failover drill")))
+                .andRespond(withSuccess(STORIES_REPLY, MediaType.APPLICATION_JSON));
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andExpect(content().string(not(containsString("Venue failover drill"))))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.GenerateBulletsRequest src = new LlmClient.GenerateBulletsRequest(UUID.randomUUID(),
+                LlmClient.SourceKind.PROJECT, "general", "Terminal", SOURCE, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, List.of(), List.of(), null);
+        LlmClient.StoryRequest req = new LlmClient.StoryRequest(src, List.of("systems"), new LlmClient.BankCoverage(
+                List.of(new LlmClient.KnownStory("Venue failover drill", List.of("systems"))), List.of(), List.of()));
+
+        LlmClient.StoryResult stories = client.findStories(req, ProgressLog.noOp(), new TokenAccumulator());
+        client.writeStoryBullets(req, stories.stories(), ProgressLog.noOp(), new TokenAccumulator());
         server.verify();
     }
 

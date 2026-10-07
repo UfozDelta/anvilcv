@@ -372,6 +372,35 @@ class BulletServiceTest {
         verify(tx).execute(any());
     }
 
+    private static Bullet wording(UUID proj, UUID story, String status, String text) {
+        Bullet b = new Bullet(proj, text, new String[0], "backend");
+        b.setStoryId(story);
+        b.setStatus(status);
+        return b;
+    }
+
+    @Test
+    void bankCoverageSplitsLiveDismissedAndStorylessWork() {
+        UUID proj = UUID.randomUUID();
+        Story live = new Story(UUID.randomUUID(), proj, "Ledger service", new String[0], new String[]{"backend"});
+        Story dismissed = new Story(UUID.randomUUID(), proj, "Dark mode", new String[0], new String[]{"frontend"});
+        Story orphan = new Story(UUID.randomUUID(), proj, "Deleted work", new String[0], new String[]{"data"});
+        List<Bullet> bank = List.of(
+                wording(proj, live.getId(), "REJECTED", "Built the ledger."),
+                wording(proj, live.getId(), "PENDING", "Settled payouts nightly."),   // one live wording keeps it live
+                wording(proj, dismissed.getId(), "REJECTED", "Added a dark mode toggle."),
+                wording(proj, null, "PENDING", "x".repeat(300)),
+                wording(proj, null, "REJECTED", "Rejected storyless bullet."));
+
+        LlmClient.BankCoverage c = BulletService.bankCoverage(bank, List.of(live, dismissed, orphan));
+
+        assertEquals(List.of(new LlmClient.KnownStory("Ledger service", List.of("backend"))), c.live());
+        assertEquals(List.of("Dark mode"), c.dismissed());
+        assertEquals(1, c.coveredWork().size());
+        assertTrue(c.coveredWork().get(0).length() <= BulletService.COVERED_WORK_CHARS);
+        assertEquals(java.util.Set.of(live.getId()), BulletService.liveStoryIds(bank));
+    }
+
     @Test
     void storyDedupNeverRepeatsTheStoredBank() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();

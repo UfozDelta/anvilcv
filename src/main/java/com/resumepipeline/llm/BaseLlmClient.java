@@ -351,7 +351,7 @@ public abstract class BaseLlmClient implements LlmClient {
         boolean experience = src.kind() == SourceKind.EXPERIENCE;
         GenerationConfig cfg = configService.get(src.userId());
 
-        String prompt = sourceMaterial(src) + """
+        String prompt = sourceMaterial(src) + bankBlock(req.bank()) + """
 
                 ─────────────────────────────────────────────────────────────
                 ## TASK — pick the stories
@@ -414,6 +414,39 @@ public abstract class BaseLlmClient implements LlmClient {
                 + (result.unsupportedLenses().isEmpty() ? ""
                         : " — no real work for: " + String.join(", ", result.unsupportedLenses())));
         return result;
+    }
+
+    /**
+     * What the bank already covers, for {@link #findStories} only: after the shared source
+     * prefix, so writeStoryBullets still caches it. Same wording style as generateBullets'
+     * ALREADY COVERED block. Empty when the bank holds nothing.
+     */
+    static String bankBlock(BankCoverage bank) {
+        if (bank == null || (bank.live().isEmpty() && bank.coveredWork().isEmpty() && bank.dismissed().isEmpty())) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("""
+
+                ─────────────────────────────────────────────────────────────
+                ## ALREADY IN THE BANK — do not pick these again
+
+                The bank already holds the work below. Pick DIFFERENT work. Do not repeat, lightly
+                reword, or split any of it into smaller stories — repeats are discarded.
+                """);
+        if (!bank.live().isEmpty()) {
+            sb.append("\nStories:\n");
+            bank.live().forEach(s -> sb.append("  - ").append(s.title())
+                    .append("   [lenses: ").append(String.join(", ", s.lenses())).append("]\n"));
+        }
+        if (!bank.coveredWork().isEmpty()) {
+            sb.append("\nCovered work (bullets written without a story):\n");
+            bank.coveredWork().forEach(t -> sb.append("  - ").append(t).append("\n"));
+        }
+        if (!bank.dismissed().isEmpty()) {
+            sb.append("\nDismissed by the user — do not pick:\n");
+            bank.dismissed().forEach(t -> sb.append("  - ").append(t).append("\n"));
+        }
+        return sb.toString();
     }
 
     /**

@@ -126,8 +126,24 @@ public interface LlmClient {
         public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null); }
     }
 
-    /** {@code source.category()} is unused here; {@code lenses} are the ones the user asked for. */
-    record StoryRequest(GenerateBulletsRequest source, List<String> lenses) {}
+    /**
+     * {@code source.category()} is unused here; {@code lenses} are the ones the user asked for;
+     * {@code bank} is what the project's bank already covers, shown to findStories only.
+     */
+    record StoryRequest(GenerateBulletsRequest source, List<String> lenses, BankCoverage bank) {
+        public StoryRequest(GenerateBulletsRequest source, List<String> lenses) {
+            this(source, lenses, BankCoverage.EMPTY);
+        }
+    }
+    /** A story the bank already holds, as findStories sees it: title and lenses, no evidence. */
+    record KnownStory(String title, List<String> lenses) {}
+    /**
+     * What the bank already covers: live stories, the text of bullets written without a story,
+     * and the titles of stories the user rejected every wording of.
+     */
+    record BankCoverage(List<KnownStory> live, List<String> coveredWork, List<String> dismissed) {
+        public static final BankCoverage EMPTY = new BankCoverage(List.of(), List.of(), List.of());
+    }
     /** id: the model's own key ("s1"), only meaningful within one generation run. */
     record Story(String id, String title, List<String> evidence, List<String> lenses) {}
     record StoryResult(List<Story> stories, List<String> unsupportedLenses) {}
