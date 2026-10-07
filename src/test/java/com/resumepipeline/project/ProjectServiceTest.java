@@ -39,6 +39,25 @@ class ProjectServiceTest {
     @InjectMocks ProjectService service;
 
     @Test
+    void usableStoriesCountsDistinctLiveSelectableStories() {
+        UUID proj = UUID.randomUUID(), story = UUID.randomUUID();
+        Bullet a = new Bullet(proj, "Built the ledger.", new String[0], "backend");
+        a.setStoryId(story);
+        Bullet b = new Bullet(proj, "Settled payouts nightly.", new String[0], "data");
+        b.setStoryId(story);                                                            // same story: counts once
+        Bullet loose = new Bullet(proj, "Hand-written bullet.", new String[0], "general");
+        org.springframework.test.util.ReflectionTestUtils.setField(loose, "id", UUID.randomUUID());
+        Bullet vanity = new Bullet(proj, "Shipped across 87 commits.", new String[0], "general");
+        org.springframework.test.util.ReflectionTestUtils.setField(vanity, "id", UUID.randomUUID());
+        Bullet rejected = new Bullet(proj, "Rejected bullet.", new String[0], "general");
+        org.springframework.test.util.ReflectionTestUtils.setField(rejected, "id", UUID.randomUUID());
+        rejected.setStatus("REJECTED");
+        when(bulletRepo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(a, b, loose, vanity, rejected));
+
+        assertEquals(2, service.usableStoryCount(proj));
+    }
+
+    @Test
     void duplicateCopiesStoriesAndRepointsTheCopiedWordings() {
         UUID user = UUID.randomUUID(), srcId = UUID.randomUUID(), copyId = UUID.randomUUID();
         Project src = new Project(user, Project.Kind.PROJECT, "P", "desc", null, null, null, null, null);

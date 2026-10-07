@@ -53,7 +53,8 @@ public class ProjectController {
 
     @GetMapping("/{id}")
     public ProjectResponse get(Authentication auth, @PathVariable UUID id) {
-        return ProjectResponse.from(projects.get(AuthUtils.userId(auth), id), projects.bulletCount(id));
+        return ProjectResponse.from(projects.get(AuthUtils.userId(auth), id), projects.bulletCount(id),
+                projects.usableStoryCount(id));
     }
 
     @PostMapping

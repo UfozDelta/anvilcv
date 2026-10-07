@@ -1044,7 +1044,7 @@ public class ApplicationService {
      */
     public static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
         List<Bullet> kept = bank.stream()
-                .filter(b -> "APPROVED".equals(b.getStatus()) || BulletTextRules.vanityCount(b.getText()) == null)
+                .filter(b -> BulletTextRules.autoSelectable(b.getStatus(), b.getText()))
                 .toList();
         int dropped = bank.size() - kept.size();
         if (dropped > 0) {

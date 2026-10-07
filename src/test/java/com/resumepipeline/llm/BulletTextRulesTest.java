@@ -404,4 +404,11 @@ class BulletTextRulesTest {
         int after = BulletTextRules.charCount(BulletTextRules.capBoldSpans(OVERBOLDED_REAL_BULLET));
         assertEquals(before, after);
     }
+
+    @Test
+    void autoSelectableHoldsBackOnlyUnreviewedVanity() {
+        assertFalse(BulletTextRules.autoSelectable("PENDING", "Shipped the app across 87 commits."));
+        assertTrue(BulletTextRules.autoSelectable("APPROVED", "Shipped the app across 87 commits."));
+        assertTrue(BulletTextRules.autoSelectable("PENDING", "Cut p95 latency from 300ms to 90ms."));
+    }
 }

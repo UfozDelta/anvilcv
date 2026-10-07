@@ -103,6 +103,8 @@ export interface Project {
   updatedAt?: string | null;
   /** Bullets in this project's bank (the list endpoint counts them in one grouped query). */
   bulletCount?: number;
+  /** Distinct stories a resume can draw on; only GET /api/projects/{id} fills it. */
+  usableStories?: number | null;
 }
 
 export interface Bullet {

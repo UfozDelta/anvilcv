@@ -79,6 +79,14 @@ public final class BulletTextRules {
         return m.find() ? m.group() : null;
     }
 
+    /**
+     * Whether selection may pick a bullet on its own: an unreviewed one padding with an activity
+     * count ({@link #vanityCount}) is held back; APPROVED ones stay, the user chose them.
+     */
+    public static boolean autoSelectable(String status, String text) {
+        return "APPROVED".equals(status) || vanityCount(text) == null;
+    }
+
     // Abbreviations whose period is not a sentence end.
     private static final Pattern ABBREV = Pattern.compile("\\b(?:e\\.g|i\\.e|etc|vs|approx|incl|U\\.S|Inc|Ltd|Co)\\.",
             Pattern.CASE_INSENSITIVE);

@@ -123,6 +123,13 @@ export function ProjectDetail() {
               >APPROVED <span style={{ opacity: 0.6, marginLeft: 4 }}>{approvedCount}</span></button>
             </div>
 
+            {project.usableStories != null && project.usableStories < 3 && s.bullets.length > 0 && (
+              <div className="label" style={{ color: 'var(--rust)', marginBottom: 10 }}>
+                Only {project.usableStories} usable {project.usableStories === 1 ? 'story' : 'stories'} - this entry
+                may print short or repeat itself. Generate more, or add context first.
+              </div>
+            )}
+
             <div className="row row--between row--centered" style={{ marginBottom: 10 }}>
               <Section num="01.A" title={s.statusTab === 'approved' ? 'Approved Bullets' : 'AI Bullet Bank'} count={s.grouped.reduce((n, g) => n + g.rows.length, 0)} />
               <div className="row" style={{ gap: 0 }}>

@@ -4,6 +4,7 @@ import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.Story;
 import com.resumepipeline.bullet.StoryRepository;
+import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.GithubContextFetcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +62,18 @@ public class ProjectService {
 
     public long bulletCount(UUID projectId) {
         return bulletRepo.countByProjectId(projectId);
+    }
+
+    /**
+     * Distinct stories a resume can draw on: non-REJECTED bullets selection may pick on its own
+     * ({@link BulletTextRules#autoSelectable}), a storyless bullet counting as its own story.
+     */
+    public long usableStoryCount(UUID projectId) {
+        return bulletRepo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .filter(b -> !"REJECTED".equals(b.getStatus())
+                        && BulletTextRules.autoSelectable(b.getStatus(), b.getText()))
+                .map(b -> b.getStoryId() != null ? b.getStoryId() : b.getId())
+                .distinct().count();
     }
 
     public Project get(UUID userId, UUID id) {
