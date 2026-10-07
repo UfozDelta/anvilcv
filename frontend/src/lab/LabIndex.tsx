@@ -25,6 +25,21 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-10-07',
+    title: 'Project page, split',
+    status: 'prototype',
+    summary: <>Back to the ledger bank: bullets by lens, Description, Context and Repo tabs, three splits.</>,
+    protos: [
+      { to: '/lab/project-split', name: 'Project page, split', line: 'Workspace / Inspector / In-Out (1-3).' },
+    ],
+    fixes: [
+      'Bullets grouped by lens with status, length fit and tags',
+      'Story wordings share a glyph; ▶ marks the one that prints',
+      'Editable Description and Context; repo map on the Repo tab',
+      'Split: page preview, bullet detail, or sources beside bullets',
+    ],
+  },
+  {
+    iso: '2026-10-07',
     title: 'Story bank, lean',
     status: 'prototype',
     summary: <>Same story model as the bank above with almost no copy: glyphs, chips, counts and tooltips. Four layouts.</>,
