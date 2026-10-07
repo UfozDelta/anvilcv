@@ -200,17 +200,7 @@ public class ApplicationRenderer {
         for (Map.Entry<UUID, List<Bullet>> g : grouped.entrySet()) {
             Project p = projectById.get(g.getKey());
             String name = p == null ? "Project" : p.getName();
-            // The raw techStack is prose written for the bullet-generation prompt; the heading
-            // needs the handful of technology names inside it. See TechStackSummary. JD-matched
-            // terms go first so they survive its cap (no keywords: author's order).
-            String shortStack = p == null ? "" : TechStackSummary.shorten(p.getTechStack(),
-                    terms -> BulletSelector.keywordFirst(terms, keywords));
-            String tagSummary = !shortStack.isBlank()
-                    ? shortStack
-                    : g.getValue().stream()
-                        .flatMap(b -> Arrays.stream(b.getTags() == null ? new String[0] : b.getTags()))
-                        .distinct().limit(6)
-                        .reduce((a, b) -> a + ", " + b).orElse("");
+            String tagSummary = headingTechLine(p, g.getValue(), keywords);
 
             sb.append("      \\resumeProjectHeading\n")
               .append("        {\\textbf{").append(escapePlain(name)).append("}");
@@ -225,6 +215,38 @@ public class ApplicationRenderer {
             sb.append("        \\resumeItemListEnd\n\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * The tech line of every project heading {@link #render} emits for this selection, unescaped
+     * — so the ATS report can count what actually prints there. {@code keywords} must be the
+     * collection handed to {@code render}, since it decides which terms win the heading's cap.
+     */
+    public static List<String> projectHeadingTechLines(List<Bullet> selectedInOrder, Map<UUID, Project> projectById,
+                                                       Collection<String> keywords) {
+        LinkedHashMap<UUID, List<Bullet>> grouped = new LinkedHashMap<>();
+        for (Bullet b : selectedInOrder) {
+            Project owner = projectById.get(b.getProjectId());
+            if (owner != null && owner.getKind() == Project.Kind.EXPERIENCE) continue;
+            grouped.computeIfAbsent(b.getProjectId(), k -> new ArrayList<>()).add(b);
+        }
+        List<String> lines = new ArrayList<>();
+        grouped.forEach((id, bullets) -> lines.add(headingTechLine(projectById.get(id), bullets, keywords)));
+        return lines;
+    }
+
+    private static String headingTechLine(Project p, List<Bullet> bullets, Collection<String> keywords) {
+        // The raw techStack is prose written for the bullet-generation prompt; the heading
+        // needs the handful of technology names inside it. See TechStackSummary. JD-matched
+        // terms go first so they survive its cap (no keywords: author's order).
+        String shortStack = p == null ? "" : TechStackSummary.shorten(p.getTechStack(),
+                terms -> BulletSelector.keywordFirst(terms, keywords));
+        return !shortStack.isBlank()
+                ? shortStack
+                : bullets.stream()
+                    .flatMap(b -> Arrays.stream(b.getTags() == null ? new String[0] : b.getTags()))
+                    .distinct().limit(6)
+                    .reduce((a, b) -> a + ", " + b).orElse("");
     }
 
     /** Returns LLM-selected skills joined by ", " if available; falls back to raw profile value. */

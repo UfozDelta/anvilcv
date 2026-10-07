@@ -647,6 +647,72 @@ class BulletSelectorTest {
     }
 
     @Nested
+    class ProfileSkillsOnly {
+
+        private final Map<String, List<String>> raw = Map.of(
+                "languages", List.of("Java", "Python"),
+                "frameworks", List.of("React Native", "React/Redux", "Spring Boot"),
+                "databases", List.of("PostgreSQL"),
+                "devops", List.of("Docker", "Kubernetes"));
+
+        @Test
+        void dropsInventedSkillsAndReportsThem() {
+            List<String> dropped = new ArrayList<>();
+            Map<String, List<String>> selected = new LinkedHashMap<>();
+            selected.put("languages", List.of("Java", "Rust", "JavaScript"));
+            selected.put("databases", List.of("SQL", "MongoDB"));
+            Map<String, List<String>> out = BulletSelector.profileSkillsOnly(selected, raw, dropped);
+
+            assertEquals(List.of("Java"), out.get("languages"));
+            assertEquals(List.of(), out.get("databases"), "PostgreSQL does not put SQL on the profile");
+            assertEquals(List.of("Rust", "JavaScript", "SQL", "MongoDB"), dropped);
+        }
+
+        @Test
+        void aliasMatchesUseTheProfileSpelling() {
+            List<String> dropped = new ArrayList<>();
+            Map<String, List<String>> out = BulletSelector.profileSkillsOnly(
+                    Map.of("databases", List.of("Postgres"), "devops", List.of("k8s")), raw, dropped);
+
+            assertEquals(List.of("PostgreSQL"), out.get("databases"));
+            assertEquals(List.of("Kubernetes"), out.get("devops"));
+            assertTrue(dropped.isEmpty());
+        }
+
+        @Test
+        void exactSpellingBeatsContainingItem() {
+            Map<String, List<String>> r = Map.of("frameworks", List.of("React Native", "React"));
+            Map<String, List<String>> out = BulletSelector.profileSkillsOnly(
+                    Map.of("frameworks", List.of("React")), r, new ArrayList<>());
+            assertEquals(List.of("React"), out.get("frameworks"));
+        }
+
+        @Test
+        void termInsideAProfileItemKeepsThatItem() {
+            Map<String, List<String>> out = BulletSelector.profileSkillsOnly(
+                    Map.of("frameworks", List.of("Redux")), raw, new ArrayList<>());
+            assertEquals(List.of("React/Redux"), out.get("frameworks"));
+        }
+
+        @Test
+        void misfiledSkillMovesToItsProfileRow() {
+            List<String> dropped = new ArrayList<>();
+            Map<String, List<String>> out = BulletSelector.profileSkillsOnly(
+                    Map.of("languages", List.of("Docker", "Python")), raw, dropped);
+
+            assertEquals(List.of("Python"), out.get("languages"));
+            assertEquals(List.of("Docker"), out.get("devops"));
+            assertTrue(dropped.isEmpty());
+        }
+
+        @Test
+        void nullSelectionGivesEmptyRows() {
+            Map<String, List<String>> out = BulletSelector.profileSkillsOnly(null, raw, new ArrayList<>());
+            for (String key : BulletSelector.SKILL_KEYS) assertTrue(out.get(key).isEmpty());
+        }
+    }
+
+    @Nested
     class PaddingCandidates {
 
         @Test

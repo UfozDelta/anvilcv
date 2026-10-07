@@ -83,6 +83,26 @@ class ApplicationRendererSnippetTest {
         assertTrue(snippet.contains("\\emph{Java, React, Kafka, Redis}"), snippet);
     }
 
+    // The ATS report counts heading terms through this helper, so it must equal what prints.
+    @Test void headingTechLinesMatchTheRenderedHeading() {
+        Project p = project(Project.Kind.PROJECT);
+        p.setTechStack("Java, React, Kafka, Redis, Kubernetes");
+        Project tagsOnly = project(Project.Kind.PROJECT);
+        Project exp = project(Project.Kind.EXPERIENCE);
+        exp.setTechStack("Rust");
+        List<Bullet> bullets = List.of(
+                new Bullet(p.getId(), "Shipped it", new String[0], "general"),
+                new Bullet(tagsOnly.getId(), "Tagged one", new String[]{"graphql", "redis"}, "general"),
+                new Bullet(exp.getId(), "Led it", new String[0], "general"));
+        Map<UUID, Project> byId = Map.of(p.getId(), p, tagsOnly.getId(), tagsOnly, exp.getId(), exp);
+
+        String tex = renderer.renderSnippet(bullets, byId);
+        List<String> lines = ApplicationRenderer.projectHeadingTechLines(bullets, byId, null);
+
+        assertTrue(lines.equals(List.of("Java, React, Kafka, Redis", "graphql, redis")), lines.toString());
+        for (String line : lines) assertTrue(tex.contains("\\emph{" + line + "}"), line);
+    }
+
     private static void setId(Object entity, UUID id) {
         try {
             Field f = entity.getClass().getDeclaredField("id");

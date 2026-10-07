@@ -291,7 +291,13 @@ public class ApplicationService {
                 "databases",  splitCsv(profile.getSkillsDatabases()),
                 "devops",     splitCsv(profile.getSkillsDevops())
         );
-        Map<String, List<String>> floorFilledSkills = BulletSelector.fillSkills(rank.selectedSkills(), rawSkills);
+        List<String> inventedSkills = new ArrayList<>();
+        Map<String, List<String>> profileSkills = BulletSelector.profileSkillsOnly(rank.selectedSkills(), rawSkills, inventedSkills);
+        if (!inventedSkills.isEmpty()) {
+            progress.emit("Skills: dropped " + inventedSkills.size() + " not in your profile: "
+                    + String.join(", ", inventedSkills));
+        }
+        Map<String, List<String>> floorFilledSkills = BulletSelector.fillSkills(profileSkills, rawSkills);
         Map<String, List<String>> filledSkills = stretchSkillsToWidth(floorFilledSkills, rawSkills, clean.keywords());
         progress.emit("Skills filled: languages=" + filledSkills.get("languages").size()
                 + " fw=" + filledSkills.get("frameworks").size()
@@ -312,7 +318,8 @@ public class ApplicationService {
         // skills_devops is on the PDF and must not be reported missing.
         Set<String> llmMatched = rank.atsMatched().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, filledSkills, selectedCourses);
+        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, filledSkills, selectedCourses,
+                projectById, clean.keywords());
         progress.emit("ATS on rendered page: " + ats.matched().size() + "/" + clean.keywords().size()
                 + " matched (LLM claimed " + rank.atsMatched().size() + ")");
 
@@ -618,7 +625,7 @@ public class ApplicationService {
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
         AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
-                selectedSkills, selectedCourses);
+                selectedSkills, selectedCourses, projectById, keywords);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -791,7 +798,8 @@ public class ApplicationService {
         priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected, selectedSkills, selectedCourses);
+        AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected, selectedSkills, selectedCourses,
+                projectById, keywordsLower);
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -806,20 +814,23 @@ public class ApplicationService {
         return repo.save(a);
     }
 
-    private record AtsReport(List<String> matched, List<String> missing) {}
+    record AtsReport(List<String> matched, List<String> missing) {}
 
     /**
      * ATS report narrowed to what actually lands on the page: a keyword counts as matched only
      * if the LLM claimed it AND the rendered text literally contains it. The corpus is
      * everything the template emits — bullets, the skills block and coursework all render (see
      * ApplicationRenderer), so a keyword living only in skills_devops is on the PDF and must
-     * not be reported missing. Shared by create and rerender so a hand-edited selection is
-     * scored by the identical rule.
+     * not be reported missing. Project headings' tech lines count too; {@code renderKeywords}
+     * must be what the renderer was given, since it picks which terms make each heading.
+     * Shared by create and rerender so a hand-edited selection is scored by the identical rule.
      */
-    private static AtsReport atsReport(List<String> keywords, Set<String> llmMatchedLower,
-                                       List<Bullet> selected, Map<String, List<String>> skills,
-                                       List<String> courses) {
+    static AtsReport atsReport(List<String> keywords, Set<String> llmMatchedLower,
+                               List<Bullet> selected, Map<String, List<String>> skills,
+                               List<String> courses, Map<UUID, Project> projectById,
+                               Collection<String> renderKeywords) {
         List<String> renderedParts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
+        renderedParts.addAll(ApplicationRenderer.projectHeadingTechLines(selected, projectById, renderKeywords));
         if (skills != null) skills.values().forEach(renderedParts::addAll);
         renderedParts.addAll(courses);
         String renderedText = String.join("\n", renderedParts);
