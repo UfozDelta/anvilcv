@@ -1,12 +1,12 @@
 package com.resumepipeline.eval;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.application.ApplicationService;
 import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.KeywordScorer;
@@ -18,14 +18,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -39,20 +38,20 @@ public class EvalService {
 
     private static final Logger log = LoggerFactory.getLogger(EvalService.class);
 
-    static final String BASELINE_RESOURCE = "eval/baseline-2026-10-06.json";
-    static final String BASELINE_LABEL = "baseline-2026-10-06";
-
     private final EvalSetRepository sets;
     private final ProjectRepository projects;
+    private final BulletRepository bullets;
     private final ApplicationRepository applications;
     private final GenerationConfigService configService;
     private final DryRunGenerator generator;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public EvalService(EvalSetRepository sets, ProjectRepository projects, ApplicationRepository applications,
-                       GenerationConfigService configService, DryRunGenerator generator) {
+    public EvalService(EvalSetRepository sets, ProjectRepository projects, BulletRepository bullets,
+                       ApplicationRepository applications, GenerationConfigService configService,
+                       DryRunGenerator generator) {
         this.sets = sets;
         this.projects = projects;
+        this.bullets = bullets;
         this.applications = applications;
         this.configService = configService;
         this.generator = generator;
@@ -78,31 +77,23 @@ public class EvalService {
         }
     }
 
-    /** Loads the frozen baseline file into eval_set. Idempotent. */
-    public EvalSet importBaseline() {
-        return sets.findByLabel(BASELINE_LABEL).orElseGet(() -> {
-                    EvalSet s = new EvalSet(BASELINE_LABEL, EvalSet.BASELINE,
-                            "live bullet table frozen 2026-10-06", EvalSet.DONE);
-                    s.setItems(write(readBaseline()));
-                    return sets.save(s);
-                });
-    }
-
-    static List<EvalItem> readBaseline() {
-        try (InputStream in = new ClassPathResource(BASELINE_RESOURCE).getInputStream()) {
-            JsonNode root = new ObjectMapper().readTree(in);
-            List<EvalItem> out = new ArrayList<>();
-            for (JsonNode b : root.get("bullets")) {
-                List<String> tags = new ArrayList<>();
-                b.path("tags").forEach(t -> tags.add(t.asText()));
-                out.add(new EvalItem(UUID.fromString(b.get("projectId").asText()), b.get("projectName").asText(),
-                        b.get("projectKind").asText(), b.get("category").asText(), b.get("status").asText(),
-                        tags, b.get("text").asText()));
+    /**
+     * Copies this user's live bullet bank (every status) into a new BASELINE set. Reads the
+     * bullet table only; the snapshot lives in eval_set, never in the repo.
+     */
+    public EvalSet snapshotBank(UUID userId) {
+        List<EvalItem> items = new ArrayList<>();
+        for (Project p : projects.findAllByUserIdOrderByCreatedAtDesc(userId)) {
+            for (Bullet b : bullets.findByProjectIdOrderByCreatedAtAsc(p.getId())) {
+                items.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
+                        Arrays.asList(b.getTags()), b.getText()));
             }
-            return out;
-        } catch (IOException e) {
-            throw new IllegalStateException("Cannot read " + BASELINE_RESOURCE, e);
         }
+        if (items.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No bullets to snapshot");
+        EvalSet s = new EvalSet("bank-" + Instant.now().toString().substring(0, 19).replace(':', '-'),
+                EvalSet.BASELINE, "bullet bank snapshot " + LocalDate.now(), EvalSet.DONE);
+        s.setItems(write(items));
+        return sets.save(s);
     }
 
     /**

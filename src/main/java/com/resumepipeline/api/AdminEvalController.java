@@ -1,7 +1,9 @@
 package com.resumepipeline.api;
 
+import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.eval.EvalService;
 import com.resumepipeline.eval.EvalSet;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -30,9 +32,10 @@ public class AdminEvalController {
         return eval.list().stream().map(this::view).toList();
     }
 
-    @PostMapping("/baseline")
-    public Map<String, Object> importBaseline() {
-        return view(eval.importBaseline());
+    /** Snapshots the calling admin's own bullet bank (not every user's). */
+    @PostMapping("/snapshot")
+    public Map<String, Object> snapshot(Authentication auth) {
+        return view(eval.snapshotBank(AuthUtils.userId(auth)));
     }
 
     @PostMapping("/generate")
