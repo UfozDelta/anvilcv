@@ -107,10 +107,11 @@ class ApplicationControllerTest {
     }
 
     @Test
-    void pdfFilenameIsLastNameRoleResume() throws Exception {
+    void pdfFilenameIsLastNameCompanyResume() throws Exception {
         UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
         Application a = new Application();
         a.setRole("Senior Backend Engineer");
+        a.setCompany("Acme Corp");
         a.setPdfBlob(new byte[]{1});
         when(service.get(userId, id)).thenReturn(a);
         Profile p = new Profile();
@@ -120,17 +121,17 @@ class ApplicationControllerTest {
         mvc.perform(get("/api/applications/{id}/pdf", id).with(user(userId)))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
-                        "inline; filename=\"Reyes_Senior_Backend_Engineer_resume.pdf\""));
+                        "inline; filename=\"Reyes_Acme_Corp_resume.pdf\""));
     }
 
     @Test
     void resumeBaseHandlesSuffixesUnicodeAndFallbacks() {
-        assertThat(ApplicationController.resumeBase("José Muñoz Jr.", "C++ / Go Dev", "Acme"))
-                .isEqualTo("Munoz_C_Go_Dev_resume");
-        assertThat(ApplicationController.resumeBase("Jordan Reyes", " ", "Acme, Inc."))
-                .isEqualTo("Reyes_Acme_Inc_resume");
+        assertThat(ApplicationController.resumeBase("José Muñoz Jr.", "Café & Co.", "Dev"))
+                .isEqualTo("Munoz_Cafe_Co_resume");
+        assertThat(ApplicationController.resumeBase("Jordan Reyes", " ", "C++ / Go Dev"))
+                .isEqualTo("Reyes_C_Go_Dev_resume");
         assertThat(ApplicationController.resumeBase("", null, null)).isEqualTo("resume");
-        assertThat(ApplicationController.resumeBase(null, "SWE \"Intern\"", null)).isEqualTo("SWE_Intern_resume");
+        assertThat(ApplicationController.resumeBase(null, "Acme, Inc.", null)).isEqualTo("Acme_Inc_resume");
     }
 
     @Test
