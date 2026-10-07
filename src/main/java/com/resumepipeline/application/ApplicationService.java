@@ -315,7 +315,8 @@ public class ApplicationService {
         //
         // The corpus is everything the template emits, not just bullets: the skills block and
         // coursework render too (see ApplicationRenderer), so a keyword living only in
-        // skills_devops is on the PDF and must not be reported missing.
+        // skills_devops is on the PDF and must not be reported missing, even though the LLM
+        // (which only looks at bullets) never claims it.
         Set<String> llmMatched = rank.atsMatched().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
         AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, filledSkills, selectedCourses,
@@ -873,8 +874,9 @@ public class ApplicationService {
     record AtsReport(List<String> matched, List<String> missing) {}
 
     /**
-     * ATS report narrowed to what actually lands on the page: a keyword counts as matched only
-     * if the LLM claimed it AND the rendered text literally contains it. The corpus is
+     * ATS report narrowed to what actually lands on the page: a keyword counts as matched if a
+     * skills row or project heading tech line names it, or if the LLM claimed it AND the
+     * rendered text literally contains it. The corpus is
      * everything the template emits — bullets, the skills block and coursework all render (see
      * ApplicationRenderer), so a keyword living only in skills_devops is on the PDF and must
      * not be reported missing. Project headings' tech lines count too; {@code renderKeywords}
@@ -885,9 +887,13 @@ public class ApplicationService {
                                List<Bullet> selected, Map<String, List<String>> skills,
                                List<String> courses, Map<UUID, Project> projectById,
                                Collection<String> renderKeywords) {
+        // Listed terms: skills rows and project heading tech lines. The LLM only claims keywords
+        // it saw in bullets, so these count on their own, matched per item via names()
+        // (alias/plural-aware, no implications), or a skills-only keyword reads as missing.
+        List<String> listedTerms = new ArrayList<>(ApplicationRenderer.projectHeadingTechLines(selected, projectById, renderKeywords));
+        if (skills != null) skills.values().forEach(listedTerms::addAll);
         List<String> renderedParts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
-        renderedParts.addAll(ApplicationRenderer.projectHeadingTechLines(selected, projectById, renderKeywords));
-        if (skills != null) skills.values().forEach(renderedParts::addAll);
+        renderedParts.addAll(listedTerms);
         renderedParts.addAll(courses);
         String renderedText = String.join("\n", renderedParts);
 
@@ -896,7 +902,8 @@ public class ApplicationService {
         List<String> matched = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         for (String k : keywords) {
-            if (llmMatchedLower.contains(k.toLowerCase()) && KeywordScorer.mentions(renderedText, k)) {
+            boolean listed = listedTerms.stream().anyMatch(t -> KeywordScorer.names(t, k));
+            if (listed || (llmMatchedLower.contains(k.toLowerCase()) && KeywordScorer.mentions(renderedText, k))) {
                 matched.add(k);
             } else {
                 missing.add(k);
