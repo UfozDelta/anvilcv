@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" width="960" height="470" role="img" aria-labelledby="t d">
   <title id="t">AnvilCV GitHub repo explorer flow</title>
-  <desc id="d">Nine steps from connecting GitHub to an approved, source-traced bullet bank: connect, import, snapshot, deterministic repo map, LLM summaries, explorer loop, verification, per-lens generation, bank triage.</desc>
+  <desc id="d">Nine steps from connecting GitHub to an approved, source-traced bullet bank: connect, import, snapshot, deterministic repo map, LLM summaries, explorer loop, verification, story-based generation with code filters, bank triage.</desc>
   <style>
     :root { --bg:#ffffff; --ink:#1b1f24; --muted:#57606a; --line:#8c959f; --box:#f6f8fa; --stroke:#d0d7de;
             --llm:#ddf4ff; --llm-s:#54aeff; --chk:#dafbe1; --chk-s:#4ac26b; }
@@ -90,10 +90,10 @@
 
   <rect class="llm" x="340" y="330" width="280" height="96" rx="8"/>
   <text class="n" x="356" y="354">08</text>
-  <text class="h" x="382" y="355">Generate per lens</text>
-  <text class="s" x="356" y="380">Shared overview + this lens's subsystems</text>
-  <text class="s" x="356" y="398">(or the ones you ticked). ~70% 1-line,</text>
-  <text class="s" x="356" y="416">XYZ's Y only from real numbers.</text>
+  <text class="h" x="382" y="355">Stories, then bullets</text>
+  <text class="s" x="356" y="380">Call 1 picks stories, quotes checked.</text>
+  <text class="s" x="356" y="398">Call 2: 1-2 wordings per story + lens.</text>
+  <text class="s" x="356" y="416">Code cuts vanity, filler, fake numbers.</text>
 
   <rect class="chk" x="660" y="330" width="280" height="96" rx="8"/>
   <text class="n" x="676" y="354">09</text>

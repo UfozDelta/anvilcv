@@ -60,15 +60,15 @@
       <li><strong>Connect GitHub</strong> (read-only, repos you pick) and <strong>import a repo</strong> as a project pinned to a commit.</li>
       <li>AnvilCV downloads the repo once and builds a <strong>repo map</strong>: modules ranked by importance, <strong>numbers counted from the code</strong>, and summaries from modules up to the whole project.</li>
       <li>An <strong>explorer</strong> uses the map to read the right files and fills project context. Anything it can't back with code is dropped.</li>
-      <li>Each lens writes bullets from <strong>its own part of the system</strong>. Every bullet links to the files or commits it came from.</li>
-      <li>Bullet rules follow recruiter research: mostly one line, one bold on those, and numbers only when real.</li>
+      <li>Bullets are written from <strong>stories</strong>: one call picks the strongest work with quotes checked against the source, a second writes one or two wordings per story and lens. Every bullet links to the files or commits it came from.</li>
+      <li>Bullet rules follow recruiter research: mostly one line, one bold on those, and a measured result only when the source states one. Activity counts (commits, lines, tests) are cut.</li>
       <li>The old <em>Copy for LLM</em> button and the agent download are gone. Manual paste still works.</li>
     </ul>
   </div>
 
   <h2>The flow</h2>
   <figure>
-    <img src="repo-explorer-flow.svg" alt="Nine-step flow: connect GitHub, import repo, download snapshot, build repo map, summarize bottom-up, explorer loop, verify and save, generate per lens, triage bank with source links.">
+    <img src="repo-explorer-flow.svg" alt="Nine-step flow: connect GitHub, import repo, download snapshot, build repo map, summarize bottom-up, explorer loop, verify and save, find stories then write bullets, triage bank with source links.">
     <figcaption>Grey steps are deterministic, blue steps use the LLM, green steps are checks and user control.</figcaption>
   </figure>
 
@@ -81,15 +81,15 @@
     <div class="card"><h3>5 · Summaries</h3><p>Bottom-up, like CodeWiki / RepoAgent. The top 15 modules get what / how / why. Then the project gets an overview, its audience, 3-7 subsystems tagged with the lenses they feed, and 2-3 end-to-end flows. Cached per commit.</p></div>
     <div class="card"><h3>6 · Explorer</h3><p>LLM tool loop (<code>read_file</code>, <code>git_log</code>, <code>search_code</code>, <code>list_tree</code>) that sees the map first. Budgets on steps, files, tokens, and time. Ported from <code>anvilcv-context-mcp</code>'s instructions.</p></div>
     <div class="card"><h3>7 · Verify</h3><p>Citations to files it never read are dropped. Evidence text is re-sliced from the real file. Any sentence whose number appears nowhere in the code is cut. Blank fields keep what the user typed.</p></div>
-    <div class="card"><h3>8 · Generate</h3><p>Every lens shares the project overview. Each then gets its own slice: the subsystems tagged for it, or the ones you ticked. Counted facts supply the Y in XYZ bullets.</p></div>
+    <div class="card"><h3>8 · Generate</h3><p>Two calls. <code>findStories</code> picks the strongest work from the overview and the requested lenses' subsystems (or the ones you ticked); quotes not found in the source are dropped. <code>writeStoryBullets</code> writes one or two wordings per story and lens. Code then cuts vanity counts, filler, invented numbers, and bad lengths, with one repair pass. Approved bullets are never touched.</p></div>
     <div class="card"><h3>9 · Triage</h3><p>The Repo tab puts the file tree and map beside the bank. Each bullet shows its sources; click one to open the cited lines. Approve or reject inline.</p></div>
   </div>
 
   <h2>Why bullets should get better</h2>
   <ul>
     <li><strong>Before:</strong> every lens rewrote the same ~10 text fields, so bullets overlapped and stayed generic.</li>
-    <li><strong>After:</strong> each lens gets different modules with concrete what / how / why. For example, the security lens gets the auth code and the data lens gets the pipelines.</li>
-    <li><strong>The Y problem:</strong> code rarely states outcomes. Counted facts ("352 test cases", "47 endpoints") are real numbers taken straight from the code. The fabricated-number check therefore never cuts them.</li>
+    <li><strong>After:</strong> the map gives concrete what / how / why per module, and the story pass picks distinct pieces of work first, so a lens the project barely touches gets no bullets instead of padding.</li>
+    <li><strong>The Y problem:</strong> code rarely states outcomes. The Y is written only when the source states a result; activity counts ("352 test cases", "47 endpoints") are real but impress nobody, so the filters cut them.</li>
   </ul>
 
   <h3>Rule changes (recruiter research)</h3>
@@ -98,8 +98,8 @@
     <tr><th>Rule</th><th>Before</th><th>Now</th><th>Basis</th></tr>
     <tr><td>1-line vs 2-line mix</td><td>≈50 / 50</td><td>≈70 / 30</td><td><span class="tag ok">data</span> Ladders eye-tracking study: ~7 s first scan, long sentences scored worst</td></tr>
     <tr><td>Bold spans</td><td>≤2 per bullet</td><td>≤1 on 1-line, ≤2 on 2-line (enforced in code)</td><td><span class="tag warn">opinion</span> strategic bolding</td></tr>
-    <tr><td>XYZ formula</td><td>X + scale + outcome always</td><td>Y only from a real number, otherwise X + Z</td><td><span class="tag warn">opinion</span> full XYZ runs 35-50 words</td></tr>
-    <tr><td>27-40 word dead zone, 15 per page, 3 per project</td><td colspan="2">Unchanged</td><td>—</td></tr>
+    <tr><td>XYZ formula</td><td>X + scale + outcome always</td><td>Y only when the source states it, otherwise X + Z</td><td><span class="tag warn">opinion</span> full XYZ runs 35-50 words</td></tr>
+    <tr><td>Length dead zone, 3 per project</td><td colspan="2">Unchanged</td><td>—</td></tr>
   </table>
   </div>
 

@@ -17,7 +17,6 @@ export const ACCOUNT: Item[] = [
   { to: '/flow', label: 'Outcome flow' },
   { to: '/settings', label: 'Settings' },
   { to: '/upload', label: 'Upload résumé' },
-  { to: '/docs', label: 'Docs' },
   { to: '/admin', label: 'Admin', admin: true },
 ];
 const NEW: Item = { to: '/new', label: 'New application' };
@@ -25,7 +24,6 @@ const NEW: Item = { to: '/new', label: 'New application' };
 export const GUEST: Item[] = [
   { to: '/jobs', label: 'Jobs' },
   { to: '/pricing', label: 'Pricing' },
-  { to: '/docs', label: 'Docs' },
 ];
 
 /**

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="t d">
   <title id="t">How AnvilCV works</title>
-  <desc id="d">Two lanes. Build the bank: import a GitHub repo, map the code, explore it, generate bullets per lens, triage the bank. Tailor per job: paste a job description, clean it, rank bullets from the bank, build the PDF and cover letter, track the outcome.</desc>
+  <desc id="d">Two lanes. Build the bank: import a GitHub repo, map and explore the code, find its strongest stories, write and filter bullets per story and lens, triage the bank. Tailor per job: paste a job description, pull keywords and a lens, pre-filter and rank bullets, select one page and build the PDF, track the outcome.</desc>
   <style>
     :root { --bg:#ffffff; --ink:#1b1f24; --muted:#57606a; --line:#8c959f; --box:#f6f8fa; --stroke:#d0d7de;
             --llm:#ddf4ff; --llm-s:#54aeff; --chk:#dafbe1; --chk-s:#4ac26b; }
@@ -36,20 +36,20 @@
   <text class="s" x="34" y="98">GitHub App, read-only</text>
   <text class="s" x="34" y="116">private repos OK</text>
 
-  <rect class="box" x="206" y="48" width="172" height="84" rx="8"/>
-  <text class="h" x="220" y="74">Map the code</text>
+  <rect class="llm" x="206" y="48" width="172" height="84" rx="8"/>
+  <text class="h" x="220" y="74">Map + explore</text>
   <text class="s" x="220" y="98">ranked modules, counted</text>
-  <text class="s" x="220" y="116">facts, AI summaries</text>
+  <text class="s" x="220" y="116">facts, AI reads files</text>
 
   <rect class="llm" x="392" y="48" width="172" height="84" rx="8"/>
-  <text class="h" x="406" y="74">Explore</text>
-  <text class="s" x="406" y="98">AI reads key files;</text>
-  <text class="s" x="406" y="116">unproven claims cut</text>
+  <text class="h" x="406" y="74">Find stories</text>
+  <text class="s" x="406" y="98">strongest work, quotes</text>
+  <text class="s" x="406" y="116">checked against source</text>
 
   <rect class="llm" x="578" y="48" width="172" height="84" rx="8"/>
-  <text class="h" x="592" y="74">Generate bullets</text>
-  <text class="s" x="592" y="98">8 lenses, each from</text>
-  <text class="s" x="592" y="116">its part of the code</text>
+  <text class="h" x="592" y="74">Write + filter</text>
+  <text class="s" x="592" y="98">1-2 per story and lens;</text>
+  <text class="s" x="592" y="116">filters + 1 repair pass</text>
 
   <rect class="chk" x="764" y="48" width="172" height="84" rx="8"/>
   <text class="h" x="778" y="74">Bullet bank</text>
@@ -75,24 +75,24 @@
   <text class="s" x="34" y="304">(JSON-LD parsed)</text>
 
   <rect class="llm" x="206" y="236" width="172" height="84" rx="8"/>
-  <text class="h" x="220" y="262">Clean JD</text>
-  <text class="s" x="220" y="286">AI pulls role, company,</text>
-  <text class="s" x="220" y="304">keywords</text>
+  <text class="h" x="220" y="262">Read JD</text>
+  <text class="s" x="220" y="286">AI pulls keywords and</text>
+  <text class="s" x="220" y="304">1-2 lenses (editable)</text>
 
   <rect class="llm" x="392" y="236" width="172" height="84" rx="8"/>
   <text class="h" x="406" y="262">Rank bullets</text>
-  <text class="s" x="406" y="286">keyword prefilter,</text>
+  <text class="s" x="406" y="286">keyword pre-filter,</text>
   <text class="s" x="406" y="304">then AI ranking</text>
 
   <rect class="box" x="578" y="236" width="172" height="84" rx="8"/>
-  <text class="h" x="592" y="262">Build PDF</text>
-  <text class="s" x="592" y="286">≤15 bullets → LaTeX →</text>
-  <text class="s" x="592" y="304">1 page + cover letter</text>
+  <text class="h" x="592" y="262">Select + build</text>
+  <text class="s" x="592" y="286">1 page, 1 wording/story</text>
+  <text class="s" x="592" y="304">→ LaTeX PDF + letter</text>
 
   <rect class="chk" x="764" y="236" width="172" height="84" rx="8"/>
   <text class="h" x="778" y="262">Track</text>
-  <text class="s" x="778" y="286">outcome history,</text>
-  <text class="s" x="778" y="304">sankey + LLM cost</text>
+  <text class="s" x="778" y="286">recruiter score,</text>
+  <text class="s" x="778" y="304">outcomes + LLM cost</text>
 
   <path class="arrow" d="M192,278 H202"/>
   <path class="arrow" d="M378,278 H388"/>
