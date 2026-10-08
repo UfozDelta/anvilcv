@@ -24,6 +24,23 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    iso: '2026-10-08',
+    title: 'Projects & experiences',
+    status: 'prototype',
+    summary: <>Both list pages on the story model: story count, lens tags, Generate per row.</>,
+    protos: [
+      { to: '/lab/lists', name: 'Lists', line: 'Projects / Experiences toggle; stories, lenses, bullets, Generate.' },
+    ],
+    fixes: [
+      'Story count per row; ⚠ under 3, Full at 12',
+      'Lens tags across stories, counts on hover',
+      'Bullets as n · n✓',
+      'Repo linked or none (projects); last generated',
+      'Open and Generate on each row',
+      'Lens filter; sort by recent, most or fewest stories',
+    ],
+  },
+  {
     iso: '2026-10-07',
     title: 'Story flow',
     status: 'prototype',
