@@ -8,6 +8,7 @@ import com.resumepipeline.api.dto.ProjectDtos.ProjectResponse;
 import com.resumepipeline.api.dto.ProjectDtos.UpdateProjectRequest;
 import com.resumepipeline.auth.AuthUtils;
 import com.resumepipeline.bullet.BulletService;
+import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
 import com.resumepipeline.project.Project;
@@ -20,6 +21,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -123,20 +125,61 @@ public class ProjectController {
     public SubmitResponse generateBankSubmit(Authentication auth, @PathVariable UUID id,
                                              @RequestBody GenerateBankRequest req) {
         UUID userId = AuthUtils.userId(auth);
+        List<String> subs = req.subsystems() == null ? List.of() : req.subsystems();
+        return submitJob(userId, id, progress -> bullets.generateBank(userId, id, req.categories(), subs, progress));
+    }
+
+    /** Runs {@code work} as a background job with the live progress panel; returns the job id at once. */
+    private SubmitResponse submitJob(UUID userId, UUID projectId, java.util.function.Consumer<ProgressLog> work) {
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
         ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
-                bullets.generateBank(userId, id, req.categories(),
-                        req.subsystems() == null ? List.of() : req.subsystems(), progress);
-                jobStore.complete(jobId, id);
+                work.accept(progress);
+                jobStore.complete(jobId, projectId);
             } catch (Exception e) {
                 log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
                 jobStore.fail(jobId, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
         }));
         return new SubmitResponse(jobId);
+    }
+
+    public record StoriesResponse(int cap, List<StoryResponse> stories) {}
+    public record StoryResponse(UUID id, String title, List<String> evidence, List<String> lenses, Instant createdAt) {}
+    public record SubsystemsRequest(List<String> subsystems) {}
+    public record WordingsRequest(List<String> lenses, List<String> subsystems) {}
+
+    @GetMapping("/{id}/stories")
+    public StoriesResponse stories(Authentication auth, @PathVariable UUID id) {
+        List<StoryResponse> out = bullets.listStories(AuthUtils.userId(auth), id).stream()
+                .map(s -> new StoryResponse(s.getId(), s.getTitle(), List.of(s.getEvidence()),
+                        List.of(s.getLenses()), s.getCreatedAt()))
+                .toList();
+        return new StoriesResponse(BulletService.STORY_CAP, out);
+    }
+
+    /** "New stories": find stories across all lenses, one slot each. */
+    @PostMapping("/{id}/stories/submit")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SubmitResponse storiesSubmit(Authentication auth, @PathVariable UUID id,
+                                        @RequestBody(required = false) SubsystemsRequest req) {
+        UUID userId = AuthUtils.userId(auth);
+        List<String> subs = req == null || req.subsystems() == null ? List.of() : req.subsystems();
+        List<String> lenses = List.copyOf(CategoryLenses.LENSES.keySet());
+        return submitJob(userId, id, progress -> bullets.generateBank(userId, id, lenses, subs, progress));
+    }
+
+    /** "More wordings" for one story. Bad input is answered now: 400, 404 or 409. */
+    @PostMapping("/{id}/stories/{storyId}/wordings/submit")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SubmitResponse wordingsSubmit(Authentication auth, @PathVariable UUID id, @PathVariable UUID storyId,
+                                         @RequestBody WordingsRequest req) {
+        UUID userId = AuthUtils.userId(auth);
+        bullets.checkWordings(userId, id, storyId, req.lenses());
+        List<String> subs = req.subsystems() == null ? List.of() : req.subsystems();
+        return submitJob(userId, id, progress -> bullets.generateWordings(userId, id, storyId, req.lenses(), subs, progress));
     }
 
     @GetMapping("/jobs/{jobId}/progress")

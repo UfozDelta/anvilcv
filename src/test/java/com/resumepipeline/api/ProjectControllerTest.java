@@ -128,4 +128,49 @@ class ProjectControllerTest {
 
         verify(projects).delete(userId, id);
     }
+
+    @Test
+    void storiesListsLiveStoriesWithTheCap() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
+        com.resumepipeline.bullet.Story s = new com.resumepipeline.bullet.Story(
+                UUID.randomUUID(), id, "Ledger service", new String[]{"quote"}, new String[]{"backend"});
+        when(bullets.listStories(userId, id)).thenReturn(List.of(s));
+
+        mvc.perform(get("/api/projects/" + id + "/stories").with(user(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cap").value(BulletService.STORY_CAP))
+                .andExpect(jsonPath("$.stories[0].title").value("Ledger service"))
+                .andExpect(jsonPath("$.stories[0].lenses[0]").value("backend"));
+    }
+
+    @Test
+    void wordingsSubmitAnswersBadInputBeforeStartingAJob() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID(), storyId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException("Unknown lens: frontend")).when(bullets)
+                .checkWordings(userId, id, storyId, List.of("frontend"));
+
+        mvc.perform(post("/api/projects/" + id + "/stories/" + storyId + "/wordings/submit")
+                        .with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lenses\":[\"frontend\"]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(bullets, never()).generateWordings(any(), any(), any(), any(), any(), any());
+        verifyNoInteractions(jobStore);
+    }
+
+    @Test
+    void wordingsSubmitStartsAJobAndReturnsItsId() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID(), storyId = UUID.randomUUID();
+
+        mvc.perform(post("/api/projects/" + id + "/stories/" + storyId + "/wordings/submit")
+                        .with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lenses\":[\"data\",\"data\"]}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").exists());
+
+        verify(bullets).checkWordings(userId, id, storyId, List.of("data", "data"));
+        verify(jobStore).start(any(), eq(userId));
+    }
 }

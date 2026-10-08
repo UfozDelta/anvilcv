@@ -222,7 +222,7 @@ class ProjectServiceTest {
         assertEquals(12L, counts.get(b));
         assertNull(counts.get(c));
         verify(bulletRepo, times(1)).countGroupedByProjectId(any());
-        verify(bulletRepo, never()).countByProjectId(any());
+        verify(bulletRepo, never()).countByProjectIdAndStatusNot(any(), any());
     }
 
     @Test

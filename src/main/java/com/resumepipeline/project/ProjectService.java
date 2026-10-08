@@ -61,7 +61,7 @@ public class ProjectService {
     }
 
     public long bulletCount(UUID projectId) {
-        return bulletRepo.countByProjectId(projectId);
+        return bulletRepo.countByProjectIdAndStatusNot(projectId, "REJECTED");
     }
 
     /**

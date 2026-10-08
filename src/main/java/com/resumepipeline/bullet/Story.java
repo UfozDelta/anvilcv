@@ -49,5 +49,6 @@ public class Story {
     public String getTitle() { return title; }
     public String[] getEvidence() { return evidence; }
     public String[] getLenses() { return lenses; }
+    public void setLenses(String[] lenses) { this.lenses = lenses; }
     public Instant getCreatedAt() { return createdAt; }
 }

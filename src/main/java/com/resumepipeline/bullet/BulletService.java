@@ -69,7 +69,7 @@ public class BulletService {
     private final Set<UUID> generating = ConcurrentHashMap.newKeySet();
 
     /** Live stories a project may hold; a build on a full bank makes no LLM call. */
-    static final int STORY_CAP = 12;
+    public static final int STORY_CAP = 12;
     /** Most new stories one build asks for. */
     static final int MAX_NEW_STORIES = 8;
     /** Evidence quotes shorter than this prove too little to call two stories the same work. */
@@ -631,6 +631,95 @@ public class BulletService {
         return saved;
     }
 
+    /** The project's live stories, oldest first. A story with no live wording is deleted and not listed. */
+    public List<Story> listStories(UUID userId, UUID projectId) {
+        projectService.get(userId, projectId);
+        Set<UUID> live = liveStoryIds(repo.findByProjectIdOrderByCreatedAtAsc(projectId));
+        return storyRepo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .filter(st -> live.contains(st.getId())).toList();
+    }
+
+    /**
+     * Synchronous checks for a wordings run, so a bad request is answered before a job starts:
+     * unknown lens (400), a story not in this project (404), a deleted story or a busy project (409).
+     */
+    public void checkWordings(UUID userId, UUID projectId, UUID storyId, List<String> lenses) {
+        if (lenses == null || lenses.isEmpty()) throw new IllegalArgumentException("Pick at least one lens.");
+        for (String l : lenses) {
+            if (!CategoryLenses.LENSES.containsKey(l)) throw new IllegalArgumentException("Unknown lens: " + l);
+        }
+        projectService.get(userId, projectId);
+        storyRepo.findById(storyId).filter(st -> projectId.equals(st.getProjectId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Story not found: " + storyId));
+        if (liveWordings(projectId, storyId).isEmpty()) {
+            throw new IllegalStateException("That story is deleted. Undo a wording or add a new story.");
+        }
+        if (generating.contains(projectId)) {
+            throw new IllegalStateException("Bullets are already being generated for this project — wait for that run to finish.");
+        }
+    }
+
+    /**
+     * More wordings for one story: one slot per chosen lens (repeats run again; a lens the story
+     * does not carry is a weak fit and still runs). Existing live wordings are passed as already
+     * written. The new wordings join the story and widen its lenses; no story row is added.
+     */
+    public List<Bullet> generateWordings(UUID userId, UUID projectId, UUID storyId, List<String> lenses,
+                                         List<String> subsystems, ProgressLog progress) {
+        checkWordings(userId, projectId, storyId, lenses);
+        if (!generating.add(projectId)) {
+            throw new IllegalStateException("Bullets are already being generated for this project — wait for that run to finish.");
+        }
+        try {
+            Project p = projectService.get(userId, projectId);
+            Story story = storyRepo.findById(storyId).orElseThrow();
+            List<Bullet> bank = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
+            List<String> bankTexts = bank.stream().map(Bullet::getText).toList();
+            List<String> liveTexts = liveWordings(projectId, storyId).stream().map(Bullet::getText).toList();
+            LlmClient.Story llmStory = new LlmClient.Story(storyId.toString(), story.getTitle(),
+                    story.getEvidence().length > 0 ? List.of(story.getEvidence()) : liveTexts,
+                    List.of(story.getLenses()));
+            LlmClient.GenerateBulletsRequest source = sourceRequest(p, "general", bankTexts, List.of(),
+                    RepoMapRenderer.lensFocus(RepoMapRenderer.parse(p.getRepoMap()), lenses, subsystems));
+
+            List<String> seen = new ArrayList<>(bankTexts);
+            List<LlmClient.GeneratedBullet> kept = new ArrayList<>();
+            TokenAccumulator candidateTokens = new TokenAccumulator();
+            TokenAccumulator judgeTokens = new TokenAccumulator();
+            try {
+                for (String lens : lenses) {
+                    List<String> written = new ArrayList<>(liveTexts);
+                    kept.forEach(g -> written.add(g.text()));
+                    List<LlmClient.GeneratedBullet> slot = runSlot(source, llmStory, lens, seen, written,
+                            p.getTechStack(), candidateTokens, judgeTokens, progress);
+                    slot.forEach(g -> seen.add(g.text()));
+                    kept.addAll(slot);
+                }
+            } finally {
+                llmUsageService.record(userId, "story_candidates", candidateTokens, null, projectId);
+                llmUsageService.record(userId, "story_judge", judgeTokens, null, projectId);
+            }
+
+            Map<String, List<LlmClient.GeneratedBullet>> byLens = new LinkedHashMap<>();
+            kept.forEach(g -> byLens.computeIfAbsent(g.lens(), k -> new ArrayList<>()).add(g));
+            recordMeasureDiagnostics(userId, projectId, byLens.entrySet().stream()
+                    .map(e -> new RawGeneration(e.getKey(), new LlmClient.BulletGenerationResult(e.getValue())))
+                    .toList(), progress);
+
+            List<Bullet> saved = saveStoryBullets(userId, projectId, kept, List.of(llmStory), bankTexts, progress, story);
+            progress.emit("Done — added " + saved.size() + " wording(s) to the story.");
+            return saved;
+        } finally {
+            generating.remove(projectId);
+        }
+    }
+
+    private List<Bullet> liveWordings(UUID projectId, UUID storyId) {
+        return repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
+                .filter(b -> storyId.equals(b.getStoryId()) && !"REJECTED".equals(b.getStatus()))
+                .toList();
+    }
+
     /** Progress prefix for one slot, e.g. {@code [backend · "Ledger service"]}. */
     static String slotTag(String lens, String title) {
         return "[" + lens + " · \"" + title + "\"]";
@@ -788,12 +877,19 @@ public class BulletService {
      */
     List<Bullet> saveStoryBullets(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
                                   List<LlmClient.Story> stories, List<String> bankTexts, ProgressLog progress) {
-        return tx.execute(status -> saveStoryBulletsNow(userId, projectId, bullets, stories, bankTexts, progress));
+        return saveStoryBullets(userId, projectId, bullets, stories, bankTexts, progress, null);
+    }
+
+    /** {@code attachTo}: an existing story the wordings join; null = each story id gets a new row. */
+    List<Bullet> saveStoryBullets(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
+                                  List<LlmClient.Story> stories, List<String> bankTexts, ProgressLog progress,
+                                  Story attachTo) {
+        return tx.execute(status -> saveStoryBulletsNow(userId, projectId, bullets, stories, bankTexts, progress, attachTo));
     }
 
     private List<Bullet> saveStoryBulletsNow(UUID userId, UUID projectId, List<LlmClient.GeneratedBullet> bullets,
                                              List<LlmClient.Story> stories, List<String> bankTexts,
-                                             ProgressLog progress) {
+                                             ProgressLog progress, Story attachTo) {
         GenerationConfig cfg = configService.get(userId);
         Map<String, UUID> storyUuid = new LinkedHashMap<>();
         Map<String, List<String>> textsByStory = new LinkedHashMap<>();
@@ -811,7 +907,8 @@ public class BulletService {
             String text = BulletTextRules.capBoldSpans(g.text(), BulletTextRules.maxBoldSpans(cfg, g.text()));
             sameStory.add(text);
             Bullet b = new Bullet(projectId, text, g.tags().toArray(new String[0]), g.lens());
-            b.setStoryId(storyUuid.computeIfAbsent(g.storyId(), k -> UUID.randomUUID()));
+            b.setStoryId(storyUuid.computeIfAbsent(g.storyId(),
+                    k -> attachTo == null ? UUID.randomUUID() : attachTo.getId()));
             saved.add(repo.save(b));
         }
         Map<String, LlmClient.Story> storyById = new LinkedHashMap<>();
@@ -823,7 +920,16 @@ public class BulletService {
             rows.add(new Story(uuid, projectId, s.title(), s.evidence().toArray(new String[0]),
                     s.lenses().toArray(new String[0])));
         });
-        storyRepo.saveAll(rows);
+        if (attachTo != null) {
+            if (!saved.isEmpty()) {
+                Set<String> lenses = new java.util.LinkedHashSet<>(List.of(attachTo.getLenses()));
+                saved.forEach(b -> lenses.add(b.getCategory()));
+                attachTo.setLenses(lenses.toArray(new String[0]));
+                storyRepo.save(attachTo);
+            }
+        } else {
+            storyRepo.saveAll(rows);
+        }
         if (dupDropped > 0) progress.emit("Dedup: dropped " + dupDropped + " near-duplicate bullet(s)");
         log.info("BULLET_PERSIST project={} stories={} generated={} saved={} dup_dropped={}",
                 projectId, storyUuid.size(), bullets.size(), saved.size(), dupDropped);

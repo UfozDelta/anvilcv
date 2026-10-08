@@ -336,6 +336,63 @@ class BulletServiceTest {
     }
 
     @Test
+    void wordingsForAStoryOutsideTheProjectAreNotFound() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(storyRepo.findById(any())).thenReturn(java.util.Optional.of(
+                new Story(UUID.randomUUID(), UUID.randomUUID(), "Other", new String[0], new String[0])));
+
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> service.checkWordings(user, proj, UUID.randomUUID(), List.of("backend")));
+        assertEquals(org.springframework.http.HttpStatus.NOT_FOUND, e.getStatusCode());
+    }
+
+    @Test
+    void wordingsForADeletedStoryConflict() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        Story st = new Story(UUID.randomUUID(), proj, "Ledger", new String[]{LONG_QUOTE}, new String[]{"backend"});
+        when(storyRepo.findById(st.getId())).thenReturn(java.util.Optional.of(st));
+        when(repo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(
+                wording(proj, st.getId(), "REJECTED", "Built the ledger.")));
+
+        assertThrows(IllegalStateException.class,
+                () -> service.checkWordings(user, proj, st.getId(), List.of("backend")));
+    }
+
+    @Test
+    void unknownLensIsRejectedBeforeAnyLookup() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class,
+                () -> service.checkWordings(user, proj, UUID.randomUUID(), List.of("frontend")));
+        verifyNoInteractions(storyRepo);
+    }
+
+    @Test
+    void moreWordingsRunEachChosenLensAndJoinTheStoryWithoutANewRow() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        Story st = new Story(UUID.randomUUID(), proj, "Ledger service", new String[]{LONG_QUOTE}, new String[]{"backend"});
+        when(storyRepo.findById(st.getId())).thenReturn(java.util.Optional.of(st));
+        when(repo.findByProjectIdOrderByCreatedAtAsc(proj)).thenReturn(List.of(
+                wording(proj, st.getId(), "PENDING", "Built a ledger service in Go for payouts.")));
+        // "data" is a weak fit for this story (it carries only backend); a repeat lens runs again.
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
+                batch(cand("Cut payout latency 40% by batching settlements.")),
+                batch(cand("Reduced reconciliation errors across regions.")));
+        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of(0));
+
+        List<Bullet> out = service.generateWordings(user, proj, st.getId(), List.of("data", "data"), List.of(), ProgressLog.noOp());
+
+        assertEquals(2, out.size());
+        assertTrue(out.stream().allMatch(b -> st.getId().equals(b.getStoryId())));
+        verify(llm, times(2)).writeSlotCandidates(any(), any(), eq("data"), anyInt(), any(), any(), any());
+        verify(storyRepo, never()).saveAll(any());
+        verify(storyRepo).save(st);
+        assertEquals(List.of("backend", "data"), List.of(st.getLenses()));
+    }
+
+    @Test
     void slotTagNamesTheLensAndTheStory() {
         assertEquals("[backend · \"Ledger service\"]", BulletService.slotTag("backend", "Ledger service"));
     }
