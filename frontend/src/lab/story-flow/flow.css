@@ -14,7 +14,6 @@
 .sf-glyph { font: 18px var(--mono); line-height: 1; flex: none; }
 .sf-lens { display: inline-block; font: 700 10.5px var(--mono); letter-spacing: 0.04em; padding: 3px 7px; border: 1.5px solid var(--ink); background: var(--paper); cursor: help; white-space: nowrap; }
 .sf-lens[data-big] { font-size: 12px; padding: 4px 9px; }
-.sf-prints { font: 11px var(--mono); cursor: help; }
 .sf-writing { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: var(--rule-thin); color: var(--muted); }
 
 /* ── Bullets: the bank, grouped by story. Ledger rows: text, then a quiet side column. ── */
@@ -43,7 +42,6 @@
 .sf-b .ps-fit, .sf-b__acts .minibtn, .sf-b__ok { box-sizing: border-box; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; font: 700 10px/1 var(--mono); letter-spacing: 0.04em; white-space: nowrap; }
 .sf-b .ps-fit { padding: 0 2px; font-weight: 400; color: var(--muted); }
 .sf-b .ps-fit[data-bad] { color: var(--rust); font-weight: 700; }
-.sf-b__prints { display: inline-flex; align-items: center; height: 22px; font: 10px/1 var(--mono); color: var(--ink); cursor: help; }
 .sf-b__acts .ws-trash { width: 26px; justify-content: center; padding: 0; }
 .sf-b__acts .minibtn { transition: background 120ms ease, color 120ms ease, transform 140ms var(--ease-out); }
 .sf-b__acts .minibtn:active, .sf-b__ok:active { transform: scale(0.97); }

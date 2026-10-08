@@ -54,12 +54,6 @@ export function useStoryFlow() {
   const count = (storyId: string, lens: Lens) => bullets.filter(b => b.storyId === storyId && b.lens === lens).length;
   const pendingOf = (storyId: string) => [...pending].filter(id => id.startsWith(`${storyId}:`));
   const isPending = (storyId: string, lens: Lens) => pendingOf(storyId).some(id => lensOf(id) === lens);
-  /** The one wording that prints: approved first, then the arriving lens, then the first. */
-  const printed = (storyId: string) => {
-    const ws = wordings(storyId);
-    return ws.find(w => w.status === 'APPROVED') ?? ws.find(w => w.lens === BY_ID[storyId].best) ?? ws[0] ?? null;
-  };
-
   const setBullets = (fn: (bs: Bullet[]) => Bullet[]) => setBank(b => ({ ...b, bullets: fn(b.bullets) }));
   const toggle = (id: string) => setBullets(bs => bs.map(b => (b.id === id ? { ...b, status: b.status === 'APPROVED' ? 'BULLET' : 'APPROVED' } : b)));
   const patch = (id: string, p: Partial<Bullet>) => setBullets(bs => bs.map(b => (b.id === id ? { ...b, ...p } : b)));
@@ -120,7 +114,7 @@ export function useStoryFlow() {
   }
 
   return {
-    project, setField, stories, bullets, wordings, count, isPending, pendingOf, printed,
+    project, setField, stories, bullets, wordings, count, isPending, pendingOf,
     used, usable, room, left, finding, last, newIds, pending, removed,
     toggle, patch, remove, undo, generate, getLenses,
   };

@@ -65,13 +65,11 @@ export function LensTag({ lens, big }: { lens: Lens; big?: boolean }) {
 
 export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () => void }) {
   const on = b.status === 'APPROVED';
-  const prints = sf.wordings(b.storyId).length > 1 && sf.printed(b.storyId)?.id === b.id;
   return (
     <li className="sf-b" data-on={on || undefined} data-new={sf.newIds.has(b.id) || undefined}>
       <div className="sf-b__text"><RichText text={b.text} /></div>
       <div className="sf-b__side">
         <span className="sf-b__meta">
-          {prints && <span className="sf-b__prints" title="Prints by default; one wording per resume" aria-label="Prints">▶</span>}
           <Fit text={b.text} />
         </span>
         <span className="sf-b__acts">

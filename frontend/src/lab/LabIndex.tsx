@@ -36,7 +36,7 @@ const ENTRIES: Entry[] = [
       'Project Generate finds new stories, each with one best-fit bullet',
       'Per story: any lens, repeats add a wording; ✓ n and weak fit marked',
       'Ledger bullet rows, tidied; approve is a quiet toggle',
-      'Bullets grouped under their story; ▶ marks the one that prints',
+      'Bullets grouped under their story',
       'Statuses: Bullet and Approved; delete with undo',
     ],
   },
