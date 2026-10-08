@@ -35,7 +35,7 @@ const ENTRIES: Entry[] = [
       'Lenses cut to AI/ML, Backend, Data Eng, General',
       'Project Generate finds new stories, each with one best-fit bullet',
       'Per story: generate only the lenses it lacks; unfit lenses greyed',
-      'Wordings of one story read as alternatives ("or"); one prints',
+      'Bullets grouped under their story; ▶ marks the one that prints',
       'Statuses: Bullet and Approved; delete with undo',
     ],
   },
