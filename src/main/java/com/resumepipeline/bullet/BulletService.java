@@ -76,12 +76,10 @@ public class BulletService {
     static final int MIN_OVERLAP_QUOTE = 40;
     /** Wordings the model writes per (story, lens) slot. */
     static final int CANDIDATES_PER_SLOT = 15;
-    /** Wordings kept per slot; one when the two picks are too similar. */
+    /** Wordings kept per slot. Two picks that restate each other never reach here: candidates are deduped first. */
     static final int KEEP_PER_SLOT = 2;
     /** Top candidates by code score that the judge sees. */
     static final int JUDGE_TOP_N = 5;
-    /** Two kept picks at least this similar count as one. */
-    static final double SLOT_SIMILAR_THRESHOLD = 0.6;
     /** Code-score weights, 0-100 in total. Length fit is constant: every candidate reaching rating is in band. */
     static final int SCORE_LENGTH = 30;
     static final int SCORE_OUTCOME = 30;
@@ -774,10 +772,6 @@ public class BulletService {
                 progress.emit(tag + " judge unreadable - top by score");
                 chosen.addAll(top.stream().limit(KEEP_PER_SLOT).toList());
             }
-        }
-        if (chosen.size() == 2
-                && BulletTextRules.similarity(chosen.get(0).text(), chosen.get(1).text()) >= SLOT_SIMILAR_THRESHOLD) {
-            chosen.remove(1);
         }
         progress.emit(tag + " kept " + chosen.size());
         return chosen.stream()
