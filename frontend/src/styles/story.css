@@ -200,3 +200,7 @@
   .sf-page .tabpane.sf-pane { padding: 16px 16px 24px; }
 }
 @media (prefers-reduced-motion: reduce) { .ps-spin { animation-duration: 1.5s; } }
+
+/* Experience header form: two columns, one under 640px. */
+.sf-meta__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+@media (max-width: 639px) { .sf-meta__grid { grid-template-columns: 1fr; } }

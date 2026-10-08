@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, CATEGORIES, type Bullet, type BulletSource, type Project, type RepoMap, type RepoTree } from '../../lib/api';
-import { markdownBoldToHtml } from '../../lib/markdown';
+import { api, CATEGORIES, type Project, type RepoMap, type RepoTree } from '../../lib/api';
 import { EventStream } from '../EventStream';
 import { RepoPicker } from '../github/RepoPicker';
 import { RepoMapView } from './RepoMapView';
-import type { useProjectDetail } from '../../hooks/useProjectDetail';
-
-type S = ReturnType<typeof useProjectDetail>;
 
 const MAX_TREE_ROWS = 500;
 
 /**
- * Side-loaded repo view: the linked repo's tree and files on the left, the bullet bank on the
- * right. The user steers the explorer (pin / exclude paths, notes, lenses), runs it, generates,
- * and triages — each bullet links back to the files or commits it traces to.
+ * Repo view: the linked repo's tree and files on the left, the repo map and the explorer on the
+ * right. The user steers the explorer (pin / exclude paths, notes, lenses) and runs it; bullets
+ * are written from the Generate tab.
  */
-export function RepoTab({ s, id, project }: { s: S; id: string; project: Project }) {
+export function RepoTab({ id, project, onChanged }: { id: string; project: Project; onChanged: () => void }) {
   const linked = !!project.repoCommitSha;
   const [relinking, setRelinking] = useState(false);
 
@@ -23,15 +19,15 @@ export function RepoTab({ s, id, project }: { s: S; id: string; project: Project
     return (
       <RepoPicker
         projectId={id}
-        onLinked={() => { setRelinking(false); s.load(); }}
+        onLinked={() => { setRelinking(false); onChanged(); }}
         onCancel={linked ? () => setRelinking(false) : undefined}
       />
     );
   }
-  return <LinkedRepo s={s} id={id} project={project} onRelink={() => setRelinking(true)} />;
+  return <LinkedRepo id={id} project={project} onChanged={onChanged} onRelink={() => setRelinking(true)} />;
 }
 
-function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: Project; onRelink: () => void }) {
+function LinkedRepo({ id, project, onChanged, onRelink }: { id: string; project: Project; onChanged: () => void; onRelink: () => void }) {
   const repoName = (project.githubUrl ?? '').replace('https://github.com/', '');
   const [tree, setTree] = useState<RepoTree | null>(null);
   const [filter, setFilter] = useState('');
@@ -39,9 +35,8 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
   const [pins, setPins] = useState<Set<string>>(new Set());
   const [excludes, setExcludes] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
-  const [lenses, setLenses] = useState<Set<string>>(new Set(s.picked));
+  const [lenses, setLenses] = useState<Set<string>>(new Set(CATEGORIES.map(c => c.slug)));
   const [exploring, setExploring] = useState(false);
-  const [sources, setSources] = useState<Record<string, BulletSource[]>>({});
   const [err, setErr] = useState<string | null>(null);
   const [pulling, setPulling] = useState(false);
   const [map, setMap] = useState<RepoMap | null>(null);
@@ -57,10 +52,6 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
     // 204 (no body) until the first exploration builds the map.
     api.get<RepoMap | ''>(`/api/github/projects/${id}/map`).then(m => setMap(m || null)).catch(() => setMap(null));
   }, [id, project.repoCommitSha, project.repoContextReady, exploring]);
-
-  useEffect(() => {
-    api.get<Record<string, BulletSource[]>>(`/api/github/projects/${id}/bullet-sources`).then(setSources).catch(() => setSources({}));
-  }, [id, s.bullets, project.repoContextReady]);
 
   const rows = useMemo(() => {
     const n = filter.trim().toLowerCase();
@@ -87,15 +78,13 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
     setPulling(true); setErr(null);
     try {
       await api.post('/api/github/link', { projectId: id, fullName: repoName, branch: project.repoBranch });
-      await s.load();
+      onChanged();
     } catch (e: any) {
       setErr(e?.message || 'Pull failed');
     } finally {
       setPulling(false);
     }
   }
-
-  const bank = s.bullets.filter(b => b.status !== 'REJECTED');
 
   return (
     <div>
@@ -162,33 +151,21 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
               <div className="label muted">{pins.size} PINNED · {excludes.size} EXCLUDED</div>
             )}
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn--acid btn--sm" onClick={() => { setRebuildMap(false); setExploring(true); }} disabled={exploring || s.generating}>
+              <button className="btn btn--acid btn--sm" onClick={() => { setRebuildMap(false); setExploring(true); }} disabled={exploring}>
                 {exploring ? <span className="spinner">EXPLORING</span> : map ? '⌕ EXPLORE REPO' : '⌕ MAP + EXPLORE REPO'}
               </button>
               {map && (
-                <button className="btn btn--ghost btn--sm" onClick={() => { setRebuildMap(true); setExploring(true); }} disabled={exploring || s.generating}
+                <button className="btn btn--ghost btn--sm" onClick={() => { setRebuildMap(true); setExploring(true); }} disabled={exploring}
                   title="Re-summarize the map even though the commit hasn't changed">
                   ↻ REBUILD MAP
                 </button>
               )}
-              <button className="btn btn--sm" onClick={() => s.generateBank(lenses)} disabled={s.generating || exploring || lenses.size === 0}
-                title="Generate bullets from the explored context, one batch per lens">
-                {s.generating ? <span className="spinner">GENERATING</span> : '↻ GENERATE BANK'}
-              </button>
             </div>
             <div className="label muted">
-              Explore maps the repo (once per commit) and fills Info &amp; Context from verified code. Generate writes
-              PENDING bullets{focusSubs.size > 0 ? ` from the ${focusSubs.size} ticked subsystem(s)` : ', each lens from its own subsystems'} — approve the ones you want.
+              Explore maps the repo (once per commit) and fills the context fields that bullet generation reads from verified code.
             </div>
           </div>
 
-          <div className="label">BANK · {bank.length}</div>
-          {bank.length === 0 && <div className="label muted">No bullets yet — explore, then generate.</div>}
-          {bank.map(b => (
-            <BankRow key={b.id} bullet={b} sources={sources[b.id] ?? []} githubUrl={project.githubUrl ?? ''}
-              onOpen={(src) => src.path && openFile(src.path, src.startLine, src.endLine)}
-              onStatus={(st) => s.setBulletStatus(b, st)} />
-          ))}
         </div>
       </div>
 
@@ -197,20 +174,9 @@ function LinkedRepo({ s, id, project, onRelink }: { s: S; id: string; project: P
           submitUrl={`/api/github/projects/${id}/explore/submit${rebuildMap ? '?rebuildMap=true' : ''}`}
           submitBody={{ pinPaths: [...pins], excludePaths: [...excludes], notes, lenses: [...lenses] }}
           pollUrl={jobId => `/api/projects/jobs/${jobId}/progress`}
-          onDone={() => { setExploring(false); s.load(); }}
+          onDone={() => { setExploring(false); onChanged(); }}
           onClose={() => setExploring(false)}
           title="EXPLORING REPO..."
-          doneLabel=""
-        />
-      )}
-      {s.generating && (
-        <EventStream
-          submitUrl={`/api/projects/${id}/bullets/generate-bank/submit`}
-          submitBody={{ categories: [...lenses], subsystems: [...focusSubs] }}
-          pollUrl={jobId => `/api/projects/jobs/${jobId}/progress`}
-          onDone={() => { s.setGenerating(false); s.load(); }}
-          onClose={() => s.setGenerating(false)}
-          title="GENERATING BULLETS..."
           doneLabel=""
         />
       )}
@@ -241,40 +207,6 @@ function FileViewer({ file, onClose }: { file: { path: string; content: string; 
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function BankRow({ bullet, sources, githubUrl, onOpen, onStatus }: {
-  bullet: Bullet;
-  sources: BulletSource[];
-  githubUrl: string;
-  onOpen: (s: BulletSource) => void;
-  onStatus: (s: Bullet['status']) => void;
-}) {
-  const approved = bullet.status === 'APPROVED';
-  return (
-    <div className="panel panel--inset" style={{ padding: '10px 12px', borderLeft: approved ? '4px solid var(--ink)' : undefined }}>
-      <div dangerouslySetInnerHTML={{ __html: markdownBoldToHtml(bullet.text) }} />
-      <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
-        <span className="label muted">{bullet.category}</span>
-        {sources.map((src, i) => src.path ? (
-          <button key={i} type="button" className="kw" title={`${src.field}: ${src.claim}`} onClick={() => onOpen(src)} style={{ cursor: 'pointer' }}>
-            {src.path.split('/').pop()}:{src.startLine}-{src.endLine}
-          </button>
-        ) : (
-          <a key={i} className="kw" title={`${src.field}: ${src.claim}`} href={`${githubUrl}/commit/${src.commit}`} target="_blank" rel="noreferrer">
-            commit {src.commit?.slice(0, 7)}
-          </a>
-        ))}
-        {sources.length === 0 && <span className="label muted">no traced source</span>}
-        <span style={{ flex: 1 }} />
-        <button className="btn btn--sm" onClick={() => onStatus(approved ? 'PENDING' : 'APPROVED')}
-          style={{ background: approved ? 'var(--ink)' : 'var(--paper)', color: approved ? 'var(--paper)' : 'var(--ink)' }}>
-          {approved ? '✓ APPROVED' : 'APPROVE'}
-        </button>
-        <button className="btn btn--ghost btn--sm" onClick={() => onStatus('REJECTED')}>REJECT</button>
       </div>
     </div>
   );
