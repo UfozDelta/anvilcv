@@ -64,17 +64,15 @@ export function ProjectDetail() {
         <button type="button" role="tab" aria-selected={tab === 'generate'} className={tab === 'generate' ? 'is-on' : ''} onClick={() => setTab('generate')}>
           Generate
         </button>
-        {!isExp && (
-          <button type="button" role="tab" aria-selected={tab === 'repo'} className={tab === 'repo' ? 'is-on' : ''} onClick={() => setTab('repo')}>
-            Repo
-          </button>
-        )}
+        <button type="button" role="tab" aria-selected={tab === 'repo'} className={tab === 'repo' ? 'is-on' : ''} onClick={() => setTab('repo')}>
+          Repo
+        </button>
       </div>
 
       <div className="tabpane sf-pane" role="tabpanel">
         {tab === 'bullets' && <StoryBullets cfg={cfg} sb={sb} />}
         {tab === 'generate' && <StoryGenerate sb={sb} />}
-        {tab === 'repo' && !isExp && (
+        {tab === 'repo' && (
           <RepoTab id={id} project={project} onChanged={() => { reloadProject(); sb.load(); }} />
         )}
       </div>

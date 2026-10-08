@@ -14,20 +14,56 @@ const MAX_TREE_ROWS = 500;
 export function RepoTab({ id, project, onChanged }: { id: string; project: Project; onChanged: () => void }) {
   const linked = !!project.repoCommitSha;
   const [relinking, setRelinking] = useState(false);
+  const [ack, setAck] = useState(false);
+  const warn = project.kind === 'EXPERIENCE';
+  const blocked = repoActionBlocked(project.kind, ack);
 
   if (!linked || relinking) {
     return (
-      <RepoPicker
-        projectId={id}
-        onLinked={() => { setRelinking(false); onChanged(); }}
-        onCancel={linked ? () => setRelinking(false) : undefined}
-      />
+      <div className="stack-sm">
+        {warn && <RepoWarning ack={ack} onAck={setAck} />}
+        <RepoPicker
+          projectId={id}
+          onLinked={() => { setRelinking(false); onChanged(); }}
+          onCancel={linked ? () => setRelinking(false) : undefined}
+        />
+      </div>
     );
   }
-  return <LinkedRepo id={id} project={project} onChanged={onChanged} onRelink={() => setRelinking(true)} />;
+  return (
+    <div className="stack-sm">
+      {warn && <RepoWarning ack={ack} onAck={setAck} />}
+      <LinkedRepo id={id} project={project} onChanged={onChanged} onRelink={() => setRelinking(true)} blocked={blocked} />
+    </div>
+  );
 }
 
-function LinkedRepo({ id, project, onChanged, onRelink }: { id: string; project: Project; onChanged: () => void; onRelink: () => void }) {
+/** Work code may need the employer's consent before it goes to a third-party AI provider. Only experiences show it. */
+export function repoActionBlocked(kind: string, acknowledged: boolean): boolean {
+  return kind === 'EXPERIENCE' && !acknowledged;
+}
+
+export const REPO_WARNING_TEXT =
+  "Work code may be under NDA or your employer's confidentiality terms. Repo map reads your code and sends excerpts to an AI provider. Use at your own risk — you are responsible for what you submit.";
+
+export const REPO_STORAGE_TEXT =
+  'What AnvilCV saves: a summary of each module, and up to 15 lines of source for each claim the explorer cites, on this experience. The full repository is held in memory during a run and is not saved.';
+
+function RepoWarning({ ack, onAck }: { ack: boolean; onAck: (v: boolean) => void }) {
+  return (
+    <div className="panel panel--inset stack-sm" role="note" style={{ borderColor: 'var(--rust)' }}>
+      <div className="label" style={{ color: 'var(--rust)' }}>Read before running the repo map</div>
+      <p style={{ margin: 0 }}>{REPO_WARNING_TEXT}</p>
+      <p className="label muted" style={{ margin: 0 }}>{REPO_STORAGE_TEXT}</p>
+      <label className="na-check">
+        <input type="checkbox" checked={ack} onChange={e => onAck(e.target.checked)} />
+        <span>I have the right to use this code with AnvilCV and accept this risk.</span>
+      </label>
+    </div>
+  );
+}
+
+function LinkedRepo({ id, project, onChanged, onRelink, blocked }: { id: string; project: Project; onChanged: () => void; onRelink: () => void; blocked: boolean }) {
   const repoName = (project.githubUrl ?? '').replace('https://github.com/', '');
   const [tree, setTree] = useState<RepoTree | null>(null);
   const [filter, setFilter] = useState('');
@@ -151,11 +187,11 @@ function LinkedRepo({ id, project, onChanged, onRelink }: { id: string; project:
               <div className="label muted">{pins.size} PINNED · {excludes.size} EXCLUDED</div>
             )}
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn--acid btn--sm" onClick={() => { setRebuildMap(false); setExploring(true); }} disabled={exploring}>
+              <button className="btn btn--acid btn--sm" onClick={() => { setRebuildMap(false); setExploring(true); }} disabled={exploring || blocked}>
                 {exploring ? <span className="spinner">EXPLORING</span> : map ? '⌕ EXPLORE REPO' : '⌕ MAP + EXPLORE REPO'}
               </button>
               {map && (
-                <button className="btn btn--ghost btn--sm" onClick={() => { setRebuildMap(true); setExploring(true); }} disabled={exploring}
+                <button className="btn btn--ghost btn--sm" onClick={() => { setRebuildMap(true); setExploring(true); }} disabled={exploring || blocked}
                   title="Re-summarize the map even though the commit hasn't changed">
                   ↻ REBUILD MAP
                 </button>
