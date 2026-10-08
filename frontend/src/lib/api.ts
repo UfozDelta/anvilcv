@@ -122,6 +122,20 @@ export interface Bullet {
   storyTitle?: string | null;
 }
 
+/** A live story from GET /api/projects/{id}/stories: its evidence quotes and the lenses it carries. */
+export interface Story {
+  id: string;
+  title: string;
+  evidence: string[];
+  lenses: string[];
+  createdAt: string;
+}
+
+export interface StoriesResponse {
+  cap: number;
+  stories: Story[];
+}
+
 export interface GithubStatus {
   configured: boolean;
   connected: boolean;
