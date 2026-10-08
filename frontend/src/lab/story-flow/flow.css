@@ -129,3 +129,10 @@
   .sf-lg + .sf-lg { padding-top: 24px; }
   .sf-lg__k { padding-left: 12px; }
 }
+
+/* Header story count + lens tags on story headings */
+.sf-count { font: 12px var(--mono); white-space: nowrap; }
+.sf-count b { font-size: 15px; }
+.sf-count[data-thin] { color: var(--rust); }
+.sf-count__full { margin-left: 8px; font: 700 10.5px var(--mono); padding: 2px 6px; border: 1.5px solid var(--ink); }
+.sf-group__lenses { display: inline-flex; flex-wrap: wrap; gap: 6px; }

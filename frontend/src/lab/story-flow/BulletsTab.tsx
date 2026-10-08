@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { EditBulletForm } from '../projectDetail/EditBulletForm';
 import { BY_ID, LENSES } from './data';
 import { lensOf, type SF } from './model';
-import { WordingRow, Writing } from './parts';
+import { LensTag, WordingRow, Writing } from './parts';
 
 export function BulletsTab({ sf, focus, onGenerate }: { sf: SF; focus: string | null; onGenerate: () => void }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -32,6 +32,9 @@ export function BulletsTab({ sf, focus, onGenerate }: { sf: SF; focus: string | 
             <h3 className="sf-group__title">
               <span className="sf-glyph" aria-hidden="true">{s.glyph}</span>
               <span className="sf-group__name" tabIndex={0} title={s.evidence.map(q => `${q.src}: ${q.text}`).join('\n')}>{s.title}</span>
+              <span className="sf-group__lenses">
+                {LENSES.filter(l => ws.some(b => b.lens === l.slug)).map(l => <LensTag key={l.slug} lens={l.slug} />)}
+              </span>
               <span className="sf-group__n" title={`${ws.length} bullet${ws.length === 1 ? '' : 's'}`}>{ws.length}</span>
             </h3>
             <ul className="sf-ws">

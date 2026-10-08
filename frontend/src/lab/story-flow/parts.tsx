@@ -3,13 +3,13 @@ import { useState } from 'react';
 import { RichText } from '../../components/RichText';
 import { RepoMapView } from '../../components/ProjectDetail/RepoMapView';
 import { UndoBar } from '../../components/ledger/shared';
-import { Meter } from '../project-split/parts';
+import { STORY_CAP } from '../stories/storyFixtures';
 import { REPO_MAP } from '../project-split/data';
 import { Fit, Spin, Trash } from '../workspace/parts';
 import { LENS_OF, type Lens } from './data';
 import { type Bullet, type SF } from './model';
 
-/* ── Head: name, cap meter ── */
+/* ── Head: name, story count ── */
 
 export function Head({ sf }: { sf: SF }) {
   return (
@@ -19,9 +19,20 @@ export function Head({ sf }: { sf: SF }) {
         <h1 className="display ps-head__name">{sf.project.name}</h1>
       </div>
       <div className="ps-head__tools">
-        <Meter used={sf.stories.length} usable={sf.usable} />
+        <StoryCount n={sf.stories.length} />
       </div>
     </header>
+  );
+}
+
+/** Plain story count; ⚠ when thin, "Full" only at the cap. */
+function StoryCount({ n }: { n: number }) {
+  const thin = n < 3, full = n >= STORY_CAP;
+  return (
+    <span className="sf-count" data-thin={thin || undefined}
+      title={full ? `Bank full (${STORY_CAP})` : thin ? 'Few stories: entry may print short' : undefined}>
+      <b>{n}</b> {n === 1 ? 'story' : 'stories'}{thin && ' ⚠'}{full && <span className="sf-count__full">Full</span>}
+    </span>
   );
 }
 
