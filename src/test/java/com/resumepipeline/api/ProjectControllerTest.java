@@ -155,7 +155,8 @@ class ProjectControllerTest {
                         .content("{\"lenses\":[\"frontend\"]}"))
                 .andExpect(status().isBadRequest());
 
-        verify(bullets, never()).generateWordings(any(), any(), any(), any(), any(), any());
+        // Scoped to this test's ids: the async job from the sibling test shares this mock.
+        verify(bullets, never()).generateWordings(eq(userId), eq(id), eq(storyId), any(), any(), any());
         verifyNoInteractions(jobStore);
     }
 
