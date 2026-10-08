@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type Project } from '../../lib/api';
 import { dropPresent, ensurePresent, looksCurrent } from '../../lib/dates';
+import '../../styles/story.css';
 
 /**
  * Experience header: role title, company, location and dates. Read mode shows them with an Edit

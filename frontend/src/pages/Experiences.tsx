@@ -6,6 +6,7 @@ import { BulletBar, EXIT, EmptyState, PageTitle, RowMenu, UndoBar, useUndoDelete
 import { endKey, looksCurrent, parseDates, tenure } from '../lib/dates';
 import { usePrefersReducedMotion } from '../components/landing/useHeroLoop';
 import { NewEntryForm } from '../components/ProjectsList/NewEntryForm';
+import '../styles/story.css';
 
 type Sort = 'recent' | 'name';
 

@@ -5,6 +5,7 @@ import { WordingRow } from './WordingRow';
 import { CATEGORIES, type Bullet, type GenerationConfig } from '../../lib/api';
 import { groupStories, isLive, refitNeeded } from '../../lib/storyBank';
 import type { useStoryBank } from '../../hooks/useStoryBank';
+import '../../styles/story.css';
 
 type SB = ReturnType<typeof useStoryBank>;
 

@@ -6,6 +6,7 @@ import { BulletBar, EXIT, EmptyState, PageTitle, RowMenu, UndoBar, ago, useUndoD
 import { usePrefersReducedMotion } from '../components/landing/useHeroLoop';
 import { NewEntryForm } from '../components/ProjectsList/NewEntryForm';
 import { RepoPicker } from '../components/github/RepoPicker';
+import '../styles/story.css';
 
 type Sort = 'edited' | 'newest' | 'name';
 

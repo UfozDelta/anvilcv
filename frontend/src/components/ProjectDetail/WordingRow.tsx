@@ -1,6 +1,7 @@
 import { RichText } from '../RichText';
 import { Fit, Trash } from '../ledger/parts';
 import type { Bullet, GenerationConfig } from '../../lib/api';
+import '../../styles/story.css';
 
 /**
  * One wording in the bank. Edit is always rendered, whatever the status or lens: a bullet's text
