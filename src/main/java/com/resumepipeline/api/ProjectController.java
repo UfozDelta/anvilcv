@@ -95,16 +95,6 @@ public class ProjectController {
         return bullets.generateForProject(AuthUtils.userId(auth), id).stream().map(BulletResponse::from).toList();
     }
 
-    /** subsystems: optional repo-map subsystem names to write from instead of each lens's tagged ones. */
-    public record GenerateBankRequest(List<String> categories, List<String> subsystems) {}
-
-    @PostMapping("/{id}/bullets/generate-bank")
-    public List<BulletResponse> generateBank(Authentication auth, @PathVariable UUID id,
-                                             @RequestBody GenerateBankRequest req) {
-        return bullets.generateBank(AuthUtils.userId(auth), id, req.categories(), ProgressLog.noOp())
-                .stream().map(BulletResponse::from).toList();
-    }
-
     /**
      * Re-measure this project's bullets against the user's length bands and rewrite the ones
      * that miss. Synchronous: it is a single LLM call over one batch, and it makes no call at
@@ -119,15 +109,6 @@ public class ProjectController {
 
     public record RefitResponse(int checked, int offBand, int rewritten, int unchanged,
                                 List<BulletResponse> bullets) {}
-
-    @PostMapping("/{id}/bullets/generate-bank/submit")
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public SubmitResponse generateBankSubmit(Authentication auth, @PathVariable UUID id,
-                                             @RequestBody GenerateBankRequest req) {
-        UUID userId = AuthUtils.userId(auth);
-        List<String> subs = req.subsystems() == null ? List.of() : req.subsystems();
-        return submitJob(userId, id, progress -> bullets.generateBank(userId, id, req.categories(), subs, progress));
-    }
 
     /** Runs {@code work} as a background job with the live progress panel; returns the job id at once. */
     private SubmitResponse submitJob(UUID userId, UUID projectId, java.util.function.Consumer<ProgressLog> work) {

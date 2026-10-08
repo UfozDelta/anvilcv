@@ -148,12 +148,19 @@ export function Projects() {
                       <strong><Link to={`/projects/${p.id}`} className="ld-link">{p.name}</Link></strong>
                       <span className="ld-desc">{p.description}</span>
                     </span>
-                    <span role="cell" className="ld-hide-sm pj-stack">{p.techTerms?.slice(0, 3).join(', ') || '—'}</span>
+                    <span role="cell" className="ld-hide-sm pj-stack" title={(p.techTerms ?? []).join(', ')}>
+                      {(p.techTerms ?? []).length === 0 ? '—' : <>
+                        {p.techTerms!.slice(0, 4).join(', ')}
+                        {p.techTerms!.length > 4 && <span className="pj-more"> +{p.techTerms!.length - 4}</span>}
+                      </>}
+                    </span>
                     <span className="ld-bullets" role="cell">
                       <span className="ld-bullets__n">{p.bulletCount ?? 0}</span>
                       <BulletBar n={p.bulletCount ?? 0} max={FULL_BANK} />
                     </span>
-                    <span role="cell" className="ld-hide-sm ld-repo" data-state={repo.state} title={p.githubUrl ?? undefined}>{repo.label}</span>
+                    <span role="cell" className="ld-hide-sm ld-repo" data-state={repo.state} title={p.githubUrl ?? undefined}>
+                      {p.githubUrl ? p.githubUrl.replace('https://github.com/', '') : repo.label}
+                    </span>
                     <span role="cell" className="ld-hide-sm ld-edited">{ago(edited(p))}</span>
                     <RowMenu label={p.name} onDelete={() => del.remove(p.id)} onDuplicate={() => dup(p.id)} />
                   </motion.div>

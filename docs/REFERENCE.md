@@ -37,31 +37,34 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
 ## Features
 
 **Bullet bank**
-- Story-based generation, two LLM calls per project whatever the lens count. `findStories`
-  picks the strongest pieces of work and tags each with up to 3 of the eight "category lenses"
-  (`ai-ml`, `backend`, `frontend`, `data`, `security`, `devops`, `systems`, `comms`); evidence
-  quotes not found in the source are dropped, and a lens no story fits gets no bullets.
-  `writeStoryBullets` then writes one wording per story-lens pair (two for a single-lens story).
-  Wordings of one story share a `story_id`, and each kept story is saved as a `story` row (title,
-  evidence quotes, lenses).
+- Story-based generation. `findStories` (one LLM call) picks the strongest pieces of work and tags
+  each with up to 3 of the four lenses (`ai-ml`, `backend`, `data`, `general`); evidence quotes not
+  found in the source are dropped. Each new story then runs one slot on its best lens: `story_candidates`
+  writes 15 wordings, code filters cut them, dedup drops repeats of the bank and of each other, a code
+  score (length, outcome, tech, fresh opener) picks the top 5, and the `story_judge` call picks 1-2.
+  Wordings of one story share a `story_id`; each kept story is saved as a `story` row (title,
+  evidence quotes, lenses). Old lens slugs (frontend, security, devops, systems, comms) map to `general`.
 - Reruns build on the bank. `findStories` is shown the live stories, storyless bullets as
   covered work, and dismissed stories (every wording rejected), and asks for up to
   `min(8, 12 - live)` new ones. A found story is dropped as a repeat if at least half of its
   quotes (ignoring quotes under 40 chars) sit inside a saved one's, or its title is a
   near-duplicate. A project holds at most 12 live stories (`STORY_CAP`); a full bank makes no
   LLM call. One build per project at a time: a second gets 409 (the async submit fails the job).
+  "More wordings" (`POST .../stories/{storyId}/wordings/submit`) runs one slot per chosen lens onto an
+  existing story; it checks 400 / 404 / 409 before the job starts. Trashed (REJECTED) wordings are hidden
+  and not counted; a story whose wordings are all trashed is deleted and is never re-found.
 - Distinct progress messages when nothing is generated: no new stories, all duplicated, or bank
   full.
-- Project page: a BY STORY view, and an "only N usable stories" warning under 3 (usable = has a
-  non-rejected wording selection may pick, i.e. not an unreviewed vanity count; a storyless
-  bullet counts as its own story).
+- Project page: Bullets, Generate and Repo tabs. The header shows the story count (a warning under 3,
+  "Full" at 12). Every wording keeps an Edit control. Experiences edit title, company, location and dates
+  inline. The Repo tab keeps the tree, map and explorer.
 - XYZ format, with the Y (a measured result) only when the source states it.
 - Deterministic filters: activity counts (commits, lines, tests...), filler sentences, numbers
   absent from the source, and lengths outside the one-line / two-line bands (a dead zone between
   is rejected; bands are per-user config, checked in rendered characters). One repair pass
   rewrites what was cut on form.
 - Additive: generation never changes a bullet already in the bank, approved or not. If the
-  story pass returns unreadable JSON, it falls back to one call per lens.
+  story pass returns unreadable JSON, the run fails (no per-lens fallback).
 - Triage workflow — every bullet is `PENDING`, `APPROVED`, or `REJECTED`.
 - Manual create/edit/tag, plus a rule-based importer for pasting in an existing resume.
 
@@ -367,7 +370,9 @@ config   GET|PUT /api/config/generation
 projects GET|POST /api/projects          GET|PUT|DELETE /api/projects/{id}
          POST /api/projects/{id}/duplicate
          POST /api/projects/{id}/bullets/generate  /bullets/refit
-         POST /api/projects/{id}/bullets/generate-bank[/submit]   (409 if a run is in flight)
+         GET  /api/projects/{id}/stories
+         POST /api/projects/{id}/stories/submit                   (new stories, job)
+         POST /api/projects/{id}/stories/{storyId}/wordings/submit (more wordings, job; 400/404/409)
          GET  /api/projects/jobs/{jobId}/progress
 bullets  GET|POST /api/projects/{projectId}/bullets
          PUT|DELETE /api/bullets/{id}    PATCH /api/bullets/{id}/status

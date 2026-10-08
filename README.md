@@ -10,10 +10,9 @@ Turn your code into resume bullets, then tailor a one-page PDF to each job.
   the code: it ranks the modules, counts facts like tests and endpoints, and summarizes it from
   modules up to the whole project.
 - **Writes grounded bullets.** Two LLM calls per project: the first picks its strongest
-  stories, each backed by quotes checked against the source; the second writes one or two
-  wordings per story for each lens it fits (AI/ML, backend, frontend, data, security, DevOps,
-  systems, comms). Code filters cut vanity counts, filler, invented numbers, and bad lengths,
-  then one repair pass rewrites what it can. Approved bullets are never touched. Stories are
+  stories, each backed by quotes checked against the source; each new story then gets wordings
+  for its best lens, chosen from 15 candidates by code filters, a score and a recruiter judge
+  (lenses: AI/ML, backend, data, general). Code filters cut vanity counts, filler, invented numbers, and bad lengths. Approved bullets are never touched. Stories are
   saved, so a rerun sees what the bank already covers and drops repeats; a project holds up to
   12 live stories.
 - **Keeps you in control.** Approve or reject bullets, pin or exclude files, add notes, and pick

@@ -18,11 +18,6 @@ const SORTS: { key: Sort; label: string }[] = [
 const FULL_BANK = 12;
 
 /** Repo state from what the API says: none, linked but still being read, or read. */
-function repoState(p: Project): { state: 'none' | 'exploring' | 'explored'; label: string } {
-  if (!p.githubUrl) return { state: 'none', label: 'None' };
-  return p.repoContextReady ? { state: 'explored', label: 'Repo read' } : { state: 'exploring', label: 'Reading repo…' };
-}
-
 /** The explicit "I currently work here" flag; older rows fall back to what the dates text says. */
 const isCurrent = (p: Project) => p.current ?? looksCurrent(p.dates);
 const endKeyOf = (p: Project) => (isCurrent(p) ? Infinity : endKey(p.dates, p.createdAt));
@@ -105,14 +100,12 @@ export function Experiences() {
             <div className="ld-row xp-row xp-row--head ld-row--head" role="row">
               <span role="columnheader">Role</span>
               <span role="columnheader">Bullets</span>
-              <span role="columnheader" className="ld-hide-sm">Repo</span>
               <span role="columnheader" className="ld-hide-sm">Dates</span>
               <span role="columnheader"><span className="sr-only">Actions</span></span>
             </div>
             <AnimatePresence initial={false}>
               {shown.map((p) => {
                 const title = p.title || p.name;
-                const repo = repoState(p);
                 const bullets = p.bulletCount ?? 0;
                 const now = isCurrent(p);
                 const span = parseDates(now && !looksCurrent(p.dates) ? `${p.dates ?? ''} – Present` : p.dates);
@@ -134,12 +127,12 @@ export function Experiences() {
                         {now && <span className="ex-now">NOW</span>}
                       </strong>
                       <span className="ld-desc">{p.dates && <span className="ex-inline">{p.dates} · </span>}{meta || '—'}</span>
+                      {p.githubUrl && <span className="ld-desc ld-slug">{p.githubUrl.replace('https://github.com/', '')}</span>}
                     </span>
                     <span className="ld-bullets" role="cell">
                       <span className={`ld-bullets__n${bullets === 0 ? ' ex-zero' : ''}`}>{bullets}</span>
                       <BulletBar n={bullets} max={FULL_BANK} />
                     </span>
-                    <span role="cell" className="ld-hide-sm ld-repo" data-state={repo.state} title={p.githubUrl ?? undefined}>{repo.label}</span>
                     <span role="cell" className="ld-hide-sm ex-dates">
                       {p.dates ? <strong>{p.dates}</strong> : '—'}
                       {span && <span>{tenure(span)}</span>}
