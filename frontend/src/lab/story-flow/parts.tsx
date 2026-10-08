@@ -1,13 +1,11 @@
 /* Shared pieces for /lab/story-flow. */
 import { useState } from 'react';
-import { FIT_LABEL, fitHint, fitOf, needsRefit } from '../../lib/bulletLength';
 import { RichText } from '../../components/RichText';
 import { RepoMapView } from '../../components/ProjectDetail/RepoMapView';
 import { UndoBar } from '../../components/ledger/shared';
 import { Meter } from '../project-split/parts';
 import { REPO_MAP } from '../project-split/data';
-import { LAB_CFG } from '../fixtures';
-import { Spin, Trash } from '../workspace/parts';
+import { Fit, Spin, Trash } from '../workspace/parts';
 import { LENS_OF, type Lens } from './data';
 import { type Bullet, type SF } from './model';
 
@@ -63,35 +61,24 @@ export function LensTag({ lens, big }: { lens: Lens; big?: boolean }) {
   return <span className="sf-lens" data-lens={lens} data-big={big || undefined} title={l.tip}>{l.name}</span>;
 }
 
-/* ── One wording row: the text leads, metadata stays quiet ── */
-
-/** Length mark, only when the wording won't fit its line budget. */
-function FitMark({ text }: { text: string }) {
-  const fit = fitOf(text, LAB_CFG);
-  if (fit === 'OFF' || !needsRefit(fit)) return null;
-  return <span className="sf-b__fit" title={fitHint(text, LAB_CFG)} aria-label={FIT_LABEL[fit]}>!</span>;
-}
+/* ── One wording row: text, then a quiet side column ── */
 
 export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () => void }) {
   const on = b.status === 'APPROVED';
   const prints = sf.wordings(b.storyId).length > 1 && sf.printed(b.storyId)?.id === b.id;
   return (
     <li className="sf-b" data-on={on || undefined} data-new={sf.newIds.has(b.id) || undefined}>
-      <button type="button" className="sf-b__dot" aria-pressed={on} aria-label="Approved"
-        title={on ? 'Approved: click to unapprove' : 'Approve'} onClick={() => sf.toggle(b.id)}>
-        <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>
-      </button>
-      <p className="sf-b__text">
-        {prints && <span className="sf-b__prints" title="Prints by default; one wording per resume" aria-label="Prints">▶</span>}
-        <RichText text={b.text} />
-      </p>
-      <div className="sf-b__meta">
-        <FitMark text={b.text} />
-        <LensTag lens={b.lens} />
+      <div className="sf-b__text"><RichText text={b.text} /></div>
+      <div className="sf-b__side">
+        <span className="sf-b__meta">
+          {prints && <span className="sf-b__prints" title="Prints by default; one wording per resume" aria-label="Prints">▶</span>}
+          <LensTag lens={b.lens} />
+          <Fit text={b.text} />
+        </span>
         <span className="sf-b__acts">
-          <button type="button" className="minibtn" title="Edit" aria-label="Edit" onClick={onEdit}>
-            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3 13l.6-2.6L10.8 3.2l2 2-7.2 7.2L3 13zM9.6 4.4l2 2" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
-          </button>
+          <button type="button" className="sf-b__ok" aria-pressed={on} title={on ? 'Approved: click to unapprove' : 'Mark approved'}
+            onClick={() => sf.toggle(b.id)}>{on ? '✓ Approved' : '✓ Approve'}</button>
+          <button type="button" className="minibtn" onClick={onEdit}>Edit</button>
           <Trash onClick={() => sf.remove(b.id)} />
         </span>
       </div>
