@@ -7,7 +7,7 @@
 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ap-root {
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: clip;
 }
 .ap-root a, .ap-root button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -76,18 +76,19 @@
   display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; background: none; cursor: pointer;
   font: 700 12px var(--mono); letter-spacing: 0.08em; color: var(--ink);
 }
-.ap-menu__danger { color: var(--rust) !important; }
+.ap-menu__danger { color: var(--rust-ink) !important; }
 @keyframes ap-pop { from { opacity: 0; transform: scale(0.97); } }
 @media (hover: hover) and (pointer: fine) { .ap-menu__pop button:hover { background: var(--acid); } }
 
 /* Undo bar: bottom-left, so it never sits under the prototype picker */
 .ap-undo {
-  position: fixed; left: 16px; bottom: 24px; z-index: 30;
+  position: fixed; left: 16px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 30;
   display: flex; align-items: center; gap: 16px; padding: 12px 14px;
   background: var(--ink); color: var(--paper); font: 13px var(--mono);
   animation: ap-up 220ms var(--ease-out) both;
 }
-.ap-undo button { border: 0; background: var(--acid); color: var(--ink); font: 700 11px var(--mono); letter-spacing: 0.16em; padding: 8px 10px; cursor: pointer; }
+.ap-undo button { border: 0; background: var(--acid); color: var(--ink); font: 700 11px var(--mono); letter-spacing: 0.16em; padding: 8px 10px; cursor: pointer; transition: transform 140ms var(--ease-out); }
+.ap-undo button:active { transform: scale(0.97); }
 @keyframes ap-up { from { opacity: 0; transform: translateY(8px); } }
 
 /* ── Empty state ── */
@@ -130,7 +131,7 @@
 .ld-bullets__n { font: 700 16px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
 .ld-repo { font: 700 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
 .ld-repo[data-state='none'] { color: var(--muted); }
-.ld-repo[data-state='exploring'] { color: var(--rust); }
+.ld-repo[data-state='exploring'] { color: var(--rust-ink); }
 .ld-edited { font: 12px var(--mono); color: var(--muted); }
 .ld-row:active:not(.ld-row--head) { background: var(--paper-2); }
 @media (hover: hover) and (pointer: fine) { .ld-row:not(.ld-row--head):hover { background: var(--paper-2); } }
@@ -196,7 +197,7 @@
 .ex-dates { display: flex; flex-direction: column; gap: 2px; font: 12px var(--mono); color: var(--muted); }
 .ex-dates strong { font-weight: 700; color: var(--ink); }
 .ex-now { color: var(--ink); background: var(--acid); padding: 0 5px; font: 700 9.5px var(--mono); letter-spacing: 0.14em; margin-left: 8px; vertical-align: 3px; }
-.ex-zero { color: var(--rust); }
+.ex-zero { color: var(--rust-ink); }
 .ex-inline { display: none; }
 @media (max-width: 760px) {
   .ex-inline { display: inline; }
@@ -219,7 +220,7 @@
 .na-input[aria-invalid='true'] { border-color: var(--rust); }
 .na-text { min-height: 220px; resize: vertical; }
 .na-hint { font: 12px/1.5 var(--mono); color: var(--muted); margin: 10px 0 0; }
-.na-hint--err { color: var(--rust); }
+.na-hint--err { color: var(--rust-ink); }
 .na-lenses { display: flex; flex-wrap: wrap; gap: 8px; }
 .na-lenses button {
   height: 40px; padding: 0 14px; border: 2px solid var(--ink); background: var(--paper); color: var(--ink); cursor: pointer;
@@ -575,6 +576,13 @@
   .ap-btn:active, .jb-save:active, .na-lenses button:active, .an-new:active, .ap-menu__btn:active, .an-dock__new:active { transform: none; }
   .an-dock__dot, .pf-field__v { transition: none; }
   .na-done { animation: none; }
+}
+
+/* Touch: search, sort, the row ⋯ button and Undo get a 44px target; desktop sizes are unchanged. */
+@media (pointer: coarse) {
+  .ap-search, .la-sort { min-height: 44px; }
+  .ap-menu__btn { min-width: 44px; min-height: 44px; }
+  .ap-undo button { min-width: 44px; min-height: 44px; }
 }
 
 /* iOS zooms the page when a focused text field is under 16px. */

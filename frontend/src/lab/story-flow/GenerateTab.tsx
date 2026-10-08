@@ -1,7 +1,7 @@
 /* Generate tab: 1 story → 2 lens(es) → 3 Generate. */
 import { useState } from 'react';
 import { RichText } from '../../components/RichText';
-import { Spin } from '../workspace/parts';
+import { Spin } from '../../components/ledger/parts';
 import { BY_ID, LENSES, type Lens } from './data';
 import { fits, lensOf, type Bullet, type SF } from './model';
 import { Finding, LensTag } from './parts';

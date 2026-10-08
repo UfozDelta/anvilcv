@@ -6,9 +6,7 @@ import { BulletsTab } from './BulletsTab';
 import { GenerateTab } from './GenerateTab';
 import '../../styles/landing.css';
 import '../../styles/ledger.css';
-import '../project-split/split.css';
-import '../workspace/workspace.css';
-import '../workspace-tabs/tabs.css';
+import './project-detail.css';
 import './flow.css';
 
 type T = 'bullets' | 'generate' | 'repo';
@@ -26,16 +24,16 @@ export function LabStoryFlow() {
   return (
     <div className="ap-root">
       <NavStrip />
-      <div className="shell ap-page ps-page ws-page wt-page sf-page">
+      <div className="shell ap-page sf-page">
         <Head sf={sf} />
         <DescBlock sf={sf} />
-        <div className="tabs ps-tabs" role="tablist">
+        <div className="tabs sf-tabs" role="tablist">
           {tabs.map(t => (
             <button key={t.k} role="tab" aria-selected={tab === t.k} className={tab === t.k ? 'is-on' : ''}
               onClick={() => { setFocus(null); setTab(t.k); }}>{t.label}</button>
           ))}
         </div>
-        <div className="tabpane wt-pane">
+        <div className="tabpane sf-pane">
           {tab === 'bullets' && <BulletsTab sf={sf} focus={focus} onGenerate={() => setTab('generate')} />}
           {tab === 'generate' && <GenerateTab sf={sf} onView={view} />}
           {tab === 'repo' && <RepoPane sf={sf} />}

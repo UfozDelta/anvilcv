@@ -1,7 +1,7 @@
 /* Story → lens wordings. Generate finds stories (one bullet each); per story, add wordings in any lens (repeats allowed). */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type Project } from '../../lib/api';
-import { STORY_CAP } from '../stories/storyFixtures';
+import { STORY_CAP } from '../../lib/config';
 import { PROJECT_FX } from '../project-split/data';
 import { BY_ID, LENSES, POOL, SEED, wordingFor, type Lens } from './data';
 

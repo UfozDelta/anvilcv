@@ -74,7 +74,7 @@ export const REPO = {
   ],
 };
 
-export const STORY_CAP = 12;
+export { STORY_CAP } from '../../lib/config';
 export const MAX_NEW_STORIES = 8;
 
 const w = (id: string, text: string, status: WStatus, extra: Partial<Wording> = {}): Wording =>

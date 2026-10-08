@@ -10,6 +10,7 @@
   --rule: #0A0A0A;
   --acid: #E8FE03;
   --rust: #D63A2F;
+  --rust-ink: #B42E24; /* rust for small text; --rust stays for fills */
   --muted: #4A4540;
   --soft: #BDB7AC;
 

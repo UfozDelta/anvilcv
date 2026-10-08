@@ -3,7 +3,8 @@
 /* ── Shared bits ── */
 .ws-acts { display: inline-flex; gap: 4px; margin-left: auto; }
 .ws-trash { display: inline-grid; place-items: center; padding: 3px 6px; }
-.ws-trash:hover { background: var(--rust); border-color: var(--rust); color: var(--paper); }
+@media (hover: hover) and (pointer: fine) { .ws-trash:hover { background: var(--rust); border-color: var(--rust); color: var(--paper); } }
+.ws-trash:active { background: var(--rust); border-color: var(--rust); color: var(--paper); }
 .ws-lens { font: 700 9px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; border: 1.5px solid var(--ink); padding: 1px 5px; cursor: help; white-space: nowrap; }
 .ws-ghead { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ps-group__head { gap: 10px; }

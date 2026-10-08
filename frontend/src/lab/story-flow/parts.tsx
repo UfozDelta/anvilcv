@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { RichText } from '../../components/RichText';
 import { RepoMapView } from '../../components/ProjectDetail/RepoMapView';
 import { UndoBar } from '../../components/ledger/shared';
-import { STORY_CAP } from '../stories/storyFixtures';
+import { Fit as FitBase, Spin, Trash } from '../../components/ledger/parts';
+import { STORY_CAP } from '../../lib/config';
+import { LAB_CFG } from '../fixtures';
 import { REPO_MAP } from '../project-split/data';
-import { Fit, Spin, Trash } from '../workspace/parts';
 import { LENS_OF, type Lens } from './data';
 import { type Bullet, type SF } from './model';
 
@@ -13,12 +14,12 @@ import { type Bullet, type SF } from './model';
 
 export function Head({ sf }: { sf: SF }) {
   return (
-    <header className="ps-head">
-      <div className="ps-head__id">
+    <header className="sf-head">
+      <div className="sf-head__id">
         <div className="eyebrow">← Projects</div>
-        <h1 className="display ps-head__name">{sf.project.name}</h1>
+        <h1 className="display sf-head__name">{sf.project.name}</h1>
       </div>
-      <div className="ps-head__tools">
+      <div className="sf-head__tools">
         <StoryCount n={sf.stories.length} />
       </div>
     </header>
@@ -48,7 +49,7 @@ export function DescBlock({ sf }: { sf: SF }) {
         <textarea className="field__textarea" aria-label="Description" value={d} autoFocus style={{ minHeight: 140 }}
           onChange={e => sf.setField('description', e.target.value)} />
         <div className="sf-desc__acts">
-          <span className="ps-count">{d.length}c</span>
+          <span className="sf-desc__len">{d.length}c</span>
           <button className="minibtn" onClick={() => setEdit(false)}>Done</button>
         </div>
       </div>
@@ -81,7 +82,7 @@ export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () =>
       <div className="sf-b__text"><RichText text={b.text} /></div>
       <div className="sf-b__side">
         <span className="sf-b__meta">
-          <Fit text={b.text} />
+          <FitBase text={b.text} cfg={LAB_CFG} />
         </span>
         <span className="sf-b__acts">
           <button type="button" className="sf-b__ok" aria-pressed={on} title={on ? 'Approved: click to unapprove' : 'Mark approved'}
@@ -115,8 +116,8 @@ export function RepoPane({ sf }: { sf: SF }) {
   });
   return (
     <div className="stack-sm">
-      <div className="ps-tools">
-        <span className="label ws-repo" title="Linked repo, branch and pinned commit">
+      <div className="sf-tools">
+        <span className="label sf-repo" title="Linked repo, branch and pinned commit">
           <a href={p.githubUrl ?? '#'} target="_blank" rel="noreferrer">{repo}</a> · {p.repoBranch} @ {p.repoCommitSha?.slice(0, 7)}
         </span>
         <span className="row" style={{ gap: 6 }}>

@@ -1,0 +1,37 @@
+/* /lab/story-flow page frame: head, tabs, pane and the shared row pieces (spinner, fit, trash).
+   Taken from split.css, workspace.css and workspace-tabs/tabs.css so this page no longer loads them. */
+
+.shell.sf-page { max-width: 1440px; }
+
+/* ── Head ── */
+.sf-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px 24px; padding-bottom: 16px; border-bottom: 3px solid var(--ink); margin-bottom: 16px; }
+.sf-head__id { min-width: 0; }
+.sf-head__name { font-size: clamp(36px, 6vw, 60px); margin: 4px 0 0; overflow-wrap: anywhere; }
+.sf-head__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+
+/* ── Tabs / pane ── */
+.tabs.sf-tabs { overflow-x: auto; scrollbar-width: none; }
+.sf-tabs button { white-space: nowrap; }
+.sf-tabs .tabs__badge { background: var(--ink); color: var(--paper); }
+.sf-tabs button.is-on .tabs__badge { background: var(--acid); color: var(--ink); }
+.sf-tabs button:focus-visible { outline: 2px solid var(--acid); outline-offset: -4px; }
+.sf-page .tabpane.sf-pane { padding: 24px 24px 32px; }
+
+/* ── Toolbar (Repo tab) ── */
+.sf-tools { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.sf-repo { min-width: 0; overflow-wrap: anywhere; }
+
+/* ── Shared row pieces (components/ledger/parts) ── */
+.ps-spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--ink); border-right-color: transparent; border-radius: 50%; animation: ps-spin 600ms linear infinite; }
+@keyframes ps-spin { to { transform: rotate(360deg); } }
+.tabs button .ps-spin { vertical-align: -1px; border-color: currentColor; border-right-color: transparent; }
+.ps-fit { font: 10.5px var(--mono); letter-spacing: 0.1em; color: var(--muted); }
+.ps-fit[data-bad] { color: var(--rust-ink); font-weight: 700; }
+.ws-trash { display: inline-grid; place-items: center; padding: 3px 6px; }
+@media (hover: hover) and (pointer: fine) { .ws-trash:hover { background: var(--rust); border-color: var(--rust); color: var(--paper); } }
+.ws-trash:active { background: var(--rust); border-color: var(--rust); color: var(--paper); }
+
+@media (max-width: 760px) {
+  .sf-page .tabpane.sf-pane { padding: 16px 16px 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .ps-spin { animation-duration: 1.5s; } }

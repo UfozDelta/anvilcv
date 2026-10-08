@@ -370,7 +370,8 @@
 }
 
 .tabs button:last-child { border-right: none; }
-.tabs button:hover { background: var(--paper-2); }
+@media (hover: hover) and (pointer: fine) { .tabs button:not(.is-on):hover { background: var(--paper-2); } }
+.tabs button:active:not(.is-on) { background: var(--paper-2); }
 .tabs button.is-on { background: var(--ink); color: var(--paper); }
 
 .tabs__badge {
@@ -499,10 +500,16 @@
   color: var(--ink);
 }
 
-.minibtn:hover { background: var(--ink); color: var(--paper); }
+@media (hover: hover) and (pointer: fine) { .minibtn:not(:disabled):hover { background: var(--ink); color: var(--paper); } }
+.minibtn:active:not(:disabled) { background: var(--ink); color: var(--paper); }
 .minibtn.is-on { background: var(--ink); color: var(--paper); }
 .minibtn:disabled { opacity: 0.45; cursor: not-allowed; }
-.minibtn:disabled:hover { background: var(--paper); color: var(--ink); }
+
+/* Touch: tabs and mini buttons get a 44px target; desktop sizes are unchanged. */
+@media (pointer: coarse) {
+  .tabs button { min-height: 44px; }
+  .minibtn { min-height: 44px; min-width: 44px; }
+}
 
 /* verdict chips read as words, not colour alone */
 .vchip {

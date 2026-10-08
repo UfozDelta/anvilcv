@@ -6,11 +6,12 @@ import { NavStrip } from '../app/AppNav';
 import { BulletBar, EXIT, PageTitle, RowMenu, UndoBar, ago } from '../../components/ledger/shared';
 import { endKey, looksCurrent, parseDates, tenure } from '../../lib/dates';
 import { usePrefersReducedMotion } from '../../components/landing/useHeroLoop';
+import { GitHubMark } from '../../components/ledger/icons';
+import { BULLET_BAR_MAX } from '../../lib/config';
 import { EXPERIENCES, PROJECTS, type ExpItem, type ProjectItem } from './data';
 import './lists.css';
 
 const OPEN = '/lab/story-flow';
-const FULL_BANK = 12;
 const SHOW_STACK = 3;
 
 /** Local stand-in for useUndoDelete: drop at once, Undo for 5s, duplicate in place. */
@@ -210,30 +211,22 @@ function Bullets({ n }: { n: number }) {
   return (
     <span className="ld-bullets" role="cell" title={`${n} bullet${n === 1 ? '' : 's'}`}>
       <span className={`ld-bullets__n${n === 0 ? ' ex-zero' : ''}`}>{n}</span>
-      <BulletBar n={n} max={FULL_BANK} />
+      <BulletBar n={n} max={BULLET_BAR_MAX} />
     </span>
   );
 }
 
 function Repo({ repo }: { repo: string | null }) {
   if (!repo) return <span className="ld-repo" data-state="none" title="No repo linked">—</span>;
-  return <span className="ld-repo ls-repo" data-state="explored" title={`github.com/${repo}`}><GitHubMark />Repo</span>;
+  return <span className="ld-repo ls-repo" data-state="explored" title={`github.com/${repo}`}><GitHubMark className="ls-gh" />Repo</span>;
 }
 
 /** Phone only: the hidden stack and repo columns fold under the name. */
 function Inline({ stack, repo }: { stack: string[]; repo: string | null }) {
   return (
     <span className="ls-inline">
-      {repo && <span className="ls-repo" title={`github.com/${repo}`}><GitHubMark /></span>}
+      {repo && <span className="ls-repo" title={`github.com/${repo}`}><GitHubMark className="ls-gh" /></span>}
       <Stack stack={stack} />
     </span>
-  );
-}
-
-function GitHubMark() {
-  return (
-    <svg className="ls-gh" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="currentColor">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-    </svg>
   );
 }
