@@ -524,6 +524,13 @@ public abstract class BaseLlmClient implements LlmClient {
                 the lens below. Write only what the evidence supports; every number must come from the
                 story's evidence or the source material.
 
+                Spread the wordings across these angles, so they do not all say the same thing:
+                  - outcome first: lead with the measured result the evidence states;
+                  - decision: the choice made and the tradeoff it accepted;
+                  - scale: the load, data size or users it ran at, when the evidence gives one;
+                  - failure prevented: what broke or could have broken, and how it was kept from happening.
+                Start each wording with a different verb. No verb may open more than two of the wordings.
+
                 Lens definition:
 
                 %s

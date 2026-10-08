@@ -123,6 +123,31 @@ class StoryGenerationTest {
     }
 
     @Test
+    void slotPromptAsksForVariedAngles() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GenerationConfig cfg = new GenerationConfig();
+        cfg.setWordFilterEnabled(false);
+        OpenCodeLlmClient client = new OpenCodeLlmClient(builder, "g", "m", "c", new GenerationConfigService(null) {
+            @Override public GenerationConfig get(UUID userId) { return cfg; }
+        });
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andExpect(content().string(containsString("failure prevented")))
+                .andExpect(content().string(containsString("No verb may open more than two")))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.GenerateBulletsRequest src = new LlmClient.GenerateBulletsRequest(UUID.randomUUID(),
+                LlmClient.SourceKind.PROJECT, "general", "Terminal", SOURCE, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, List.of(), List.of(), null);
+        client.writeSlotCandidates(src, new LlmClient.Story("s1", "Ledger", List.of("quote"), List.of("backend")),
+                "backend", 15, List.of(), ProgressLog.noOp(), new TokenAccumulator());
+        server.verify();
+    }
+
+    @Test
     void onlyTheStoryPassIsShownTheBank() {  // the slot writes never see the bank
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
