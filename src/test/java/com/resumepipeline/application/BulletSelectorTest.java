@@ -751,4 +751,37 @@ class BulletSelectorTest {
             assertEquals(items, BulletSelector.keywordFirst(items, null));
         }
     }
+
+    private static List<String> rankedTexts(String... texts) {
+        UUID proj = UUID.randomUUID();
+        Map<UUID, Bullet> byId = new HashMap<>();
+        List<LlmClient.RankedBullet> ranked = new ArrayList<>();
+        for (int i = 0; i < texts.length; i++) {
+            UUID id = UUID.randomUUID();
+            Bullet b = TestFixtures.bullet(id, proj, null);
+            b.setText(texts[i]);
+            byId.put(id, b);
+            ranked.add(new LlmClient.RankedBullet(id.toString(), i + 1, ""));
+        }
+        return BulletSelector.preferFreshVerbs(ranked, byId).stream()
+                .map(r -> byId.get(UUID.fromString(r.bulletId())).getText()).toList();
+    }
+
+    @Test
+    void aThirdUseOfAVerbYieldsOnlyToAFreshOneWithinTheWindow() {
+        assertEquals(List.of("Cut a", "Cut b", "Built d", "Cut c"),
+                rankedTexts("Cut a", "Cut b", "Cut c", "Built d"));
+    }
+
+    @Test
+    void aFreshVerbMovesUpOnlyOnceItEntersTheWindow() {
+        // The build is ranked 6th: it is outside the window until the cuts above it run out of room.
+        assertEquals(List.of("Cut a", "Cut b", "Cut c", "Built f", "Cut d", "Cut e"),
+                rankedTexts("Cut a", "Cut b", "Cut c", "Cut d", "Cut e", "Built f"));
+    }
+
+    @Test
+    void whenNoFreshVerbExistsTheRankingIsUnchanged() {
+        assertEquals(List.of("Cut a", "Cut b", "Cut c"), rankedTexts("Cut a", "Cut b", "Cut c"));
+    }
 }

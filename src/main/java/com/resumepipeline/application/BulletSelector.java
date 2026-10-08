@@ -82,6 +82,10 @@ public final class BulletSelector {
 
     /** Bullets per project — a floor <i>and</i> a ceiling. See the invariant in the class javadoc. */
     static final int MAX_PER_PROJECT = 3;
+    /** A verb opens at most this many bullets on a page, as a soft preference (see preferFreshVerbs). */
+    static final int VERB_PAGE_CAP = 2;
+    /** How far down the ranking preferFreshVerbs may look for a fresh verb. */
+    static final int VERB_TIE_WINDOW = 3;
 
     /**
      * Usable bullet lines on one rendered page, after heading, education, section
@@ -212,7 +216,7 @@ public final class BulletSelector {
             selectedTexts.add(b.getText());
             lines += BulletTextRules.estimatedLines(b.getText());
         }
-        for (LlmClient.RankedBullet rb : rankedSorted) {
+        for (LlmClient.RankedBullet rb : preferFreshVerbs(rankedSorted, bulletById)) {
             if (selected.size() >= MAX_TOTAL) break;
             UUID bid = parseUuid(rb.bulletId());
             if (bid == null || excluded.contains(bid)) continue;
@@ -553,6 +557,41 @@ public final class BulletSelector {
         String verb = BulletTextRules.openingVerb(b.getText());
         return !verb.isEmpty() && selected.stream().anyMatch(s ->
                 s.getProjectId().equals(b.getProjectId()) && verb.equals(BulletTextRules.openingVerb(s.getText())));
+    }
+
+    /**
+     * Soft page-level verb cap. Walks the ranking and, at each step, takes the first of the next
+     * {@link #VERB_TIE_WINDOW} bullets whose opening verb is still under {@link #VERB_PAGE_CAP}; if
+     * none is, it takes the top one. So a verb only yields order to a near-equal alternative, and
+     * the strongest remaining bullet is never pushed further than the window. Bullets with no
+     * known verb are never counted against the cap.
+     */
+    static List<LlmClient.RankedBullet> preferFreshVerbs(List<LlmClient.RankedBullet> ranked, Map<UUID, Bullet> bulletById) {
+        List<LlmClient.RankedBullet> remaining = new ArrayList<>(ranked);
+        Map<String, Integer> verbs = new HashMap<>();
+        List<LlmClient.RankedBullet> out = new ArrayList<>(ranked.size());
+        while (!remaining.isEmpty()) {
+            int window = Math.min(VERB_TIE_WINDOW, remaining.size());
+            int pick = 0;
+            for (int i = 0; i < window; i++) {
+                String v = verbOf(remaining.get(i), bulletById);
+                if (v.isEmpty() || verbs.getOrDefault(v, 0) < VERB_PAGE_CAP) {
+                    pick = i;
+                    break;
+                }
+            }
+            LlmClient.RankedBullet rb = remaining.remove(pick);
+            String v = verbOf(rb, bulletById);
+            if (!v.isEmpty()) verbs.merge(v, 1, Integer::sum);
+            out.add(rb);
+        }
+        return out;
+    }
+
+    private static String verbOf(LlmClient.RankedBullet rb, Map<UUID, Bullet> bulletById) {
+        UUID bid = parseUuid(rb.bulletId());
+        Bullet b = bid == null ? null : bulletById.get(bid);
+        return b == null ? "" : BulletTextRules.openingVerb(b.getText());
     }
 
     /** Two wordings of one story (see {@code Bullet.storyId}) are the same claim. Null = its own story. */
