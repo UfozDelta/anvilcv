@@ -63,6 +63,14 @@ class SecurityRulesTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void storyBankRoutesNeedLogin() throws Exception {
+        mvc.perform(get("/api/projects/" + UUID.randomUUID() + "/stories"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/projects/" + UUID.randomUUID() + "/stories/submit"))
+                .andExpect(status().isUnauthorized());
+    }
+
     // /api/admin/** used to be .authenticated(), so anyone who registered could read
     // every user's email and spend. These three pin the rule that closed that.
 
