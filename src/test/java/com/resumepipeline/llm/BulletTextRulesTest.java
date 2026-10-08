@@ -411,4 +411,34 @@ class BulletTextRulesTest {
         assertTrue(BulletTextRules.autoSelectable("APPROVED", "Shipped the app across 87 commits."));
         assertTrue(BulletTextRules.autoSelectable("PENDING", "Cut p95 latency from 300ms to 90ms."));
     }
+
+    @Test
+    void aPercentClaimIsNotVouchedForByABareCount() {
+        assertEquals(List.of("40%"), BulletTextRules.fabricatedNumbers("Cut costs by 40%.", "Shipped to 40 files across the repo."));
+    }
+
+    @Test
+    void aPercentClaimIsVouchedForByAPercentInTheSource() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Cut costs by 40%.", "Costs fell 40% in Q3.").isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("Cut costs by 40%.", "Costs fell forty percent.").isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("Cut costs by 40%.", "Costs fell 40 percent.").isEmpty());
+    }
+
+    @Test
+    void aMagnitudeClaimIsVouchedForByTheFullCountInTheSource() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Stores 64K rows.", "Loaded 64,000 rows nightly.").isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("Stores 64K rows.", "Holds 64K rows.").isEmpty());
+    }
+
+    @Test
+    void aMoneyClaimIsNotVouchedForByABareNumber() {
+        assertEquals(List.of("$200"), BulletTextRules.fabricatedNumbers("Saved $200 a month.", "Saved 200 a month."));
+        assertTrue(BulletTextRules.fabricatedNumbers("Saved $200 a month.", "Saved $200 a month.").isEmpty());
+    }
+
+    @Test
+    void aTimeClaimIsNotVouchedForByABareNumber() {
+        assertEquals(List.of("80ms"), BulletTextRules.fabricatedNumbers("Ran in 80ms.", "Took 80 files to finish."));
+        assertTrue(BulletTextRules.fabricatedNumbers("Ran in 80ms.", "Ran in 80ms p95.").isEmpty());
+    }
 }

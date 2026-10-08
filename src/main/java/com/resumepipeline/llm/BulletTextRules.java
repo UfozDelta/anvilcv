@@ -173,33 +173,88 @@ public final class BulletTextRules {
      */
     public static List<String> fabricatedNumbers(String text, String sourceContext) {
         if (text == null || text.isBlank()) return List.of();
-        // Strip thousands separators so "64,000" reads as one run rather than "64" + "000".
-        String src = stripThousands(sourceContext == null ? "" : sourceContext);
-        Set<String> srcNumbers = new HashSet<>();
-        Matcher srcMatcher = DIGITS.matcher(src);
-        while (srcMatcher.find()) srcNumbers.add(stripLeadingZeros(srcMatcher.group()));
-        // Source prose sometimes spells a quantity out ("forty percent" instead of "40%") —
-        // without this, a bullet correctly quoting "40%" gets rejected as fabricated even
-        // though the source genuinely states it, just not in digits.
-        srcNumbers.addAll(wordNumbersToDigits(sourceContext == null ? "" : sourceContext));
+        Set<String> srcKeys = sourceKeys(sourceContext == null ? "" : sourceContext);
 
         List<String> fabricated = new ArrayList<>();
         // Bold markers are dropped so "**64K**" and "**3 to 180** ms" read as plain text.
         Matcher m = QUANTITY.matcher(stripThousands(text.replace("**", "")));
         while (m.find()) {
             String unit = m.group(3) != null ? m.group(3) : m.group(4);
-            if (m.group(1) == null && unit == null) continue;   // bare number, not a claim
-            String digits = stripLeadingZeros(m.group(2));
-            // The bare digits count as quoted, and so does their scaled expansion —
-            // the source may spell the same quantity either way.
-            boolean magnitude = unit != null && unit.length() == 1
-                    && "kKmMbB".indexOf(unit.charAt(0)) >= 0;
-            boolean found = srcNumbers.contains(digits)
-                    || (magnitude && srcNumbers.contains(scale(digits, unit)));
+            String prefix = m.group(1);
+            if (prefix == null && unit == null) continue;   // bare number, not a claim
+            String cls = unitClass(prefix, unit);
+            String value = magnitudeValue(stripLeadingZeros(m.group(2)), unit);
+            // A claim is vouched for only by the same value in a compatible unit class. "40%" is not
+            // stated by "40 files", and "$200" is not stated by "200".
+            boolean found = false;
+            for (String v : vouchers(cls)) {
+                if (srcKeys.contains(key(value, v))) { found = true; break; }
+            }
             if (!found) fabricated.add(m.group());
         }
         return fabricated;
     }
+
+    /** Unit classes a quantity can carry. The empty class is a bare count. */
+    private static final String BARE = "";
+    private static final List<String> ALL_CLASSES = List.of(BARE, "%", "time", "$", "mag", "x", "+");
+
+    private static String key(String value, String cls) {
+        return value + "|" + cls;
+    }
+
+    /** The class of a claim: money by its $, percent, time, magnitude (K/M/B), or the unit itself. */
+    private static String unitClass(String prefix, String unit) {
+        if (prefix != null) return "$";
+        if (unit == null) return BARE;
+        if (unit.equals("%")) return "%";
+        if (unit.equals("ms") || unit.equals("s")) return "time";
+        if (unit.length() == 1 && "kKmMbB".indexOf(unit.charAt(0)) >= 0) return "mag";
+        if (unit.equalsIgnoreCase("x")) return "x";
+        return unit;
+    }
+
+    /** Which source classes can state a claim of this class. Bare digits never state %, time or money. */
+    private static Set<String> vouchers(String cls) {
+        return switch (cls) {
+            case "%", "time", "$" -> Set.of(cls);
+            case "mag" -> Set.of(BARE, "mag");
+            default -> Set.of(BARE, cls);
+        };
+    }
+
+    /** "64K" with a magnitude suffix reads as its full value; anything else keeps its digits. */
+    private static String magnitudeValue(String digits, String unit) {
+        return unit != null && unit.length() == 1 && "kKmMbB".indexOf(unit.charAt(0)) >= 0
+                ? scale(digits, unit) : digits;
+    }
+
+    /** Every quantity the source states, keyed by value and unit class. */
+    private static Set<String> sourceKeys(String sourceContext) {
+        Set<String> keys = new HashSet<>();
+        String src = stripThousands(sourceContext);
+        Matcher q = QUANTITY.matcher(src);
+        while (q.find()) {
+            String unit = q.group(3) != null ? q.group(3) : q.group(4);
+            String prefix = q.group(1);
+            String digits = stripLeadingZeros(q.group(2));
+            keys.add(key(magnitudeValue(digits, unit), unitClass(prefix, unit)));
+        }
+        // Digit runs QUANTITY does not match (glued to letters, like K8s) still count as bare numbers.
+        Matcher d = DIGITS.matcher(src);
+        while (d.find()) keys.add(key(stripLeadingZeros(d.group()), BARE));
+        // "40 percent" states a percentage in words.
+        Matcher pct = PERCENT_WORDS.matcher(src);
+        while (pct.find()) keys.add(key(stripLeadingZeros(pct.group(1)), "%"));
+        // Spelled-out numbers ("forty", "two thousand") cannot say their unit, so they vouch for every class.
+        for (String w : wordNumbersToDigits(sourceContext)) {
+            for (String c : ALL_CLASSES) keys.add(key(w, c));
+        }
+        return keys;
+    }
+
+    private static final Pattern PERCENT_WORDS = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(?:percent|per cent)\\b",
+            Pattern.CASE_INSENSITIVE);
 
     private static final java.util.Map<String, Integer> SMALL_NUMBER_WORDS = java.util.Map.ofEntries(
             java.util.Map.entry("zero", 0), java.util.Map.entry("one", 1), java.util.Map.entry("two", 2),
