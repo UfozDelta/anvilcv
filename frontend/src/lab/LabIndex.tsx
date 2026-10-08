@@ -27,9 +27,9 @@ const ENTRIES: Entry[] = [
     iso: '2026-10-07',
     title: 'Story flow',
     status: 'prototype',
-    summary: <>Generate finds stories, one bullet each. Pick a story, then pick which lens bullets to get. Four lenses.</>,
+    summary: <>One bank of bullets, grouped by story. Generate: pick a story, pick lenses, go.</>,
     protos: [
-      { to: '/lab/story-flow', name: 'Story flow', line: 'Story cards / Pick then build / Lens columns (1-3).' },
+      { to: '/lab/story-flow', name: 'Story flow', line: 'Bullets bank by story; Generate: story → lens → go.' },
     ],
     fixes: [
       'Lenses cut to AI/ML, Backend, Data Eng, General',
