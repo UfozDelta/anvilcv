@@ -258,7 +258,7 @@ class BulletServiceTest {
                     ? batch(cand("Built a ledger service that settles payouts nightly."))
                     : batch(cand("Ingested exchange fills from three brokers into one schema."));
         });
-        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of(0));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend", "data"), ProgressLog.noOp());
 
@@ -278,7 +278,7 @@ class BulletServiceTest {
         assertThrows(LlmParseException.class,
                 () -> service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp()));
         verify(repo, never()).save(any());
-        verify(llm, never()).judgeCandidates(any(), any(), any(), any());
+        verify(llm, never()).scoreCandidates(any(), any(), any(), any());
     }
 
     @Test
@@ -292,15 +292,25 @@ class BulletServiceTest {
         String cut = "Cut payout latency 40% by batching settlements.";
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(batch(cand(built, "Go"), cand(reduced), cand(cut)));
-        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of());
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of());
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
         assertEquals(List.of(cut, reduced), out.stream().map(Bullet::getText).toList());
     }
 
+    /** Scores by candidate text: "Cut" 5, "Built" 4, anything else 1. Works for any presented order. */
+    private void stubScores(org.mockito.stubbing.Answer<List<Integer>> answer) {
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(answer);
+    }
+
+    private static List<Integer> scoreByPrefix(org.mockito.invocation.InvocationOnMock inv) {
+        List<String> ts = inv.getArgument(1);
+        return ts.stream().map(t -> t.startsWith("Cut") ? 5 : t.startsWith("Built") ? 4 : 1).toList();
+    }
+
     @Test
-    void judgePicksAreKeptInTheJudgesOrder() {
+    void judgeScoresDecideTheBulletsKept() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
         stubStoryRun(user, proj);
         when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
@@ -309,12 +319,54 @@ class BulletServiceTest {
         String cut = "Cut payout latency 40% by batching settlements.";
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(batch(cand(built, "Go"), cand(reduced), cand(cut)));
-        // The judge indexes the top list, ranked: 0 = cut, 1 = reduced, 2 = built.
-        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of(2, 0));
+        stubScores(inv -> scoreByPrefix(inv));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
-        assertEquals(List.of(built, cut), out.stream().map(Bullet::getText).toList());
+        // cut 5 is pick #1; built 4 is within one point of it and is pick #2. reduced 1 is not.
+        assertEquals(List.of(cut, built), out.stream().map(Bullet::getText).toList());
+        verify(llm, times(2)).scoreCandidates(any(), any(), any(), any());
+    }
+
+    @Test
+    void oneUnreadableJudgeRunStillRanksFromTheOther() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        String built = "Built a ledger service in Go for payouts.";
+        String reduced = "Reduced reconciliation errors across regions.";
+        String cut = "Cut payout latency 40% by batching settlements.";
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
+                .thenReturn(batch(cand(built, "Go"), cand(reduced), cand(cut)));
+        // Top list in code order is cut, reduced, built. The second run is reversed: built, reduced, cut.
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(), List.of(4, 1, 5));
+
+        List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+
+        assertEquals(List.of(cut, built), out.stream().map(Bullet::getText).toList());
+    }
+
+    @Test
+    void varietyBreaksANearTieButNeverOverridesAClearWinner() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        String a = "Cut payout latency 40% by batching settlements.";
+        String b = "Cut payout latency 40% by batching the settlement jobs.";
+        String c = "Reduced reconciliation errors across regions.";
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
+                .thenReturn(batch(cand(a), cand(b), cand(c)));
+        // a and b tie at 5 and nearly repeat each other; c is one point lower and differs.
+        stubScores(inv -> {
+            List<String> ts = inv.getArgument(1);
+            return ts.stream().map(t -> t.startsWith("Reduced") ? 4 : 5).toList();
+        });
+
+        List<String> texts = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())
+                .stream().map(Bullet::getText).toList();
+
+        assertTrue(texts.contains(c), texts.toString());
+        assertEquals(1, texts.stream().filter(t -> t.equals(a) || t.equals(b)).count(), texts.toString());
     }
 
     @Test
@@ -327,12 +379,12 @@ class BulletServiceTest {
         String cut = "Cut payout latency 40% by batching settlements.";
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(batch(cand("Built a ledger service in Go for payouts."), cand(cut)));
-        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of(0));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
         assertEquals(List.of(cut), out.stream().map(Bullet::getText).toList());
-        verify(llm).judgeCandidates(any(), argThat(l -> l.size() == 1), any(), any());
+        verify(llm, times(2)).scoreCandidates(any(), argThat(l -> l.size() == 1), any(), any());
     }
 
     @Test
@@ -380,7 +432,7 @@ class BulletServiceTest {
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
                 batch(cand("Cut payout latency 40% by batching settlements.")),
                 batch(cand("Reduced reconciliation errors across regions.")));
-        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of(0));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
 
         List<Bullet> out = service.generateWordings(user, proj, st.getId(), List.of("data", "data"), List.of(), ProgressLog.noOp());
 

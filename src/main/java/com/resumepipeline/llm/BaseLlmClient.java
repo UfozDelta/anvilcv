@@ -567,9 +567,12 @@ public abstract class BaseLlmClient implements LlmClient {
         return new SlotCandidates(kept, raw.size(), raw.size() - kept.size());
     }
 
-    /** Recruiter judge for one slot. Notes come first in the schema so the model writes them before picking. */
+    /**
+     * Recruiter checklist for one slot: a note and a 1-5 score per candidate. Notes come first in
+     * the schema so the model writes them before scoring. Scores come back in the order given.
+     */
     @Override
-    public List<Integer> judgeCandidates(Story story, List<String> candidates, ProgressLog progress,
+    public List<Integer> scoreCandidates(Story story, List<String> candidates, ProgressLog progress,
                                          TokenAccumulator tokens) {
         StringBuilder list = new StringBuilder();
         for (int i = 0; i < candidates.size(); i++) {
@@ -577,30 +580,39 @@ public abstract class BaseLlmClient implements LlmClient {
         }
         String evidence = story.evidence().stream().map(e -> "  \"" + e + "\"").collect(java.util.stream.Collectors.joining("\n"));
         String prompt = """
-                You are a technical recruiter reading resume bullets for one piece of work: "%s".
+                You are a technical recruiter scoring resume bullets for one piece of work: "%s".
                 The bullets must rest on this evidence:
                 %s
                 Candidates (index: text):
                 %s
-                First, for every candidate write a short note: "good" (what a reviewer would value) and
-                "bad" (what is weak: activity instead of an outcome, generic tech, fluff, a claim the
-                evidence does not back, or a near-restatement of another candidate).
-                Then pick the 1 or 2 best indexes. Prefer a concrete result over activity, specific tech
-                and scale, plain verbs, no fluff. Pick only from the listed indexes.
+                Score each candidate 1-5 against this checklist, every point:
+                  - the claim is supported by the evidence;
+                  - a concrete outcome, or a failure prevented, is stated;
+                  - the specific technology is named;
+                  - it is one plain sentence;
+                  - the ownership is not inflated.
+                First, for every candidate write a short "good" and "bad" note. Then give the scores in
+                the same order as the candidates, one integer each.
                 """.formatted(story.title(), evidence, list);
 
-        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
-                "notes", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
-                        "i", SchemaSpec.integer(),
-                        "good", SchemaSpec.string(),
-                        "bad", SchemaSpec.string()
-                )), List.of("i", "good", "bad"))),
-                "picks", SchemaSpec.array(SchemaSpec.integer())
-        )), List.of("notes", "picks"));
+        Map<String, SchemaSpec> note = new LinkedHashMap<>();
+        note.put("i", SchemaSpec.integer());
+        note.put("good", SchemaSpec.string());
+        note.put("bad", SchemaSpec.string());
+        Map<String, SchemaSpec> props = new LinkedHashMap<>();
+        props.put("notes", SchemaSpec.array(SchemaSpec.object(note, List.of("i", "good", "bad"))));
+        props.put("scores", SchemaSpec.array(SchemaSpec.integer()));
+        SchemaSpec schema = SchemaSpec.object(props, List.of("notes", "scores"));
         try {
             String json = callJson(cleanJdModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, false, "Judge");
             JudgeEnvelope env = readLenient(json, JudgeEnvelope.class, "judge");
-            return env.picks == null ? List.of() : env.picks;
+            if (env.scores == null || env.scores.size() != candidates.size()
+                    || env.scores.stream().anyMatch(v -> v == null || v < 1 || v > 5)) {
+                log.warn("BULLET_JUDGE_MISMATCH story={} candidates={} scores={}", story.id(), candidates.size(),
+                        env.scores == null ? 0 : env.scores.size());
+                return List.of();
+            }
+            return env.scores;
         } catch (RuntimeException e) {
             // No retry: the caller already has a score-based fallback.
             log.warn("BULLET_JUDGE_FAILED story={} cause={}", story.id(), LogText.abbreviate(e.getMessage(), 120));
@@ -1899,7 +1911,7 @@ public abstract class BaseLlmClient implements LlmClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoriesEnvelope { public List<StoryJson> stories; }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    protected static class JudgeEnvelope { public List<Integer> picks; }
+    protected static class JudgeEnvelope { public List<Integer> scores; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoryJson { public String id; public String title; public List<String> evidence; public List<String> lenses; }
     @JsonIgnoreProperties(ignoreUnknown = true)

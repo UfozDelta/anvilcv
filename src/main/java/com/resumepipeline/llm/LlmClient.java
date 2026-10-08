@@ -29,10 +29,11 @@ public interface LlmClient {
                                        List<String> alreadyWritten, ProgressLog progress, TokenAccumulator tokens);
 
     /**
-     * Recruiter judge over a slot's top candidates: writes a note per candidate, then returns the
-     * indexes of the 1-2 best. Empty when the reply is unreadable; the caller falls back to score.
+     * Recruiter checklist over a slot's candidates, in the order given: writes a note per candidate,
+     * then a 1-5 score for each. Returns one score per candidate, or empty when the reply is
+     * unreadable or does not line up with the candidates.
      */
-    List<Integer> judgeCandidates(Story story, List<String> candidates, ProgressLog progress, TokenAccumulator tokens);
+    List<Integer> scoreCandidates(Story story, List<String> candidates, ProgressLog progress, TokenAccumulator tokens);
 
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 

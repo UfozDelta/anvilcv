@@ -55,9 +55,9 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
-    public List<Integer> judgeCandidates(Story story, List<String> candidates, ProgressLog progress,
+    public List<Integer> scoreCandidates(Story story, List<String> candidates, ProgressLog progress,
                                          TokenAccumulator tokens) {
-        return current().judgeCandidates(story, candidates, progress, tokens);
+        return current().scoreCandidates(story, candidates, progress, tokens);
     }
 
     @Override

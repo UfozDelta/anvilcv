@@ -25,6 +25,7 @@ import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -80,6 +82,8 @@ public class BulletService {
     static final int KEEP_PER_SLOT = 2;
     /** Top candidates by code score that the judge sees. */
     static final int JUDGE_TOP_N = 5;
+    /** Similarity to pick #1 costs this many judge points when choosing pick #2. */
+    static final double VARIETY_PENALTY = 2.0;
     /** Code-score weights, 0-100 in total. Length fit is constant: every candidate reaching rating is in band. */
     static final int SCORE_LENGTH = 30;
     static final int SCORE_OUTCOME = 30;
@@ -760,14 +764,7 @@ public class BulletService {
 
         List<LlmClient.Candidate> chosen = new ArrayList<>();
         if (!top.isEmpty()) {
-            List<Integer> picks = llm.judgeCandidates(story, top.stream().map(LlmClient.Candidate::text).toList(),
-                    progress, judgeTokens);
-            if (picks != null) {
-                for (Integer i : picks) {
-                    if (i != null && i >= 0 && i < top.size() && !chosen.contains(top.get(i))) chosen.add(top.get(i));
-                    if (chosen.size() == KEEP_PER_SLOT) break;
-                }
-            }
+            chosen.addAll(judgeTop(story, lens, top, judgeTokens, progress));
             if (chosen.isEmpty()) {
                 progress.emit(tag + " judge unreadable - top by score");
                 chosen.addAll(top.stream().limit(KEEP_PER_SLOT).toList());
@@ -778,6 +775,71 @@ public class BulletService {
                 .map(c -> new LlmClient.GeneratedBullet(c.text(), c.tags(), story.id(), lens))
                 .toList();
     }
+
+    /**
+     * Two judge runs over the top candidates: one in a seeded shuffle (the seed comes from the slot,
+     * so a rerun asks in the same order) and one in reverse, so position bias cancels out. Scores
+     * are averaged. Pick #1 is the best average. Pick #2 is drawn only from candidates within one
+     * point of the best, and is the best of those after a variety penalty for resembling pick #1.
+     * Empty when neither run is readable. Logs one line per slot: pick #1's code rank and whether
+     * the two runs agreed on the best candidate.
+     */
+    private List<LlmClient.Candidate> judgeTop(LlmClient.Story story, String lens, List<LlmClient.Candidate> top,
+                                               TokenAccumulator judgeTokens, ProgressLog progress) {
+        int n = top.size();
+        List<Integer> shuffled = new ArrayList<>();
+        for (int i = 0; i < n; i++) shuffled.add(i);
+        Collections.shuffle(shuffled, new Random((story.id() + "|" + lens).hashCode()));
+        List<Integer> reversed = new ArrayList<>();
+        for (int i = n - 1; i >= 0; i--) reversed.add(i);
+
+        double[] sum = new double[n];
+        List<Integer> bests = new ArrayList<>();
+        for (List<Integer> order : List.of(shuffled, reversed)) {
+            List<Integer> scores = llm.scoreCandidates(story, order.stream().map(i -> top.get(i).text()).toList(),
+                    progress, judgeTokens);
+            if (scores == null || scores.size() != n) continue;
+            int best = -1;
+            int bestScore = 0;
+            for (int k = 0; k < n; k++) {
+                int idx = order.get(k);
+                int s = scores.get(k);
+                sum[idx] += s;
+                if (best < 0 || s > bestScore || (s == bestScore && idx < best)) {
+                    best = idx;
+                    bestScore = s;
+                }
+            }
+            bests.add(best);
+        }
+        int runs = bests.size();
+        if (runs == 0) return List.of();
+
+        double[] avg = new double[n];
+        for (int i = 0; i < n; i++) avg[i] = sum[i] / runs;
+        int first = 0;
+        for (int i = 1; i < n; i++) if (avg[i] > avg[first]) first = i;
+        log.info("BULLET_JUDGE story={} pick_code_rank={} runs={} agreed={}", story.id(), first + 1, runs,
+                runs == 2 && bests.get(0).equals(bests.get(1)));
+
+        List<LlmClient.Candidate> out = new ArrayList<>();
+        out.add(top.get(first));
+        if (KEEP_PER_SLOT >= 2) {
+            int second = -1;
+            double secondScore = 0;
+            for (int i = 0; i < n; i++) {
+                if (i == first || avg[i] < avg[first] - 1.0) continue;
+                double v = avg[i] - VARIETY_PENALTY * BulletTextRules.similarity(top.get(i).text(), top.get(first).text());
+                if (second < 0 || v > secondScore) {
+                    second = i;
+                    secondScore = v;
+                }
+            }
+            if (second >= 0) out.add(top.get(second));
+        }
+        return out;
+    }
+
 
     /**
      * Code score 0-100: length fit (constant, see SCORE_LENGTH), outcome (a number, or a result
