@@ -1,21 +1,17 @@
 /* Small row pieces shared by the ledger pages: bullet fit, spinner, delete. */
 import { type GenerationConfig } from '../../lib/api';
-import { charCount, estimatedLines, FIT_LABEL, fitHint, fitOf, needsRefit } from '../../lib/bulletLength';
+import { charCount, FIT_LABEL, fitHint, fitOf, needsRefit } from '../../lib/bulletLength';
 
+/** Fit label, shown only when the bullet needs a refit. */
 export function Fit({ text, cfg }: { text: string; cfg: GenerationConfig }) {
   const fit = fitOf(text, cfg);
-  if (fit === 'OFF') return null;
-  const bad = needsRefit(fit);
-  const lines = estimatedLines(text);
-  return (
-    <span className="ps-fit" data-bad={bad || undefined} title={bad ? fitHint(text, cfg) : `${lines} line${lines === 1 ? '' : 's'}`}>
-      {bad && '⚠ '}{FIT_LABEL[fit]} · {charCount(text)}c
-    </span>
-  );
+  if (fit === 'OFF' || !needsRefit(fit)) return null;
+  return <span className="ps-fit" data-bad title={fitHint(text, cfg)}>⚠ {FIT_LABEL[fit]} · {charCount(text)}c</span>;
 }
 
-export function Spin() {
-  return <span className="ps-spin" aria-label="Generating" />;
+/** Spinner; the label is for screen readers only. */
+export function Spin({ label = 'Working' }: { label?: string }) {
+  return <><span className="ps-spin" aria-hidden="true" /><span className="sr-only">{label}</span></>;
 }
 
 export function Trash({ onClick, label = 'Delete' }: { onClick: () => void; label?: string }) {

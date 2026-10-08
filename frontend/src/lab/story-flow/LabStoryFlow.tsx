@@ -21,19 +21,31 @@ export function LabStoryFlow() {
     { k: 'repo', label: 'Repo' },
   ];
   const view = (id: string | null) => { setFocus(id); setTab('bullets'); };
+  const pickTab = (k: T) => { setFocus(null); setTab(k); };
+  // Roving tabindex: ←/→ (and Home/End) move between tabs and select them.
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const i = tabs.findIndex(t => t.k === tab);
+    const n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null;
+    if (n === null) return;
+    e.preventDefault();
+    const k = tabs[(n + tabs.length) % tabs.length].k;
+    pickTab(k);
+    document.getElementById(`sf-tab-${k}`)?.focus();
+  };
   return (
     <div className="ap-root">
       <NavStrip />
       <div className="shell ap-page sf-page">
         <Head sf={sf} />
         <DescBlock sf={sf} />
-        <div className="tabs sf-tabs" role="tablist">
+        <div className="tabs sf-tabs" role="tablist" aria-label="Project" onKeyDown={onKey}>
           {tabs.map(t => (
-            <button key={t.k} role="tab" aria-selected={tab === t.k} className={tab === t.k ? 'is-on' : ''}
-              onClick={() => { setFocus(null); setTab(t.k); }}>{t.label}</button>
+            <button key={t.k} type="button" role="tab" id={`sf-tab-${t.k}`} aria-controls={tab === t.k ? `sf-panel-${t.k}` : undefined}
+              aria-selected={tab === t.k} tabIndex={tab === t.k ? 0 : -1} className={tab === t.k ? 'is-on' : ''}
+              onClick={() => pickTab(t.k)}>{t.label}</button>
           ))}
         </div>
-        <div className="tabpane sf-pane">
+        <div className="tabpane sf-pane" role="tabpanel" id={`sf-panel-${tab}`} aria-labelledby={`sf-tab-${tab}`}>
           {tab === 'bullets' && <BulletsTab sf={sf} focus={focus} onGenerate={() => setTab('generate')} />}
           {tab === 'generate' && <GenerateTab sf={sf} onView={view} />}
           {tab === 'repo' && <RepoPane sf={sf} />}

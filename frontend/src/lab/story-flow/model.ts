@@ -31,10 +31,18 @@ export function useStoryFlow() {
   const [finding, setFinding] = useState(0);
   const [last, setLast] = useState<{ added: number; full?: boolean } | null>(null);
   const [removed, setRemoved] = useState<{ name: string; prev: Bank } | null>(null);
+  /** Wording ids whose generation failed, and the lab-only switch that makes the next ones fail. */
+  const [failed, setFailed] = useState<Set<string>>(new Set());
+  const [failSim, setFailSim] = useState(false);
   const timers = useRef<number[]>([]);
   const undoTimer = useRef<number>();
   useEffect(() => () => { timers.current.forEach(clearTimeout); clearTimeout(undoTimer.current); }, []);
   const later = (ms: number, fn: () => void) => { timers.current.push(window.setTimeout(fn, ms)); };
+  /** Mark a wording new for its landing animation (~1.9s), then forget it so a remount never replays it. */
+  const land = (id: string) => {
+    setNewIds(n => new Set([...n, id]));
+    later(2000, () => setNewIds(n => { const m = new Set(n); m.delete(id); return m; }));
+  };
 
   const { stories, bullets } = bank;
   const byStory = useMemo(() => {
@@ -83,11 +91,10 @@ export function useStoryFlow() {
     setLast(null);
     if (found.length === 0) { later(500, () => setLast({ added: 0 })); return; }
     setFinding(found.length);
-    setNewIds(new Set());
     found.forEach((s, i) => later(650 * (i + 1), () => {
       const b = make(s.id, s.best);
       setBank(k => ({ stories: [s.id, ...k.stories], bullets: [b, ...k.bullets] }));
-      setNewIds(n => new Set([...n, s.id, b.id]));
+      land(b.id);
       setFinding(f => f - 1);
       if (i === found.length - 1) setLast({ added: found.length });
     }));
@@ -103,11 +110,16 @@ export function useStoryFlow() {
     };
     const ids = go.map(l => wid(storyId, l, next(l)));
     if (ids.length === 0) return ids;
+    const fail = failSim;
     setPending(p => new Set([...p, ...ids]));
+    setFailed(f => { const n = new Set(f); ids.forEach(id => n.delete(id)); return n; });
     go.forEach((l, i) => later(700 + i * 380, () => {
       const b = make(storyId, l, next(l));
-      setBullets(bs => (bs.some(x => x.id === b.id) ? bs : [...bs, b]));
-      setNewIds(n => new Set([...n, b.id]));
+      if (fail) setFailed(f => new Set([...f, b.id]));
+      else {
+        setBullets(bs => (bs.some(x => x.id === b.id) ? bs : [...bs, b]));
+        land(b.id);
+      }
       setPending(p => { const n = new Set(p); n.delete(b.id); return n; });
     }));
     return ids;
@@ -115,7 +127,7 @@ export function useStoryFlow() {
 
   return {
     project, setField, stories, bullets, wordings, count, isPending, pendingOf,
-    used, usable, room, left, finding, last, newIds, pending, removed,
+    used, usable, room, left, finding, last, newIds, pending, removed, failed, failSim, setFailSim,
     toggle, patch, remove, undo, generate, getLenses,
   };
 }

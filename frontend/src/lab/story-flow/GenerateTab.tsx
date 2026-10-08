@@ -2,9 +2,9 @@
 import { useState } from 'react';
 import { RichText } from '../../components/RichText';
 import { Spin } from '../../components/ledger/parts';
-import { BY_ID, LENSES, type Lens } from './data';
+import { BY_ID, LENS_OF, LENSES, type Lens } from './data';
 import { fits, lensOf, type Bullet, type SF } from './model';
-import { Finding, LensTag } from './parts';
+import { Finding, LensTag, PaneStatus } from './parts';
 
 const NEW = '+new';
 type Run = { story: string; ids: string[]; before: string[] };
@@ -20,6 +20,10 @@ export function GenerateTab({ sf, onView }: { sf: SF; onView: (storyId: string |
   const go = isNew ? [] : [...picked].filter(l => !sf.isPending(sid, l));
   const busy = sf.finding > 0;
   const can = isNew ? !newOff && !busy : go.length > 0;
+  const why = can ? null : isNew ? (newOff ?? 'Finding stories…') : 'Pick a lens';
+  const lensRun = run && run.story !== NEW ? run.ids : [];
+  const writing = lensRun.filter(id => sf.pending.has(id)).map(id => LENS_OF[lensOf(id)].name);
+  const status = busy ? 'Finding stories…' : writing.length ? `Writing ${writing.join(', ')}…` : null;
 
   const pick = (id: string) => { setStory(id); setPicked(new Set()); };
   const flip = (l: Lens) => setPicked(s => { const n = new Set(s); n.has(l) ? n.delete(l) : n.add(l); return n; });
@@ -31,61 +35,61 @@ export function GenerateTab({ sf, onView }: { sf: SF; onView: (storyId: string |
 
   return (
     <div className="sf-gen">
+      <PaneStatus busy={status} done={lensRun.some(id => sf.failed.has(id)) ? 'Generation failed' : 'Done'} />
       <section className="sf-step" aria-labelledby="sf-a">
-        <h3 className="sf-step__k" id="sf-a"><b>1</b> Story</h3>
+        <h2 className="sf-step__k" id="sf-a"><b>1</b> Story</h2>
         <div className="sf-opts" role="radiogroup" aria-labelledby="sf-a">
           {sf.stories.map(id => {
-            const s = BY_ID[id];
             const n = sf.wordings(id).length;
             return (
-              <button key={id} type="button" role="radio" aria-checked={sid === id} className="sf-opt" onClick={() => pick(id)}
-                title={s.evidence.map(q => `${q.src}: ${q.text}`).join('\n')}>
-                <span className="sf-glyph" aria-hidden="true">{s.glyph}</span>
-                <span className="sf-opt__name">{s.title}</span>
-                <span className="sf-opt__n" title={`${n} wording${n === 1 ? '' : 's'}`}>{n}</span>
+              <button key={id} type="button" role="radio" aria-checked={sid === id} className="sf-opt" onClick={() => pick(id)}>
+                <span className="sf-opt__name">{BY_ID[id].title}</span>
+                <span className="sf-opt__n">{n}<span className="sr-only"> bullet{n === 1 ? '' : 's'}</span></span>
               </button>
             );
           })}
-          <button type="button" role="radio" aria-checked={isNew} className="sf-opt sf-opt--new" onClick={() => pick(NEW)}
-            title={newOff ?? 'Find new stories in the source, 1 bullet each in its best lens'}>
-            <span className="sf-glyph" aria-hidden="true">＋</span>
-            <span className="sf-opt__name">New stories</span>
+          <button type="button" role="radio" aria-checked={isNew} className="sf-opt sf-opt--new" onClick={() => pick(NEW)}>
+            <span className="sf-opt__name">+ New stories</span>
             {newOff && <span className="sf-opt__n">{sf.room === 0 ? 'Full' : 'None'}</span>}
           </button>
         </div>
       </section>
 
       <section className="sf-step" aria-labelledby="sf-b" data-idle={isNew || undefined}>
-        <h3 className="sf-step__k" id="sf-b"><b>2</b> Lens</h3>
-        <div className="sf-lenses">
-          {LENSES.map(l => {
-            const n = isNew ? 0 : sf.count(sid, l.slug);
-            const wait = !isNew && sf.isPending(sid, l.slug);
-            const weak = !isNew && !fits(sid, l.slug);
-            const on = picked.has(l.slug) && !wait && !isNew;
-            const s = isNew ? 'off' : wait ? 'wait' : on ? 'on' : 'get';
-            return (
-              <button key={l.slug} type="button" className="sf-chip" data-s={s} aria-pressed={on}
-                disabled={isNew || wait} onClick={() => flip(l.slug)}
-                title={isNew ? 'Best fit, picked per story' : wait ? 'Writing…' : l.tip}>
-                <span className="sf-chip__mark" aria-hidden="true">{wait ? <Spin /> : on ? '■' : '□'}</span>
-                {l.name}
-                {weak && <span className="sf-chip__weak" title={`Weak fit: little evidence for ${l.name}`}>weak fit</span>}
-                {n > 0 && <span className="sf-chip__has" title={`Already has ${n} wording${n === 1 ? '' : 's'}`}>✓ {n}</span>}
-              </button>
-            );
-          })}
-        </div>
-        {isNew && <span className="sf-auto" title="Each new story arrives with 1 bullet in its best lens">Auto</span>}
+        <h2 className="sf-step__k" id="sf-b"><b>2</b> Lens</h2>
+        {isNew ? (
+          <p className="sf-auto">Best lens per story</p>
+        ) : (
+          <div className="sf-lenses">
+            {LENSES.map(l => {
+              const n = sf.count(sid, l.slug);
+              const wait = sf.isPending(sid, l.slug);
+              const weak = !fits(sid, l.slug);
+              const on = picked.has(l.slug) && !wait;
+              return (
+                <button key={l.slug} type="button" className="sf-chip" data-s={wait ? 'wait' : on ? 'on' : 'get'} aria-pressed={on}
+                  disabled={wait} onClick={() => flip(l.slug)}>
+                  <span className="sf-chip__mark" aria-hidden="true">{wait ? <Spin label={`Writing ${l.name}`} /> : on ? '■' : '□'}</span>
+                  {l.name}
+                  {weak && <span className="sf-chip__weak">weak fit</span>}
+                  {n > 0 && <span className="sf-chip__has">has {n}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="sf-step" aria-labelledby="sf-c">
-        <h3 className="sf-step__k" id="sf-c"><b>3</b> Generate</h3>
-        <button type="button" className="btn btn--acid sf-go" disabled={!can} onClick={generate}
-          title={isNew ? (newOff ?? 'Find new stories') : go.length === 0 ? 'Pick a lens' : `Write ${go.length} bullet${go.length === 1 ? '' : 's'}`}>
-          {busy ? <Spin /> : '✦'} Generate{go.length > 1 && ` ${go.length}`}
+        <h2 className="sf-step__k" id="sf-c"><b>3</b> Generate</h2>
+        <button type="button" className="btn btn--acid sf-go" disabled={!can} aria-describedby={why ? 'sf-why' : undefined} onClick={generate}>
+          {busy ? <Spin label="Finding stories" /> : <span aria-hidden="true">✦</span>} Generate
         </button>
+        {why && <p className="sf-go__why" id="sf-why">{why}</p>}
         {run && <Result sf={sf} run={run} onView={onView} />}
+        <label className="sf-sim">
+          <input type="checkbox" checked={sf.failSim} onChange={e => sf.setFailSim(e.target.checked)} /> Lab: make lens runs fail
+        </label>
       </section>
     </div>
   );
@@ -97,13 +101,21 @@ function Result({ sf, run, onView }: { sf: SF; run: Run; onView: (storyId: strin
     ? sf.bullets.filter(b => !run.before.includes(b.storyId))
     : run.ids.map(id => sf.bullets.find(b => b.id === id)).filter((b): b is Bullet => !!b);
   const wait = isNew ? [] : run.ids.filter(id => sf.pending.has(id)).map(lensOf);
+  const failed = isNew ? [] : run.ids.filter(id => sf.failed.has(id));
   const empty = isNew && sf.finding === 0 && bs.length === 0 && sf.last;
   return (
-    <div className="sf-out" aria-live="polite">
+    <div className="sf-out">
       {isNew && <Finding n={sf.finding} />}
-      {wait.map(l => <div key={l} className="sf-out__row"><Spin /> <LensTag lens={l} /></div>)}
+      {wait.map(l => <div key={l} className="sf-out__row"><Spin label={`Writing ${LENS_OF[l].name}`} /> <LensTag lens={l} /></div>)}
+      {failed.map(id => (
+        <div key={id} className="sf-out__row" data-err>
+          <LensTag lens={lensOf(id)} />
+          <span className="sf-out__err">Couldn’t write this one.</span>
+          <button type="button" className="minibtn" onClick={() => sf.getLenses(run.story, [lensOf(id)])}>Retry</button>
+        </div>
+      ))}
       {bs.map(b => (
-        <div key={b.id} className="sf-out__row" data-new>
+        <div key={b.id} className="sf-out__row" data-new={sf.newIds.has(b.id) || undefined}>
           <LensTag lens={b.lens} />
           <div className="sf-out__text">
             {isNew && <b>{BY_ID[b.storyId].title}</b>}

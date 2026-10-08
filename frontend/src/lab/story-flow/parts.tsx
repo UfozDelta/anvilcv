@@ -1,9 +1,11 @@
 /* Shared pieces for /lab/story-flow. */
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RichText } from '../../components/RichText';
 import { RepoMapView } from '../../components/ProjectDetail/RepoMapView';
 import { UndoBar } from '../../components/ledger/shared';
-import { Fit as FitBase, Spin, Trash } from '../../components/ledger/parts';
+import { Fit, Spin, Trash } from '../../components/ledger/parts';
+import { charCount, FIT_LABEL, fitOf, needsRefit } from '../../lib/bulletLength';
 import { STORY_CAP } from '../../lib/config';
 import { LAB_CFG } from '../fixtures';
 import { REPO_MAP } from '../project-split/data';
@@ -16,7 +18,7 @@ export function Head({ sf }: { sf: SF }) {
   return (
     <header className="sf-head">
       <div className="sf-head__id">
-        <div className="eyebrow">← Projects</div>
+        <Link to="/lab/lists" className="eyebrow sf-back">← Projects</Link>
         <h1 className="display sf-head__name">{sf.project.name}</h1>
       </div>
       <div className="sf-head__tools">
@@ -30,9 +32,8 @@ export function Head({ sf }: { sf: SF }) {
 function StoryCount({ n }: { n: number }) {
   const thin = n < 3, full = n >= STORY_CAP;
   return (
-    <span className="sf-count" data-thin={thin || undefined}
-      title={full ? `Bank full (${STORY_CAP})` : thin ? 'Few stories: entry may print short' : undefined}>
-      <b>{n}</b> {n === 1 ? 'story' : 'stories'}{thin && ' ⚠'}{full && <span className="sf-count__full">Full</span>}
+    <span className="sf-count" data-thin={thin || undefined}>
+      <b>{n}</b> {n === 1 ? 'story' : 'stories'}{thin && ' ⚠ few'}{full && <span className="sf-count__full">Full</span>}
     </span>
   );
 }
@@ -42,7 +43,21 @@ function StoryCount({ n }: { n: number }) {
 export function DescBlock({ sf }: { sf: SF }) {
   const [edit, setEdit] = useState(false);
   const [more, setMore] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const text = useRef<HTMLParagraphElement>(null);
   const d = sf.project.description;
+
+  // More/Less only when the 2-line clamp actually hides text; re-check on resize.
+  useLayoutEffect(() => {
+    const el = text.current;
+    if (!el || more) return;
+    const check = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [d, more, edit]);
+
   if (edit) {
     return (
       <div className="sf-desc" data-edit>
@@ -50,17 +65,24 @@ export function DescBlock({ sf }: { sf: SF }) {
           onChange={e => sf.setField('description', e.target.value)} />
         <div className="sf-desc__acts">
           <span className="sf-desc__len">{d.length}c</span>
-          <button className="minibtn" onClick={() => setEdit(false)}>Done</button>
+          <button type="button" className="minibtn" onClick={() => setEdit(false)}>Done</button>
         </div>
+      </div>
+    );
+  }
+  if (!d.trim()) {
+    return (
+      <div className="sf-desc" data-empty>
+        <button type="button" className="sf-desc__add" onClick={() => setEdit(true)}>Add description</button>
       </div>
     );
   }
   return (
     <div className="sf-desc">
-      <p className="sf-desc__text" data-open={more || undefined} title="Description">{d || '—'}</p>
+      <p ref={text} className="sf-desc__text" data-open={more || undefined}>{d}</p>
       <div className="sf-desc__acts">
-        <button className="minibtn" aria-expanded={more} onClick={() => setMore(m => !m)}>{more ? 'Less' : 'More'}</button>
-        <button className="minibtn" onClick={() => setEdit(true)}>Edit</button>
+        {(clamped || more) && <button type="button" className="minibtn" aria-expanded={more} onClick={() => setMore(m => !m)}>{more ? 'Less' : 'More'}</button>}
+        <button type="button" className="minibtn" onClick={() => setEdit(true)}>Edit</button>
       </div>
     </div>
   );
@@ -70,7 +92,7 @@ export function DescBlock({ sf }: { sf: SF }) {
 
 export function LensTag({ lens, big }: { lens: Lens; big?: boolean }) {
   const l = LENS_OF[lens];
-  return <span className="sf-lens" data-lens={lens} data-big={big || undefined} title={l.tip}>{l.name}</span>;
+  return <span className="sf-lens" data-lens={lens} data-big={big || undefined}>{l.name}</span>;
 }
 
 /* ── One wording row: text, then a quiet side column ── */
@@ -82,11 +104,10 @@ export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () =>
       <div className="sf-b__text"><RichText text={b.text} /></div>
       <div className="sf-b__side">
         <span className="sf-b__meta">
-          <FitBase text={b.text} cfg={LAB_CFG} />
+          <Fit text={b.text} cfg={LAB_CFG} />
         </span>
         <span className="sf-b__acts">
-          <button type="button" className="sf-b__ok" aria-pressed={on} title={on ? 'Approved: click to unapprove' : 'Mark approved'}
-            onClick={() => sf.toggle(b.id)}>{on ? '✓ Approved' : '✓ Approve'}</button>
+          <button type="button" className="sf-b__ok" aria-pressed={on} onClick={() => sf.toggle(b.id)}>{on ? '✓ Approved' : 'Approve'}</button>
           <button type="button" className="minibtn" onClick={onEdit}>Edit</button>
           <Trash onClick={() => sf.remove(b.id)} />
         </span>
@@ -95,12 +116,52 @@ export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () =>
   );
 }
 
-export function Writing() {
+/** The same row, editing its text in place. Esc cancels, Ctrl/⌘+Enter saves. */
+export function EditRow({ b, onSave, onCancel }: { b: Bullet; onSave: (text: string) => void; onCancel: () => void }) {
+  const [t, setT] = useState(b.text);
+  const fit = fitOf(t, LAB_CFG);
+  const save = () => { if (t.trim()) onSave(t.trim()); };
   return (
-    <li className="sf-writing" aria-live="polite">
-      <Spin /> Writing…
+    <li className="sf-b" data-edit data-on={b.status === 'APPROVED' || undefined}>
+      <textarea className="field__textarea sf-b__input" aria-label="Bullet text" value={t} autoFocus rows={3}
+        onChange={e => setT(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
+        }} />
+      <div className="sf-b__side">
+        <span className="sf-b__meta">
+          <span className="ps-fit" data-bad={needsRefit(fit) || undefined}>{needsRefit(fit) && `⚠ ${FIT_LABEL[fit]} · `}{charCount(t)}c</span>
+        </span>
+        <span className="sf-b__acts">
+          <button type="button" className="minibtn" disabled={!t.trim()} onClick={save}>Save</button>
+          <button type="button" className="minibtn" onClick={onCancel}>Cancel</button>
+        </span>
+      </div>
     </li>
   );
+}
+
+export function Writing({ lens }: { lens: Lens }) {
+  return (
+    <li className="sf-writing">
+      <Spin label={`Writing ${LENS_OF[lens].name}`} /> Writing…
+    </li>
+  );
+}
+
+/**
+ * One polite live region per pane: says what is being written, then "Done" (or `done`) once it settles.
+ * Stays mounted so the first message is announced.
+ */
+export function PaneStatus({ busy, done = 'Done' }: { busy: string | null; done?: string }) {
+  const was = useRef(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    if (busy) { was.current = true; setMsg(busy); }
+    else if (was.current) { was.current = false; setMsg(done); }
+  }, [busy, done]);
+  return <p role="status" className="sr-only">{msg}</p>;
 }
 
 /* ── Repo (as in /lab/workspace) ── */
@@ -117,12 +178,12 @@ export function RepoPane({ sf }: { sf: SF }) {
   return (
     <div className="stack-sm">
       <div className="sf-tools">
-        <span className="label sf-repo" title="Linked repo, branch and pinned commit">
+        <span className="label sf-repo">
           <a href={p.githubUrl ?? '#'} target="_blank" rel="noreferrer">{repo}</a> · {p.repoBranch} @ {p.repoCommitSha?.slice(0, 7)}
         </span>
-        <span className="row" style={{ gap: 6 }}>
-          <button className="minibtn" title="Pull latest commit">↻ Pull</button>
-          <button className="minibtn" title="Link another repo">Change</button>
+        <span className="row" style={{ gap: 8 }}>
+          <button type="button" className="minibtn">↻ Pull</button>
+          <button type="button" className="minibtn">Change</button>
         </span>
       </div>
       <RepoMapView map={REPO_MAP} picked={picked} onToggle={toggle} onOpenFile={() => {}} />
@@ -136,5 +197,5 @@ export function Undo({ sf }: { sf: SF }) {
 
 /** Placeholder rows while the project Generate is finding stories. */
 export function Finding({ n }: { n: number }) {
-  return <>{Array.from({ length: n }, (_, i) => <div key={i} className="sf-finding"><Spin /></div>)}</>;
+  return <>{Array.from({ length: n }, (_, i) => <div key={i} className="sf-finding"><Spin label="Finding a story" /></div>)}</>;
 }
