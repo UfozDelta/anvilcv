@@ -1,6 +1,7 @@
 /** Fictional fixtures for /lab/lists. */
 
-type Base = { id: string; name: string; stack: string[]; bullets: number; repo: string | null; createdAt: string; updatedAt: string };
+/** repoReady false = the repo is still being read. */
+type Base = { id: string; name: string; stack: string[]; bullets: number; repo: string | null; repoReady?: boolean; createdAt: string; updatedAt: string };
 export type ProjectItem = Base & { description: string };
 export type ExpItem = Base & { company: string; location?: string; dates: string; current?: boolean };
 
@@ -18,7 +19,7 @@ export const PROJECTS: ProjectItem[] = [
   { id: 'kestrel-notes', name: 'Kestrel Notes', description: 'Markdown notes with sync', stack: ['Kotlin', 'Spring', 'PostgreSQL', 'React', 'AWS', 'Terraform'],
     bullets: 23, repo: 'ferrow/kestrel-notes', createdAt: daysAgo(200), updatedAt: daysAgo(4) },
   { id: 'moorline', name: 'Moorline', description: 'Warehouse models for a co-op shop', stack: ['dbt', 'Snowflake'],
-    bullets: 0, repo: 'ferrow/moorline', createdAt: daysAgo(2), updatedAt: daysAgo(2) },
+    bullets: 0, repo: 'ferrow/moorline', repoReady: false, createdAt: daysAgo(2), updatedAt: daysAgo(2) },
 ];
 
 export const EXPERIENCES: ExpItem[] = [
