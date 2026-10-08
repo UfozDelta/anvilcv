@@ -25,6 +25,21 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-10-07',
+    title: 'Project workspace',
+    status: 'prototype',
+    summary: <>The Workspace split without Context or the page preview. Generate writes a wording per lens; two statuses.</>,
+    protos: [
+      { to: '/lab/workspace', name: 'Project workspace', line: 'Tabs / Desk / Matrix (1-3).' },
+    ],
+    fixes: [
+      'Context tab and page preview removed',
+      'Generate: pick lenses, new stories arrive with one wording per lens',
+      'Bullet or Approved only; reject is delete, with undo',
+      'Run result as +stories, +wordings and per-lens chips',
+    ],
+  },
+  {
+    iso: '2026-10-07',
     title: 'Project page, split',
     status: 'prototype',
     summary: <>Back to the ledger bank: bullets by lens, Description, Context and Repo tabs, three splits.</>,
