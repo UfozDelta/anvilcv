@@ -1,12 +1,13 @@
 /* Shared pieces for /lab/story-flow. */
 import { useState } from 'react';
-import { estimatedLines } from '../../lib/bulletLength';
+import { FIT_LABEL, fitHint, fitOf, needsRefit } from '../../lib/bulletLength';
 import { RichText } from '../../components/RichText';
 import { RepoMapView } from '../../components/ProjectDetail/RepoMapView';
 import { UndoBar } from '../../components/ledger/shared';
 import { Meter } from '../project-split/parts';
 import { REPO_MAP } from '../project-split/data';
-import { Fit, Spin, Trash } from '../workspace/parts';
+import { LAB_CFG } from '../fixtures';
+import { Spin, Trash } from '../workspace/parts';
 import { LENS_OF, type Lens } from './data';
 import { type Bullet, type SF } from './model';
 
@@ -62,46 +63,47 @@ export function LensTag({ lens, big }: { lens: Lens; big?: boolean }) {
   return <span className="sf-lens" data-lens={lens} data-big={big || undefined} title={l.tip}>{l.name}</span>;
 }
 
-/* ── One wording row, wide ── */
+/* ── One wording row: the text leads, metadata stays quiet ── */
 
-function Toggle({ sf, b }: { sf: SF; b: Bullet }) {
-  const on = b.status === 'APPROVED';
-  return (
-    <button className="brow__toggle" aria-pressed={on} title={on ? 'Unapprove' : 'Approve'}
-      onClick={e => { e.stopPropagation(); sf.toggle(b.id); }}>
-      <span className={`brow__state ${on ? 'brow__state--in' : 'brow__state--out'}`}>{on ? '✓ APPROVED' : 'BULLET'}</span>
-      <span className="brow__rank">{estimatedLines(b.text)}L</span>
-    </button>
-  );
+/** Length mark, only when the wording won't fit its line budget. */
+function FitMark({ text }: { text: string }) {
+  const fit = fitOf(text, LAB_CFG);
+  if (fit === 'OFF' || !needsRefit(fit)) return null;
+  return <span className="sf-b__fit" title={fitHint(text, LAB_CFG)} aria-label={FIT_LABEL[fit]}>!</span>;
 }
 
 export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () => void }) {
-  const prints = sf.printed(b.storyId)?.id === b.id;
-  const many = sf.wordings(b.storyId).length > 1;
+  const on = b.status === 'APPROVED';
+  const prints = sf.wordings(b.storyId).length > 1 && sf.printed(b.storyId)?.id === b.id;
   return (
-    <div className={`brow ps-row wt-row sf-row${b.status === 'APPROVED' ? ' is-in' : ''}`} data-new={sf.newIds.has(b.id) || undefined}>
-      <Toggle sf={sf} b={b} />
-      <div className="brow__text wt-text"><RichText text={b.text} /></div>
-      <div className="wt-side">
-        <span className="wt-side__meta">
-          <LensTag lens={b.lens} />
-          {many && prints && <span className="sf-prints" title="Prints by default; one wording per resume">▶</span>}
-          <Fit text={b.text} />
-        </span>
-        <span className="ws-acts wt-acts">
-          <button className="minibtn" onClick={onEdit}>Edit</button>
+    <li className="sf-b" data-on={on || undefined} data-new={sf.newIds.has(b.id) || undefined}>
+      <button type="button" className="sf-b__dot" aria-pressed={on} aria-label="Approved"
+        title={on ? 'Approved: click to unapprove' : 'Approve'} onClick={() => sf.toggle(b.id)}>
+        <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>
+      </button>
+      <p className="sf-b__text">
+        {prints && <span className="sf-b__prints" title="Prints by default; one wording per resume" aria-label="Prints">▶</span>}
+        <RichText text={b.text} />
+      </p>
+      <div className="sf-b__meta">
+        <FitMark text={b.text} />
+        <LensTag lens={b.lens} />
+        <span className="sf-b__acts">
+          <button type="button" className="minibtn" title="Edit" aria-label="Edit" onClick={onEdit}>
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3 13l.6-2.6L10.8 3.2l2 2-7.2 7.2L3 13zM9.6 4.4l2 2" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+          </button>
           <Trash onClick={() => sf.remove(b.id)} />
         </span>
       </div>
-    </div>
+    </li>
   );
 }
 
 export function Writing({ lens }: { lens: Lens }) {
   return (
-    <div className="sf-writing" aria-live="polite">
+    <li className="sf-writing" aria-live="polite">
       <Spin /> <LensTag lens={lens} />
-    </div>
+    </li>
   );
 }
 

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { RichText } from '../../components/RichText';
 import { Spin } from '../workspace/parts';
 import { BY_ID, LENSES, type Lens } from './data';
-import { fits, wid, type Bullet, type SF } from './model';
+import { fits, lensOf, type Bullet, type SF } from './model';
 import { Finding, LensTag } from './parts';
 
 const NEW = '+new';
@@ -17,7 +17,7 @@ export function GenerateTab({ sf, onView }: { sf: SF; onView: (storyId: string |
   const sid = story === NEW || sf.stories.includes(story) ? story : (sf.stories[0] ?? NEW);
   const isNew = sid === NEW;
   const newOff = sf.room === 0 ? 'Bank full' : sf.left === 0 ? 'No new stories left' : null;
-  const go = isNew ? [] : [...picked].filter(l => sf.open(sid).includes(l));
+  const go = isNew ? [] : [...picked].filter(l => !sf.isPending(sid, l));
   const busy = sf.finding > 0;
   const can = isNew ? !newOff && !busy : go.length > 0;
 
@@ -25,7 +25,7 @@ export function GenerateTab({ sf, onView }: { sf: SF; onView: (storyId: string |
   const flip = (l: Lens) => setPicked(s => { const n = new Set(s); n.has(l) ? n.delete(l) : n.add(l); return n; });
   const generate = () => {
     if (isNew) { setRun({ story: NEW, ids: [], before: sf.stories }); sf.generate(); }
-    else { setRun({ story: sid, ids: go.map(l => wid(sid, l)), before: [] }); sf.getLenses(sid, go); }
+    else setRun({ story: sid, ids: sf.getLenses(sid, go), before: [] });
     setPicked(new Set());
   };
 
@@ -42,7 +42,7 @@ export function GenerateTab({ sf, onView }: { sf: SF; onView: (storyId: string |
                 title={s.evidence.map(q => `${q.src}: ${q.text}`).join('\n')}>
                 <span className="sf-glyph" aria-hidden="true">{s.glyph}</span>
                 <span className="sf-opt__name">{s.title}</span>
-                <span className="sf-opt__n" title={`${n} lens${n === 1 ? '' : 'es'} done`}>{n}/4</span>
+                <span className="sf-opt__n" title={`${n} wording${n === 1 ? '' : 's'}`}>{n}</span>
               </button>
             );
           })}
@@ -59,17 +59,19 @@ export function GenerateTab({ sf, onView }: { sf: SF; onView: (storyId: string |
         <h3 className="sf-step__k" id="sf-b"><b>2</b> Lens</h3>
         <div className="sf-lenses">
           {LENSES.map(l => {
-            const done = !isNew && sf.has(sid, l.slug);
+            const n = isNew ? 0 : sf.count(sid, l.slug);
             const wait = !isNew && sf.isPending(sid, l.slug);
-            const off = isNew || !fits(sid, l.slug);
-            const on = picked.has(l.slug) && !done && !wait && !off;
-            const s = done ? 'done' : wait ? 'wait' : off ? 'off' : on ? 'on' : 'get';
+            const weak = !isNew && !fits(sid, l.slug);
+            const on = picked.has(l.slug) && !wait && !isNew;
+            const s = isNew ? 'off' : wait ? 'wait' : on ? 'on' : 'get';
             return (
               <button key={l.slug} type="button" className="sf-chip" data-s={s} aria-pressed={on}
-                disabled={done || wait || off} onClick={() => flip(l.slug)}
-                title={isNew ? 'Best fit, picked per story' : done ? `${l.name}: done` : wait ? 'Writing…' : off ? `Doesn't fit ${l.name}` : l.tip}>
-                <span className="sf-chip__mark" aria-hidden="true">{done ? '✓' : wait ? <Spin /> : off ? '—' : on ? '■' : '□'}</span>
+                disabled={isNew || wait} onClick={() => flip(l.slug)}
+                title={isNew ? 'Best fit, picked per story' : wait ? 'Writing…' : l.tip}>
+                <span className="sf-chip__mark" aria-hidden="true">{wait ? <Spin /> : on ? '■' : '□'}</span>
                 {l.name}
+                {weak && <span className="sf-chip__weak" title={`Weak fit: little evidence for ${l.name}`}>weak fit</span>}
+                {n > 0 && <span className="sf-chip__has" title={`Already has ${n} wording${n === 1 ? '' : 's'}`}>✓ {n}</span>}
               </button>
             );
           })}
@@ -94,7 +96,7 @@ function Result({ sf, run, onView }: { sf: SF; run: Run; onView: (storyId: strin
   const bs = isNew
     ? sf.bullets.filter(b => !run.before.includes(b.storyId))
     : run.ids.map(id => sf.bullets.find(b => b.id === id)).filter((b): b is Bullet => !!b);
-  const wait = isNew ? [] : run.ids.filter(id => sf.pending.has(id)).map(id => id.split(':')[1] as Lens);
+  const wait = isNew ? [] : run.ids.filter(id => sf.pending.has(id)).map(lensOf);
   const empty = isNew && sf.finding === 0 && bs.length === 0 && sf.last;
   return (
     <div className="sf-out" aria-live="polite">

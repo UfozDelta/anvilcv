@@ -1,21 +1,23 @@
-/* Story → lens wordings. Generate finds stories (one bullet each); per story, get more lenses. */
+/* Story → lens wordings. Generate finds stories (one bullet each); per story, add wordings in any lens (repeats allowed). */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type Project } from '../../lib/api';
 import { STORY_CAP } from '../stories/storyFixtures';
 import { PROJECT_FX } from '../project-split/data';
-import { BY_ID, LENSES, POOL, SEED, type Lens } from './data';
+import { BY_ID, LENSES, POOL, SEED, wordingFor, type Lens } from './data';
 
 export type Status = 'BULLET' | 'APPROVED';
 export type Bullet = { id: string; storyId: string; lens: Lens; text: string; status: Status; tags: string[] };
 type Bank = { stories: string[]; bullets: Bullet[] };
 
-export const wid = (storyId: string, lens: Lens) => `${storyId}:${lens}`;
-const make = (storyId: string, lens: Lens, status: Status = 'BULLET'): Bullet =>
-  ({ id: wid(storyId, lens), storyId, lens, text: BY_ID[storyId].fits[lens] ?? '', status, tags: [] });
+/** Wording id: story:lens:n — n counts wordings of that lens, so a lens can repeat. */
+export const wid = (storyId: string, lens: Lens, n = 0) => `${storyId}:${lens}:${n}`;
+export const lensOf = (id: string) => id.split(':')[1] as Lens;
+const make = (storyId: string, lens: Lens, n = 0, status: Status = 'BULLET'): Bullet =>
+  ({ id: wid(storyId, lens, n), storyId, lens, text: wordingFor(BY_ID[storyId], lens, n), status, tags: [] });
 
 const seed = (): Bank => ({
   stories: SEED.map(s => s.id),
-  bullets: SEED.flatMap(s => s.lenses.map(l => make(s.id, l, s.approved?.includes(l) ? 'APPROVED' : 'BULLET'))),
+  bullets: SEED.flatMap(s => s.lenses.map(l => make(s.id, l, 0, s.approved?.includes(l) ? 'APPROVED' : 'BULLET'))),
 });
 
 export const fits = (storyId: string, lens: Lens) => !!BY_ID[storyId]?.fits[lens];
@@ -48,10 +50,10 @@ export function useStoryFlow() {
   const left = POOL.filter(s => !stories.includes(s.id)).length;
 
   const wordings = (storyId: string) => byStory.get(storyId) ?? [];
-  const has = (storyId: string, lens: Lens) => bullets.some(b => b.id === wid(storyId, lens));
-  const isPending = (storyId: string, lens: Lens) => pending.has(wid(storyId, lens));
-  /** Lenses this story fits and hasn't got (or isn't getting) yet. */
-  const open = (storyId: string) => LENSES.map(l => l.slug).filter(l => fits(storyId, l) && !has(storyId, l) && !isPending(storyId, l));
+  /** How many wordings a story has in a lens. */
+  const count = (storyId: string, lens: Lens) => bullets.filter(b => b.storyId === storyId && b.lens === lens).length;
+  const pendingOf = (storyId: string) => [...pending].filter(id => id.startsWith(`${storyId}:`));
+  const isPending = (storyId: string, lens: Lens) => pendingOf(storyId).some(id => lensOf(id) === lens);
   /** The one wording that prints: approved first, then the arriving lens, then the first. */
   const printed = (storyId: string) => {
     const ws = wordings(storyId);
@@ -97,21 +99,28 @@ export function useStoryFlow() {
     }));
   }
 
-  /** Per story: write wordings for the chosen lenses. */
-  function getLenses(storyId: string, lenses: Lens[]) {
-    const go = lenses.filter(l => fits(storyId, l) && !has(storyId, l) && !isPending(storyId, l));
-    if (go.length === 0) return;
-    setPending(p => new Set([...p, ...go.map(l => wid(storyId, l))]));
+  /** Per story: write one more wording in each chosen lens. Returns the new wording ids. */
+  function getLenses(storyId: string, lenses: Lens[]): string[] {
+    const go = lenses.filter(l => !isPending(storyId, l));
+    const next = (l: Lens) => {
+      let n = 0;
+      while (bullets.some(b => b.id === wid(storyId, l, n))) n++;
+      return n;
+    };
+    const ids = go.map(l => wid(storyId, l, next(l)));
+    if (ids.length === 0) return ids;
+    setPending(p => new Set([...p, ...ids]));
     go.forEach((l, i) => later(700 + i * 380, () => {
-      const b = make(storyId, l);
+      const b = make(storyId, l, next(l));
       setBullets(bs => (bs.some(x => x.id === b.id) ? bs : [...bs, b]));
       setNewIds(n => new Set([...n, b.id]));
       setPending(p => { const n = new Set(p); n.delete(b.id); return n; });
     }));
+    return ids;
   }
 
   return {
-    project, setField, stories, bullets, wordings, has, isPending, open, printed,
+    project, setField, stories, bullets, wordings, count, isPending, pendingOf, printed,
     used, usable, room, left, finding, last, newIds, pending, removed,
     toggle, patch, remove, undo, generate, getLenses,
   };

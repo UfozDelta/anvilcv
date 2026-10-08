@@ -1,7 +1,8 @@
 /**
  * Fictional data for /lab/story-flow, on the invented "Quayside" project.
  * A story = one piece of real work with evidence. `fits` = the wording per lens it supports;
- * a missing lens means the story doesn't fit it.
+ * a missing lens means the story doesn't fit it (still generatable, as a weak fit).
+ * `alt` = further wordings for a lens, used when it's generated again.
  */
 
 export type Lens = 'ai-ml' | 'backend' | 'data' | 'general';
@@ -24,6 +25,7 @@ export type StoryFx = {
   /** Lens of the one bullet the story arrives with. */
   best: Lens;
   fits: Partial<Record<Lens, string>>;
+  alt?: Partial<Record<Lens, string[]>>;
 };
 
 export const STORIES: StoryFx[] = [
@@ -39,6 +41,10 @@ export const STORIES: StoryFx[] = [
       data: 'Rebuilt arrival estimates from live **AIS position pings**, cutting ETA error from **9 minutes to under 2**.',
       general: 'Cut ferry arrival-time error from **9 minutes to under 2** for three island routes.',
     },
+    alt: {
+      'ai-ml': ['Modelled swell delay per route from past crossings, holding ETA error under **2 minutes**.'],
+      general: ['Made ferry arrival times trustworthy to within **2 minutes** on three routes.'],
+    },
   },
   {
     id: 'feed', title: 'Surviving silent feeds', glyph: '▲', best: 'backend',
@@ -51,6 +57,7 @@ export const STORIES: StoryFx[] = [
       data: 'Detected silent operator feeds within **3 polls** and back-filled gaps once they recovered.',
       general: 'Kept a public departures board accurate through daily outages of the operator’s data feed.',
     },
+    alt: { backend: ['Fell back to the timetable after **3 silent polls**, so the board never froze on a dead feed.'] },
   },
   {
     id: 'alerts', title: 'Cancellation alerts', glyph: '●', best: 'backend',
@@ -61,6 +68,7 @@ export const STORIES: StoryFx[] = [
       backend: 'Pushed cancellation alerts to **4,000 subscribers** within **60 seconds** using Postgres LISTEN/NOTIFY.',
       general: 'Built cancellation alerts that reach **4,000** passengers within a minute.',
     },
+    alt: { backend: ['Fanned out cancellations in batches of **500** from a Postgres LISTEN channel, under a minute end to end.'] },
   },
   {
     id: 'parser', title: 'Three operator formats, one schema', glyph: '■', best: 'data',
@@ -73,6 +81,7 @@ export const STORIES: StoryFx[] = [
       backend: 'Wrote pluggable parsers so a new operator format ships without touching the poller.',
       general: 'Merged three ferry operators’ timetables into one consistent source.',
     },
+    alt: { data: ['Mapped GTFS, legacy CSV and harbour XML onto **one departures table**.'] },
   },
   {
     id: 'kiosk', title: 'Offline pier kiosk', glyph: '▼', best: 'general',
@@ -83,6 +92,7 @@ export const STORIES: StoryFx[] = [
       general: 'Shipped a pier kiosk that keeps showing departures through **30 minutes** of lost signal.',
       backend: 'Served a cached departures snapshot so the kiosk degrades to stale data, never a blank screen.',
     },
+    alt: { general: ['Kept the pier screen useful offline, showing cached departures with a stale badge.'] },
   },
   {
     id: 'deploy', title: 'Zero-downtime releases', glyph: '✚', best: 'backend',
@@ -93,6 +103,7 @@ export const STORIES: StoryFx[] = [
       backend: 'Moved releases to blue-green deploys with health checks, so the board never drops during a ship.',
       general: 'Released weekly with no visible downtime for passengers.',
     },
+    alt: { backend: ['Switched to health-checked blue-green releases, shipping weekly with **zero** board downtime.'] },
   },
 ];
 
@@ -108,6 +119,7 @@ export const POOL: StoryFx[] = [
       data: 'Joined hourly wind forecasts to each sailing to score delay risk.',
       general: 'Warned passengers about weather delays a day ahead.',
     },
+    alt: { 'ai-ml': ['Scored each sailing’s delay risk from gust forecasts, flagging **7 in 10** weather delays a day ahead.'] },
   },
   {
     id: 'replay', title: 'Feed replay for debugging', glyph: '✜', best: 'data',
@@ -119,6 +131,7 @@ export const POOL: StoryFx[] = [
       backend: 'Added a replay mode that pushes recorded captures through the live poller code path.',
       general: 'Made any bad morning reproducible locally from recorded data.',
     },
+    alt: { data: ['Stored **30 days** of raw captures and replayed them to test parser fixes on real outages.'] },
   },
   {
     id: 'ratelimit', title: 'Public API limits', glyph: '⬣', best: 'backend',
@@ -129,8 +142,15 @@ export const POOL: StoryFx[] = [
       backend: 'Added per-key token-bucket limits so partner traffic never starves the public board.',
       general: 'Opened the departures data to partner apps without risking the main board.',
     },
+    alt: { backend: ['Rate-limited the public API at **60 req/min** per key with a token bucket.'] },
   },
 ];
+
+/** The n-th wording of a story in a lens; a weak-fit lens borrows the General one. */
+export function wordingFor(s: StoryFx, lens: Lens, n: number): string {
+  const list = s.fits[lens] ? [s.fits[lens]!, ...(s.alt?.[lens] ?? [])] : [s.fits.general ?? s.fits[s.best] ?? ''];
+  return list[n % list.length];
+}
 
 export const ALL: StoryFx[] = [...STORIES, ...POOL];
 export const BY_ID: Record<string, StoryFx> = Object.fromEntries(ALL.map(s => [s.id, s]));

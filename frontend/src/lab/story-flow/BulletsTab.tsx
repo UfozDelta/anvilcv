@@ -1,8 +1,8 @@
 /* Bullets tab: the whole bank, grouped under the story each bullet achieves. */
 import { useEffect, useState } from 'react';
 import { EditBulletForm } from '../projectDetail/EditBulletForm';
-import { BY_ID, LENSES } from './data';
-import { wid, type SF } from './model';
+import { BY_ID } from './data';
+import { lensOf, type SF } from './model';
 import { WordingRow, Writing } from './parts';
 
 export function BulletsTab({ sf, focus, onGenerate }: { sf: SF; focus: string | null; onGenerate: () => void }) {
@@ -26,7 +26,7 @@ export function BulletsTab({ sf, focus, onGenerate }: { sf: SF; focus: string | 
       {sf.stories.map(id => {
         const s = BY_ID[id];
         const ws = sf.wordings(id);
-        const wait = LENSES.map(l => l.slug).filter(l => sf.pending.has(wid(id, l)));
+        const wait = sf.pendingOf(id);
         return (
           <section key={id} id={`sf-s-${id}`} className="sf-group" data-new={sf.newIds.has(id) || undefined}>
             <h3 className="sf-group__title">
@@ -34,14 +34,18 @@ export function BulletsTab({ sf, focus, onGenerate }: { sf: SF; focus: string | 
               <span className="sf-group__name" tabIndex={0} title={s.evidence.map(q => `${q.src}: ${q.text}`).join('\n')}>{s.title}</span>
               <span className="sf-group__n" title={`${ws.length} bullet${ws.length === 1 ? '' : 's'}`}>{ws.length}</span>
             </h3>
-            {ws.map(b => (editing === b.id ? (
-              <EditBulletForm key={b.id}
-                bullet={{ ...b, status: b.status === 'APPROVED' ? 'APPROVED' : 'PENDING', projectId: '', category: b.lens, createdAt: '', updatedAt: '' }}
-                onSave={(text, tags) => { sf.patch(b.id, { text, tags }); setEditing(null); }} onCancel={() => setEditing(null)} />
-            ) : (
-              <WordingRow key={b.id} sf={sf} b={b} onEdit={() => setEditing(b.id)} />
-            )))}
-            {wait.map(l => <Writing key={l} lens={l} />)}
+            <ul className="sf-ws">
+              {ws.map(b => (editing === b.id ? (
+                <li key={b.id} className="sf-b-edit">
+                  <EditBulletForm
+                    bullet={{ ...b, status: b.status === 'APPROVED' ? 'APPROVED' : 'PENDING', projectId: '', category: b.lens, createdAt: '', updatedAt: '' }}
+                    onSave={(text, tags) => { sf.patch(b.id, { text, tags }); setEditing(null); }} onCancel={() => setEditing(null)} />
+                </li>
+              ) : (
+                <WordingRow key={b.id} sf={sf} b={b} onEdit={() => setEditing(b.id)} />
+              )))}
+              {wait.map(id => <Writing key={id} lens={lensOf(id)} />)}
+            </ul>
           </section>
         );
       })}
