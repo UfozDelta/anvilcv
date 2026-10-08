@@ -25,6 +25,21 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-10-07',
+    title: 'Workspace, tabs',
+    status: 'prototype',
+    summary: <>Workspace variant 1 with a wider Bullets tab and three takes on Generate. "Story" renamed per variant.</>,
+    protos: [
+      { to: '/lab/workspace-tabs', name: 'Workspace, tabs', line: 'Pick / Guided / Gaps (1-3).' },
+    ],
+    fixes: [
+      'Bullets tab wider: roomier rows, meta in its own column, clearer lens groups',
+      'Generate 1: tick repo areas, Keep or Skip each Highlight',
+      'Generate 2: Source, Find, Write steps for Wins',
+      'Generate 3: lens and area coverage with one-click fills per gap',
+    ],
+  },
+  {
+    iso: '2026-10-07',
     title: 'Project workspace',
     status: 'prototype',
     summary: <>The Workspace split without Context or the page preview. Generate writes a wording per lens; two statuses.</>,
