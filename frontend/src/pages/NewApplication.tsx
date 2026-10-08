@@ -11,7 +11,6 @@ import { CATEGORIES } from '../lib/api';
 const EMPHASES = [
   { value: '', label: 'Auto' },
   ...CATEGORIES.map(c => ({ value: c.slug, label: c.label })),
-  { value: 'generalist', label: 'Generalist' },
 ];
 
 const looksLikeUrl = (s: string) => /^https?:\/\/\S+\.\S+/i.test(s.trim());

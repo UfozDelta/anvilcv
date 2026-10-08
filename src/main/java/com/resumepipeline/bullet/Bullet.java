@@ -61,7 +61,7 @@ public class Bullet {
     public String[] getTags() { return tags; }
     public void setTags(String[] tags) { this.tags = tags == null ? new String[0] : tags; }
     public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category == null || category.isBlank() ? "general" : category; }
+    public void setCategory(String category) { this.category = com.resumepipeline.llm.CategoryLenses.normalize(category); }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public UUID getStoryId() { return storyId; }

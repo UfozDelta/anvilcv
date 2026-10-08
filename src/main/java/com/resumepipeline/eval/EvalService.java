@@ -87,7 +87,7 @@ public class EvalService {
         List<EvalItem> items = new ArrayList<>();
         for (Project p : projects.findAllByUserIdOrderByCreatedAtDesc(userId)) {
             for (Bullet b : bullets.findByProjectIdOrderByCreatedAtAsc(p.getId())) {
-                items.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
+                items.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), CategoryLenses.normalize(b.getCategory()), b.getStatus(),
                         Arrays.asList(b.getTags()), b.getText(), b.getStoryId()));
             }
         }
@@ -137,7 +137,7 @@ public class EvalService {
                 List<String> lenses = lensesByProject.get(p.getId());
                 log.info("EVAL_GEN set={} project={} lenses={}", run.getLabel(), p.getName(), lenses);
                 for (Bullet b : generator.generate(p.getUserId(), p.getId(), lenses, ProgressLog.noOp())) {
-                    out.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), b.getCategory(), b.getStatus(),
+                    out.add(new EvalItem(p.getId(), p.getName(), p.getKind().name(), CategoryLenses.normalize(b.getCategory()), b.getStatus(),
                             Arrays.asList(b.getTags()), b.getText(), b.getStoryId()));
                 }
             }

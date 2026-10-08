@@ -63,7 +63,7 @@ class RepoMapServiceTest {
 
         verify(llm).summarizeProject(argThat(r -> r.modules().stream().anyMatch(m -> m.startsWith("src/core — Stores jobs."))
                 && r.facts().stream().anyMatch(f -> f.contains("API endpoints"))
-                && r.lenses().contains("security")), any(), any());
+                && r.lenses().contains("general")), any(), any());
         verify(llm, times(3)).summarizeModule(any(), any(), any());
     }
 }

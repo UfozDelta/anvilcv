@@ -261,7 +261,7 @@ class ApplicationServiceTest {
             Bullet backend = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"java"});
             security.setText("Built the auth service handling login for all tenants");
             backend.setText("Built the auth service handling login for all tenants");
-            security.setCategory("security");
+            security.setCategory("general");
             backend.setCategory("backend");
             when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(security, backend));
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
@@ -292,10 +292,10 @@ class ApplicationServiceTest {
             when(llm.cleanJd(any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
 
-            Application out = service.create(user, "jd text", null, "security", false, ProgressLog.noOp());
+            Application out = service.create(user, "jd text", null, "general", false, ProgressLog.noOp());
 
             assertEquals("[" + pair[0].getId() + "]", rankedIds());
-            assertEquals("security", out.getRoleEmphasis());
+            assertEquals("general", out.getRoleEmphasis());
         }
 
         @Test
@@ -307,7 +307,7 @@ class ApplicationServiceTest {
         }
 
         @Test
-        void unknownOverrideBecomesGeneralistInStoreAndPrompt() {
+        void unknownOverrideBecomesGeneralInStoreAndPrompt() {
             crossLensPair();
             when(llm.cleanJd(any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
@@ -316,8 +316,8 @@ class ApplicationServiceTest {
 
             ArgumentCaptor<LlmClient.RankRequest> cap = ArgumentCaptor.forClass(LlmClient.RankRequest.class);
             verify(llm).rankBullets(cap.capture(), any(), any());
-            assertEquals("generalist", cap.getValue().roleEmphasis());
-            assertEquals("generalist", out.getRoleEmphasis());
+            assertEquals("general", cap.getValue().roleEmphasis());
+            assertEquals("general", out.getRoleEmphasis());
         }
 
         @Test

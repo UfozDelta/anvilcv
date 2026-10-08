@@ -1,6 +1,7 @@
 package com.resumepipeline.github;
 
 import com.resumepipeline.llm.BulletTextRules;
+import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.LlmClient;
 import com.resumepipeline.llm.LlmClient.EvidenceRef;
 import com.resumepipeline.llm.LlmClient.ExploreStep;
@@ -35,8 +36,7 @@ public class RepoExplorer {
 
     private static final Logger log = LoggerFactory.getLogger(RepoExplorer.class);
 
-    public static final Set<String> CATEGORIES = Set.of(
-            "ai-ml", "backend", "frontend", "data", "security", "devops", "systems", "comms");
+    public static final Set<String> CATEGORIES = Set.copyOf(CategoryLenses.LENSES.keySet());
 
     private static final int MAX_READ_CHARS = 12_000;
     private static final int MAX_TREE_LINES = 400;

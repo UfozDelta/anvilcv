@@ -1004,7 +1004,7 @@ public abstract class BaseLlmClient implements LlmClient {
                   - company: the hiring company name.
                   - role: the job title.
                   - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
-                  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: %s. Empty array if the role is general or unclear.
+                  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: %s. Use general when the role is not mainly AI/ML, backend or data.
 
                 Raw JD:
                 %s
@@ -1042,7 +1042,7 @@ public abstract class BaseLlmClient implements LlmClient {
                   - company: the hiring company name.
                   - role: the job title.
                   - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
-                  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: %s. Empty array if the role is general or unclear.
+                  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: %s. Use general when the role is not mainly AI/ML, backend or data.
 
                 JD:
                 %s

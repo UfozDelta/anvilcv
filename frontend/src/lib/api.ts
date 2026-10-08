@@ -179,14 +179,10 @@ export interface RefitResponse {
 }
 
 export const CATEGORIES: { slug: string; label: string; blurb: string }[] = [
-  { slug: 'ai-ml',    label: 'AI / ML',           blurb: 'RAG, agents, embeddings, prompt design' },
-  { slug: 'backend',  label: 'Backend & Data',    blurb: 'APIs, schemas, indexes, migrations' },
-  { slug: 'frontend', label: 'Frontend & Product',blurb: 'design systems, state, viz, mobile' },
-  { slug: 'data',     label: 'Data Engineering',  blurb: 'ingestion, parsers, ETL, geospatial' },
-  { slug: 'security', label: 'Security & Auth',   blurb: 'RBAC, encryption, compliance' },
-  { slug: 'devops',   label: 'Infra & DevOps',    blurb: 'CI/CD, monorepos, deploys' },
-  { slug: 'systems',  label: 'Distributed Systems', blurb: 'async, idempotency, real-time' },
-  { slug: 'comms',    label: 'Real-time Comms',   blurb: 'WebRTC, telephony, SMS, webhooks' },
+  { slug: 'ai-ml',   label: 'AI / ML',         blurb: 'RAG, agents, embeddings, prompt design' },
+  { slug: 'backend', label: 'Backend',         blurb: 'APIs, schemas, indexes, migrations' },
+  { slug: 'data',    label: 'Data Engineering', blurb: 'ingestion, parsers, ETL, geospatial' },
+  { slug: 'general', label: 'General',         blurb: 'everything else: product, tooling, ops' },
 ];
 
 /** A bullet that repeats `conflictId`, earlier on the same page (POST /api/applications/selection-check). */

@@ -96,8 +96,7 @@ only (functions, classes, routes), no bodies. Goes into `description`.
 `result` has exactly these keys: `name`, `techStack`, `description`,
 `yourRole`, `ownership`, `scaleImpact`, `hardestProblem`,
 `technicalDecisions`, `userImpact`, `securityPosture` (strings), `category`
-(1-2 of: `ai-ml`, `backend`, `frontend`, `data`, `security`, `devops`,
-`systems`, `comms`), and `evidence`.
+(1-2 of: `ai-ml`, `backend`, `data`, `general`), and `evidence`.
 
 - `description`: (1) a 3-5 sentence overview; (2) `## Code map` — Stage 5.7.
   AnvilCV attaches the verbatim evidence spans itself; don't paste code here.

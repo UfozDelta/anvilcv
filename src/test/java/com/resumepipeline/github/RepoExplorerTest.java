@@ -55,7 +55,7 @@ class RepoExplorerTest {
         when(llm.exploreStep(any(), any(), any())).thenReturn(
                 tool("read_file", "src/main/resources/application.yml"),
                 tool("git_log", ""),
-                new ExploreStep("finish", null, null, "done", result(List.of("backend", "Devops"),
+                new ExploreStep("finish", null, null, "done", result(List.of("backend", "Data"),
                         "Caps the Hikari pool at 5 connections. Serves 30K users daily.",
                         List.of(
                                 new EvidenceRef("scaleImpact", "pool cap", "src/main/resources/application.yml", 4, 5, null),
@@ -64,7 +64,7 @@ class RepoExplorerTest {
 
         RepoExplorer.Outcome out = explorer(BIG).explore(repo, NONE, ProgressLog.noOp(), new TokenAccumulator());
 
-        assertEquals(List.of("backend", "devops"), out.result().category()); // normalized to schema slugs
+        assertEquals(List.of("backend", "data"), out.result().category()); // normalized to schema slugs
         // "30K users" never appeared in anything read -> sentence cut; the sourced one stays.
         assertEquals("Caps the Hikari pool at 5 connections.", out.result().scaleImpact());
         assertTrue(out.droppedClaims().stream().anyMatch(d -> d.contains("30K")));
@@ -139,11 +139,11 @@ class RepoExplorerTest {
     void invalidFinishGetsOneRepairTurn() {
         when(llm.exploreStep(any(), any(), any())).thenReturn(
                 new ExploreStep("finish", null, null, "done", result(List.of("web-scale"), "", List.of())),
-                new ExploreStep("finish", null, null, "done", result(List.of("frontend"), "", List.of())));
+                new ExploreStep("finish", null, null, "done", result(List.of("general"), "", List.of())));
 
         RepoExplorer.Outcome out = explorer(BIG).explore(repo, NONE, ProgressLog.noOp(), new TokenAccumulator());
 
-        assertEquals(List.of("frontend"), out.result().category());
+        assertEquals(List.of("general"), out.result().category());
     }
 
     @Test

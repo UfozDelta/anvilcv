@@ -109,7 +109,7 @@ const JSON_DOC = {
   technicalDecisions: 'Chose Redis over Postgres pub/sub.',
   userImpact: '40 tenants.',
   securityPosture: 'AES-256-GCM at rest.',
-  category: ['backend', 'systems'],
+  category: ['backend', 'data'],
 };
 
 describe('parseExtractJson', () => {
@@ -120,7 +120,7 @@ describe('parseExtractJson', () => {
     expect(result.fields.techStack).toBe('React, PostgreSQL');
     expect(result.fields.description).toContain('Two Next.js apps');
     expect(result.name).toBe('AnvilCV');
-    expect(result.category).toEqual(['backend', 'systems']);
+    expect(result.category).toEqual(['backend', 'data']);
   });
 
   it('strips an outer ```json fence', () => {

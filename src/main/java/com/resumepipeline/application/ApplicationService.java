@@ -176,7 +176,7 @@ public class ApplicationService {
         // Lens: an explicit roleEmphasis overrides; otherwise the one inferred from the JD.
         // Empty lens list = generalist, which leaves the keyword order untouched.
         boolean overridden = roleEmphasis != null && !roleEmphasis.isBlank();
-        List<String> lenses = overridden ? CategoryLenses.validate(List.of(roleEmphasis)) : clean.lenses();
+        List<String> lenses = overridden ? List.of(CategoryLenses.normalize(roleEmphasis)) : clean.lenses();
         // Label from the validated lenses, so an unknown override ("ml") becomes "generalist"
         // instead of stored and prompted as free text the bias never applied.
         final String emphasis = CategoryLenses.label(lenses);

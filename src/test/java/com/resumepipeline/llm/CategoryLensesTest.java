@@ -49,6 +49,15 @@ class CategoryLensesTest {
     }
 
     @Test
+    void normalizeMapsOldAndUnknownSlugsToGeneral() {
+        assertEquals("backend", CategoryLenses.normalize(" Backend "));
+        assertEquals("general", CategoryLenses.normalize("frontend"));
+        assertEquals("general", CategoryLenses.normalize("security"));
+        assertEquals("general", CategoryLenses.normalize("ml"));
+        assertEquals("general", CategoryLenses.normalize(null));
+    }
+
+    @Test
     void weightAndLabel() {
         assertEquals(1.0, CategoryLenses.weight(java.util.List.of("backend"), "backend"));
         assertEquals(0.7, CategoryLenses.weight(java.util.List.of("backend", "data"), "backend"));

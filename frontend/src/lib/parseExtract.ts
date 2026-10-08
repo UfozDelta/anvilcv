@@ -19,9 +19,7 @@ export type ExtractField =
 
 // Known slugs from the Category lens list in anvilcv-context-agent.md — kept in sync
 // by hand, same list CATEGORIES in lib/api.ts is built from.
-const KNOWN_CATEGORY_SLUGS = new Set([
-  'ai-ml', 'backend', 'frontend', 'data', 'security', 'devops', 'systems', 'comms',
-]);
+const KNOWN_CATEGORY_SLUGS = new Set(['ai-ml', 'backend', 'data', 'general']);
 
 // "name" and "category" are handled separately below — they don't map to an
 // ExtractField (name has no drawer field; category drives lens selection).

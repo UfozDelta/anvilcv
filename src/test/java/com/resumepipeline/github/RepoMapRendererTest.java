@@ -17,27 +17,40 @@ class RepoMapRendererTest {
             List.of(new RepoMap.Fact("test cases", "352", "@Test across 41 files")),
             List.of(mod("src/auth", "BCrypt login with sessions."), mod("src/pipe", "Ranks bullets on virtual threads."), mod("src/misc", "Helpers.")),
             new RepoMap.ProjectSummary("Tailors resumes.", "job seekers",
-                    List.of(new RepoMap.Subsystem("Auth", "Keeps accounts apart.", List.of("security"), List.of("src/auth")),
+                    List.of(new RepoMap.Subsystem("Auth", "Keeps accounts apart.", List.of("general"), List.of("src/auth")),
                             new RepoMap.Subsystem("Pipeline", "Tailors per JD.", List.of("backend", "ai-ml"), List.of("src/pipe"))),
                     List.of(new RepoMap.Flow("Tailor", List.of("paste JD", "rank", "render PDF")))));
 
     @Test
     void lensPicksTaggedSubsystemOnly() {
-        String s = RepoMapRenderer.lensFocus(MAP, "security", null);
-        assertTrue(s.contains("### Auth") && s.contains("BCrypt login"));
-        assertFalse(s.contains("virtual threads"));
+        String s = RepoMapRenderer.lensFocus(MAP, "ai-ml", null);
+        assertTrue(s.contains("### Pipeline") && s.contains("virtual threads"));
+        assertFalse(s.contains("BCrypt login"));
+    }
+
+    @Test
+    void generalLensCoversEverySubsystem() {
+        String s = RepoMapRenderer.lensFocus(MAP, "general", null);
+        assertTrue(s.contains("### Auth") && s.contains("### Pipeline"));
+    }
+
+    @Test
+    void oldLensTagsAreNormalizedToGeneral() {
+        // A map saved before the four-lens taxonomy still tags Auth "security"; it now means general.
+        String s = RepoMapRenderer.lensFocus(MAP, "general", null);
+        assertTrue(s.contains("BCrypt login"));
     }
 
     @Test
     void userPickedSubsystemsOverrideLensTags() {
-        String s = RepoMapRenderer.lensFocus(MAP, "security", List.of("Pipeline"));
+        String s = RepoMapRenderer.lensFocus(MAP, "ai-ml", List.of("Pipeline"));
         assertTrue(s.contains("### Pipeline"));
         assertFalse(s.contains("BCrypt"));
     }
 
     @Test
     void untaggedLensFallsBackToCentralModules() {
-        String s = RepoMapRenderer.lensFocus(MAP, "frontend", null);
+        String s = RepoMapRenderer.lensFocus(MAP, "data", null);
         assertTrue(s.startsWith("No subsystem is tagged"));
         assertTrue(s.contains("src/auth") && s.contains("src/pipe"));
     }

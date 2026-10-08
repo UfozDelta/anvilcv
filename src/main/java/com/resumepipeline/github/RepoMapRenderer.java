@@ -1,5 +1,6 @@
 package com.resumepipeline.github;
 
+import com.resumepipeline.llm.CategoryLenses;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.*;
@@ -13,6 +14,8 @@ public final class RepoMapRenderer {
     private static final int EXPLORER_MODULES = 30;
     private static final int FOCUS_SYMBOLS = 6;
     private static final int FALLBACK_MODULES = 3;
+    /** Cap on subsystems in the general lens so a large repo cannot flood the prompt. */
+    private static final int GENERAL_SUBSYSTEMS = 12;
 
     public static RepoMap parse(String json) {
         if (json == null || json.isBlank()) return null;
@@ -79,9 +82,15 @@ public final class RepoMapRenderer {
         Map<String, RepoMap.Module> byPath = new HashMap<>();
         map.modules().forEach(m -> byPath.put(m.path(), m));
         List<RepoMap.Subsystem> subs = map.project() == null ? List.of() : map.project().subsystems();
+        // General sees the whole project (size-capped); other lenses match tagged subsystems.
+        // Tags are normalized so maps saved before the four-lens taxonomy still match.
+        List<String> wanted = lenses.stream().map(CategoryLenses::normalize).toList();
         List<RepoMap.Subsystem> picked = subsystemFilter != null && !subsystemFilter.isEmpty()
                 ? subs.stream().filter(s -> subsystemFilter.contains(s.name())).toList()
-                : subs.stream().filter(s -> s.lenses().stream().anyMatch(lenses::contains)).toList();
+                : wanted.contains(CategoryLenses.GENERAL)
+                        ? subs.stream().limit(GENERAL_SUBSYSTEMS).toList()
+                        : subs.stream().filter(s -> s.lenses().stream().map(CategoryLenses::normalize)
+                                .anyMatch(wanted::contains)).toList();
 
         StringBuilder sb = new StringBuilder();
         if (picked.isEmpty()) {

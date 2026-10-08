@@ -29,41 +29,24 @@ public final class CategoryLenses {
                 under failure (consistency, idempotency, migrations), and performance at the scale
                 the source states.""");
 
-        LENSES.put("frontend", """
-                LENS: Frontend & Product.
-                Covers: what users see and touch: UI, client-side state, rendering, interaction.
-                A reviewer for this role looks for: what users could do because of it, how hard UI
-                state or rendering problems were solved, and responsiveness or accessibility.""");
-
         LENSES.put("data", """
                 LENS: Data Engineering.
                 Covers: getting data in, cleaning it, transforming it and serving it for analysis.
                 A reviewer for this role looks for: sources and volume, how data quality was enforced,
                 and what the pipeline made possible downstream.""");
 
-        LENSES.put("security", """
-                LENS: Security & Authentication.
-                Covers: identity, access control, secrets, tenant isolation and abuse prevention.
-                A reviewer for this role looks for: the concrete threat each control stops, where the
-                boundary is enforced, and any compliance constraint the source states.""");
+        LENSES.put("general", """
+                LENS: General Software Engineering.
+                Covers: the project's work as a whole when it is not mainly AI / ML, backend or data.
+                A reviewer for this role looks for: what was built and for whom, the engineering
+                decisions behind it, and the measurable result the source states.""");
+    }
 
-        LENSES.put("devops", """
-                LENS: Infrastructure & DevOps.
-                Covers: build, deploy, hosting, observability and reliability.
-                A reviewer for this role looks for: what got faster, safer or cheaper to ship or run,
-                and how failures are detected and recovered from.""");
-
-        LENSES.put("systems", """
-                LENS: Distributed Systems & Real-time.
-                Covers: concurrency, streaming, messaging and coordination between processes or services.
-                A reviewer for this role looks for: how ordering, backpressure, retries or partial
-                failure were handled, and the latency or throughput the source states.""");
-
-        LENSES.put("comms", """
-                LENS: Real-time Communications.
-                Covers: telephony, messaging, email, chat and live media channels.
-                A reviewer for this role looks for: which channels and providers were integrated, how
-                delivery and failures were handled, and messaging rules (consent, opt-out) enforced.""");
+    /** The lens slug for {@code slug}; anything unknown or blank is {@code general}. */
+    public static String normalize(String slug) {
+        if (slug == null) return GENERAL;
+        String s = slug.trim().toLowerCase(java.util.Locale.ROOT);
+        return LENSES.containsKey(s) ? s : GENERAL;
     }
 
     /**
@@ -75,6 +58,7 @@ public final class CategoryLenses {
         return LENSES.get(category);
     }
 
+    public static final String GENERAL = "general";
     public static final String GENERALIST = "generalist";
 
     /** Keeps known slugs only, de-duplicated, at most 2, best first. Null-safe. */
