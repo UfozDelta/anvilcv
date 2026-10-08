@@ -1,7 +1,7 @@
 /* Bullets tab: the whole bank, grouped under the story each bullet achieves. */
 import { useEffect, useState } from 'react';
 import { EditBulletForm } from '../projectDetail/EditBulletForm';
-import { BY_ID } from './data';
+import { BY_ID, LENSES } from './data';
 import { lensOf, type SF } from './model';
 import { WordingRow, Writing } from './parts';
 
@@ -35,16 +35,28 @@ export function BulletsTab({ sf, focus, onGenerate }: { sf: SF; focus: string | 
               <span className="sf-group__n" title={`${ws.length} bullet${ws.length === 1 ? '' : 's'}`}>{ws.length}</span>
             </h3>
             <ul className="sf-ws">
-              {ws.map(b => (editing === b.id ? (
-                <li key={b.id} className="sf-b-edit">
-                  <EditBulletForm
-                    bullet={{ ...b, status: b.status === 'APPROVED' ? 'APPROVED' : 'PENDING', projectId: '', category: b.lens, createdAt: '', updatedAt: '' }}
-                    onSave={(text, tags) => { sf.patch(b.id, { text, tags }); setEditing(null); }} onCancel={() => setEditing(null)} />
-                </li>
-              ) : (
-                <WordingRow key={b.id} sf={sf} b={b} onEdit={() => setEditing(b.id)} />
-              )))}
-              {wait.map(id => <Writing key={id} lens={lensOf(id)} />)}
+              {LENSES.map(l => {
+                const lw = ws.filter(b => b.lens === l.slug);
+                const lp = wait.filter(w => lensOf(w) === l.slug);
+                if (lw.length + lp.length === 0) return null;
+                return (
+                  <li key={l.slug} className="sf-lg" data-lens={l.slug}>
+                    <div className="sf-lg__k" title={l.tip}>{l.name}{lw.length > 1 && <span className="sf-lg__n">{lw.length}</span>}</div>
+                    <ul className="sf-ws">
+                      {lw.map(b => (editing === b.id ? (
+                        <li key={b.id} className="sf-b-edit">
+                          <EditBulletForm
+                            bullet={{ ...b, status: b.status === 'APPROVED' ? 'APPROVED' : 'PENDING', projectId: '', category: b.lens, createdAt: '', updatedAt: '' }}
+                            onSave={(text, tags) => { sf.patch(b.id, { text, tags }); setEditing(null); }} onCancel={() => setEditing(null)} />
+                        </li>
+                      ) : (
+                        <WordingRow key={b.id} sf={sf} b={b} onEdit={() => setEditing(b.id)} />
+                      )))}
+                      {lp.map(w => <Writing key={w} />)}
+                    </ul>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         );

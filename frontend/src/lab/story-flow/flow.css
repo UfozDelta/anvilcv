@@ -26,6 +26,11 @@
 .sf-group__n { margin-left: auto; font: 700 11px var(--mono); color: var(--muted); cursor: help; }
 
 .sf-ws { list-style: none; margin: 0; padding: 0; }
+/* lens sub-groups: fixed order, a quiet label, more air between lenses than between rows */
+.sf-lg { padding-top: 14px; }
+.sf-lg + .sf-lg { padding-top: 30px; }
+.sf-lg__k { display: flex; align-items: baseline; gap: 6px; padding: 0 0 7px 16px; border-bottom: 1px solid var(--ink); font: 700 10px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); cursor: help; }
+.sf-lg__n { font-weight: 400; letter-spacing: 0; }
 .sf-b { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px 32px; padding: 16px 14px 16px 16px; border-bottom: var(--rule-thin); border-left: 3px solid transparent; transition: background 120ms ease; }
 .sf-b[data-on] { border-left-color: var(--ink); }
 @media (hover: hover) and (pointer: fine) { .sf-b:hover { background: var(--paper-2); } }
@@ -35,8 +40,7 @@
 /* side: metadata on top, actions under it; every chip shares one 22px height */
 .sf-b__side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; }
 .sf-b__meta, .sf-b__acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
-.sf-b .sf-lens, .sf-b .ps-fit, .sf-b__acts .minibtn, .sf-b__ok { box-sizing: border-box; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; font: 700 10px/1 var(--mono); letter-spacing: 0.04em; white-space: nowrap; }
-.sf-b .sf-lens { border-width: 1.5px; }
+.sf-b .ps-fit, .sf-b__acts .minibtn, .sf-b__ok { box-sizing: border-box; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; font: 700 10px/1 var(--mono); letter-spacing: 0.04em; white-space: nowrap; }
 .sf-b .ps-fit { padding: 0 2px; font-weight: 400; color: var(--muted); }
 .sf-b .ps-fit[data-bad] { color: var(--rust); font-weight: 700; }
 .sf-b__prints { display: inline-flex; align-items: center; height: 22px; font: 10px/1 var(--mono); color: var(--ink); cursor: help; }
@@ -124,4 +128,6 @@
   .sf-desc { flex-direction: column; align-items: stretch; padding-left: 12px; }
   .sf-lenses { grid-template-columns: minmax(0, 1fr); }
   .sf-group__title { font-size: 18px; }
+  .sf-lg + .sf-lg { padding-top: 24px; }
+  .sf-lg__k { padding-left: 12px; }
 }

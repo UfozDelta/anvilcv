@@ -72,7 +72,6 @@ export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () =>
       <div className="sf-b__side">
         <span className="sf-b__meta">
           {prints && <span className="sf-b__prints" title="Prints by default; one wording per resume" aria-label="Prints">▶</span>}
-          <LensTag lens={b.lens} />
           <Fit text={b.text} />
         </span>
         <span className="sf-b__acts">
@@ -86,10 +85,10 @@ export function WordingRow({ sf, b, onEdit }: { sf: SF; b: Bullet; onEdit: () =>
   );
 }
 
-export function Writing({ lens }: { lens: Lens }) {
+export function Writing() {
   return (
     <li className="sf-writing" aria-live="polite">
-      <Spin /> <LensTag lens={lens} />
+      <Spin /> Writing…
     </li>
   );
 }
