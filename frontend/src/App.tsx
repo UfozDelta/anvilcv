@@ -44,6 +44,7 @@ import { LabStoriesLean } from './lab/stories-lean/LabStoriesLean';
 import { LabProjectSplit } from './lab/project-split/LabProjectSplit';
 import { LabWorkspace } from './lab/workspace/LabWorkspace';
 import { LabWorkspaceTabs } from './lab/workspace-tabs/LabWorkspaceTabs';
+import { LabStoryFlow } from './lab/story-flow/LabStoryFlow';
 
 /** The router keeps the old scroll position across navigation, so a link clicked at the bottom of a page opened the next one mid-way. */
 function ScrollToTop() {
@@ -116,6 +117,7 @@ export function App() {
         <Route path="/lab/project-split"    element={<LabProjectSplit />} />
         <Route path="/lab/workspace"        element={<LabWorkspace />} />
         <Route path="/lab/workspace-tabs"   element={<LabWorkspaceTabs />} />
+        <Route path="/lab/story-flow"       element={<LabStoryFlow />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

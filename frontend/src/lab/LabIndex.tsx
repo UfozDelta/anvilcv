@@ -25,6 +25,22 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-10-07',
+    title: 'Story flow',
+    status: 'prototype',
+    summary: <>Generate finds stories, one bullet each. Pick a story, then pick which lens bullets to get. Four lenses.</>,
+    protos: [
+      { to: '/lab/story-flow', name: 'Story flow', line: 'Story cards / Pick then build / Lens columns (1-3).' },
+    ],
+    fixes: [
+      'Lenses cut to AI/ML, Backend, Data Eng, General',
+      'Project Generate finds new stories, each with one best-fit bullet',
+      'Per story: generate only the lenses it lacks; unfit lenses greyed',
+      'Wordings of one story read as alternatives ("or"); one prints',
+      'Statuses: Bullet and Approved; delete with undo',
+    ],
+  },
+  {
+    iso: '2026-10-07',
     title: 'Workspace, tabs',
     status: 'prototype',
     summary: <>Workspace variant 1 with a wider Bullets tab and three takes on Generate. "Story" renamed per variant.</>,
