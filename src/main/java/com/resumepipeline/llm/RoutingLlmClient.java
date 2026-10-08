@@ -55,6 +55,18 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
+    public SlotCandidates writeSlotCandidates(GenerateBulletsRequest source, Story story, String lens, int count,
+                                              List<String> alreadyWritten, ProgressLog progress, TokenAccumulator tokens) {
+        return current().writeSlotCandidates(source, story, lens, count, alreadyWritten, progress, tokens);
+    }
+
+    @Override
+    public List<Integer> judgeCandidates(Story story, List<String> candidates, ProgressLog progress,
+                                         TokenAccumulator tokens) {
+        return current().judgeCandidates(story, candidates, progress, tokens);
+    }
+
+    @Override
     public JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
         return current().cleanJd(rawJd, progress, tokens);
     }

@@ -53,9 +53,11 @@ class DryRunGeneratorTest {
             inv.getArgument(2, TokenAccumulator.class).add("m", 100, 10);
             return new LlmClient.StoryResult(List.of(story), List.of());
         });
-        when(llm.writeStoryBullets(any(), any(), any(), any())).thenReturn(new LlmClient.BulletGenerationResult(List.of(
-                new LlmClient.GeneratedBullet("Built a Redis cache for pricing.", List.of("backend"), "s1", "backend"),
-                new LlmClient.GeneratedBullet("Designed an ETL job for billing data.", List.of("data"), "s1", "backend"))));
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
+                new LlmClient.SlotCandidates(List.of(
+                        new LlmClient.Candidate("Built a Redis cache for pricing.", List.of("backend")),
+                        new LlmClient.Candidate("Designed an ETL job for billing data.", List.of("data"))), 15, 13));
+        when(llm.judgeCandidates(any(), any(), any(), any())).thenReturn(List.of(0, 1));
 
         DryRunGenerator gen = new DryRunGenerator(projectService, llm, usage, configService, projectRepo,
                 renderer, compiler, applicationRepo);

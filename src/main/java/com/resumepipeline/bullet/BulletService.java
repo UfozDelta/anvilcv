@@ -7,8 +7,8 @@ import com.resumepipeline.github.RepoMapRenderer;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
+import com.resumepipeline.llm.KeywordScorer;
 import com.resumepipeline.llm.LlmClient;
-import com.resumepipeline.llm.LlmParseException;
 import com.resumepipeline.llm.LlmUsageService;
 import com.resumepipeline.llm.TokenAccumulator;
 import com.resumepipeline.obs.LogText;
@@ -25,6 +25,8 @@ import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -33,6 +35,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -61,8 +64,6 @@ public class BulletService {
     private final StoryRepository storyRepo;
     // A story build's bullets and story rows commit together (see saveStoryBullets).
     private final TransactionOperations tx;
-    // See generateBank: off for the eval dry run, which must measure the story generator only.
-    private boolean lensFallback = true;
     // Projects with a generateBank in flight. In memory, like ApplicationService.scoring: one
     // instance, and a restart ends the run anyway.
     private final Set<UUID> generating = ConcurrentHashMap.newKeySet();
@@ -73,6 +74,21 @@ public class BulletService {
     static final int MAX_NEW_STORIES = 8;
     /** Evidence quotes shorter than this prove too little to call two stories the same work. */
     static final int MIN_OVERLAP_QUOTE = 40;
+    /** Wordings the model writes per (story, lens) slot. */
+    static final int CANDIDATES_PER_SLOT = 15;
+    /** Wordings kept per slot; one when the two picks are too similar. */
+    static final int KEEP_PER_SLOT = 2;
+    /** Top candidates by code score that the judge sees. */
+    static final int JUDGE_TOP_N = 5;
+    /** Two kept picks at least this similar count as one. */
+    static final double SLOT_SIMILAR_THRESHOLD = 0.6;
+    /** Code-score weights, 0-100 in total. Length fit is constant: every candidate reaching rating is in band. */
+    static final int SCORE_LENGTH = 30;
+    static final int SCORE_OUTCOME = 30;
+    static final int SCORE_TECH = 20;
+    static final int SCORE_OPENER = 20;
+    private static final Pattern RESULT_VERB = Pattern.compile(
+            "(?i)\\b(cut|reduc|increas|improv|sped|speed|sav|reach|halv|doubl|grew|grow|eliminat|boost|lower|raise|achiev)");
 
     public BulletService(BulletRepository repo, ProjectService projectService, LlmClient llm,
                          LlmUsageService llmUsageService, GenerationConfigService configService,
@@ -93,11 +109,6 @@ public class BulletService {
         this.applicationRepo = applicationRepo;
         this.storyRepo = storyRepo;
         this.tx = tx;
-    }
-
-    /** Story-pass failures then fail the run instead of falling back to per-lens generation. */
-    public void disableLensFallback() {
-        lensFallback = false;
     }
 
     /**
@@ -520,16 +531,12 @@ public class BulletService {
      *
      * <p>Two calls, whatever the lens count: {@code findStories} picks the project's strongest
      * pieces of work (each backed by quotes verified against the source, each tagged with the
-     * requested lenses it really fits), then {@code writeStoryBullets} writes one wording per
-     * story-lens pair. This replaced one call per lens, each asked for 4-6 bullets, which padded
-     * every lens the project barely touched. A lens no story fits now gets no bullets.
+     * requested lenses it really fits), then each new story runs one slot on its best lens: see
+     * {@link #runSlot}. A lens no story fits now gets no bullets.
      *
      * <p>Additive like before: nothing already in the bank, APPROVED or not, is changed.
      *
-     * <p>If either story call still returns unreadable JSON after its one retry, the run falls
-     * back to the old one-call-per-lens path rather than returning nothing. Only on parse
-     * failures: a timeout, quota or auth error would just fail N more times. Nothing is saved
-     * before both story calls succeed, so a fallback never stacks on partial story output.
+     * <p>An unreadable story reply fails the run. There is no per-lens fallback any more.
      */
     public List<Bullet> generateBank(UUID userId, UUID projectId, List<String> categories, List<String> subsystems,
                                      ProgressLog progress) {
@@ -560,7 +567,6 @@ public class BulletService {
         List<Bullet> existing = repo.findByProjectIdOrderByCreatedAtAsc(projectId);
         List<Story> storyRows = storyRepo.findByProjectIdOrderByCreatedAtAsc(projectId);
         Set<UUID> liveIds = liveStoryIds(existing);
-        List<Story> liveStories = storyRows.stream().filter(s -> liveIds.contains(s.getId())).toList();
         int room = Math.min(MAX_NEW_STORIES, STORY_CAP - liveIds.size());
         if (room <= 0) {
             progress.emit("Story bank full (" + STORY_CAP + ") — nothing generated. Reject a story's wordings to make room.");
@@ -573,7 +579,6 @@ public class BulletService {
                 bankCoverage(existing, storyRows), room);
 
         TokenAccumulator tokens = new TokenAccumulator();
-        LlmClient.BulletGenerationResult result;
         List<LlmClient.Story> stories;
         try {
             List<LlmClient.Story> found = llm.findStories(req, progress, tokens).stories();
@@ -581,7 +586,8 @@ public class BulletService {
                 progress.emit("No new stories found — nothing generated.");
                 return List.of();
             }
-            stories = dropRepeats(found, liveStories);
+            // Deleted (fully rejected) stories count too: a dismissed story is never re-found.
+            stories = dropRepeats(found, storyRows);
             if (stories.isEmpty()) {
                 progress.emit("All stories duplicated existing ones — nothing generated.");
                 return List.of();
@@ -590,29 +596,121 @@ public class BulletService {
                 progress.emit("Dropped " + (found.size() - stories.size()) + " story(ies) repeating the bank.");
             }
             if (stories.size() > room) stories = stories.subList(0, room);
-            result = llm.writeStoryBullets(req, stories, progress, tokens);
-        } catch (LlmParseException e) {
-            if (!lensFallback) throw e;
-            log.warn("BULLET_FALLBACK project={} lenses={} cause={}", projectId, categories,
-                    LogText.abbreviate(e.getMessage(), 120));
-            progress.emit("Story pass returned unreadable output - falling back to one call per lens.");
-            return generatePerLens(userId, projectId, categories, subsystems,
-                    existing.stream().map(Bullet::getText).toList(), progress, e);
         } finally {
             llmUsageService.record(userId, "bullet_generation", tokens, null, projectId);
         }
 
+        // One slot per new story, on its best lens. Each slot dedups against the bank and against
+        // the wordings kept so far in this run.
+        List<String> bankTexts = existing.stream().map(Bullet::getText).toList();
+        List<String> seen = new ArrayList<>(bankTexts);
+        List<LlmClient.GeneratedBullet> kept = new ArrayList<>();
+        TokenAccumulator candidateTokens = new TokenAccumulator();
+        TokenAccumulator judgeTokens = new TokenAccumulator();
+        try {
+            for (LlmClient.Story s : stories) {
+                List<LlmClient.GeneratedBullet> slot = runSlot(source, s, s.lenses().get(0), seen, List.of(),
+                        p.getTechStack(), candidateTokens, judgeTokens, progress);
+                slot.forEach(g -> seen.add(g.text()));
+                kept.addAll(slot);
+            }
+        } finally {
+            llmUsageService.record(userId, "story_candidates", candidateTokens, null, projectId);
+            llmUsageService.record(userId, "story_judge", judgeTokens, null, projectId);
+        }
+
         // Grouped by lens so the shadow-mode measurement keeps its per-category ids.
         Map<String, List<LlmClient.GeneratedBullet>> byLens = new LinkedHashMap<>();
-        result.bullets().forEach(g -> byLens.computeIfAbsent(g.lens(), k -> new ArrayList<>()).add(g));
+        kept.forEach(g -> byLens.computeIfAbsent(g.lens(), k -> new ArrayList<>()).add(g));
         recordMeasureDiagnostics(userId, projectId, byLens.entrySet().stream()
                 .map(e -> new RawGeneration(e.getKey(), new LlmClient.BulletGenerationResult(e.getValue())))
                 .toList(), progress);
 
-        List<Bullet> saved = saveStoryBullets(userId, projectId, result.bullets(), stories,
-                existing.stream().map(Bullet::getText).toList(), progress);
+        List<Bullet> saved = saveStoryBullets(userId, projectId, kept, stories, bankTexts, progress);
         progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
         return saved;
+    }
+
+    /** Progress prefix for one slot, e.g. {@code [backend · "Ledger service"]}. */
+    static String slotTag(String lens, String title) {
+        return "[" + lens + " · \"" + title + "\"]";
+    }
+
+    /**
+     * One (story, lens) slot: write candidates, code-filter them (in the LLM layer), drop repeats of
+     * {@code seen}, rate by code score, let the judge pick from the top {@link #JUDGE_TOP_N}, and keep
+     * up to {@link #KEEP_PER_SLOT}. A judge that cannot be read falls back to the top by score.
+     */
+    private List<LlmClient.GeneratedBullet> runSlot(LlmClient.GenerateBulletsRequest source, LlmClient.Story story,
+                                                    String lens, List<String> seen, List<String> alreadyWritten,
+                                                    String stack, TokenAccumulator candidateTokens,
+                                                    TokenAccumulator judgeTokens, ProgressLog progress) {
+        String tag = slotTag(lens, story.title());
+        LlmClient.SlotCandidates batch = llm.writeSlotCandidates(source, story, lens, CANDIDATES_PER_SLOT,
+                alreadyWritten, progress, candidateTokens);
+        progress.emit(tag + " written " + batch.written() + " / filtered -" + batch.filtered());
+
+        List<String> known = new ArrayList<>(seen);
+        List<LlmClient.Candidate> unique = new ArrayList<>();
+        int dups = 0;
+        for (LlmClient.Candidate c : batch.kept()) {
+            if (BulletTextRules.isNearDuplicate(c.text(), known)) {
+                dups++;
+                continue;
+            }
+            known.add(c.text());
+            unique.add(c);
+        }
+
+        Set<String> bankOpeners = seen.stream().map(BulletTextRules::openingVerb).collect(Collectors.toSet());
+        Map<String, Integer> batchOpeners = new HashMap<>();
+        unique.forEach(c -> batchOpeners.merge(BulletTextRules.openingVerb(c.text()), 1, Integer::sum));
+        List<LlmClient.Candidate> ranked = unique.stream()
+                .sorted(Comparator.comparingInt((LlmClient.Candidate c) -> codeScore(c, stack, bankOpeners, batchOpeners)).reversed())
+                .toList();
+        List<LlmClient.Candidate> top = ranked.stream().limit(JUDGE_TOP_N).toList();
+        progress.emit(tag + " duplicates -" + dups + " / scored " + unique.size() + ", judging top " + top.size());
+
+        List<LlmClient.Candidate> chosen = new ArrayList<>();
+        if (!top.isEmpty()) {
+            List<Integer> picks = llm.judgeCandidates(story, top.stream().map(LlmClient.Candidate::text).toList(),
+                    progress, judgeTokens);
+            if (picks != null) {
+                for (Integer i : picks) {
+                    if (i != null && i >= 0 && i < top.size() && !chosen.contains(top.get(i))) chosen.add(top.get(i));
+                    if (chosen.size() == KEEP_PER_SLOT) break;
+                }
+            }
+            if (chosen.isEmpty()) {
+                progress.emit(tag + " judge unreadable - top by score");
+                chosen.addAll(top.stream().limit(KEEP_PER_SLOT).toList());
+            }
+        }
+        if (chosen.size() == 2
+                && BulletTextRules.similarity(chosen.get(0).text(), chosen.get(1).text()) >= SLOT_SIMILAR_THRESHOLD) {
+            chosen.remove(1);
+        }
+        progress.emit(tag + " kept " + chosen.size());
+        return chosen.stream()
+                .map(c -> new LlmClient.GeneratedBullet(c.text(), c.tags(), story.id(), lens))
+                .toList();
+    }
+
+    /**
+     * Code score 0-100: length fit (constant, see SCORE_LENGTH), outcome (a number, or a result
+     * verb without one), specific tech (a tag the project's stack names; some tag but none of
+     * them; or none), and an opener that is fresh against the bank and this batch.
+     */
+    static int codeScore(LlmClient.Candidate c, String stack, Set<String> bankOpeners, Map<String, Integer> batchOpeners) {
+        String opener = BulletTextRules.openingVerb(c.text());
+        int opening = bankOpeners.contains(opener) ? 0
+                : batchOpeners.getOrDefault(opener, 0) > 1 ? SCORE_OPENER / 2 : SCORE_OPENER;
+        int tech = c.tags().isEmpty() ? 0
+                : c.tags().stream().anyMatch(t -> KeywordScorer.mentions(stack == null ? "" : stack, t))
+                        ? SCORE_TECH : SCORE_TECH / 2;
+        int outcome = c.text().matches("(?s).*\\d.*") ? SCORE_OUTCOME
+                : RESULT_VERB.matcher(c.text()).find() ? SCORE_OUTCOME / 2 : 0;
+        return SCORE_LENGTH + outcome + tech + opening;
     }
 
     /** How evidence quotes are compared: lowercased, markdown stripped, whitespace collapsed. */
@@ -621,7 +719,7 @@ public class BulletService {
     }
 
     /**
-     * Drops found stories that repeat a saved live story or an earlier story of this run: at
+     * Drops found stories that repeat a saved story (live or dismissed) or an earlier story of this run: at
      * least half of its quotes of {@value #MIN_OVERLAP_QUOTE}+ chars sit inside one of their
      * quotes, or its title is a near-duplicate of theirs ({@link BulletTextRules#isNearDuplicate}).
      */
@@ -676,37 +774,6 @@ public class BulletService {
                 // Every wording rejected: the user dismissed the work itself.
                 storyRows.stream().filter(s -> withBullets.contains(s.getId()) && !live.contains(s.getId()))
                         .map(Story::getTitle).toList());
-    }
-
-    /**
-     * The pre-story bank path, kept as generateBank's fallback. Lenses run one after another;
-     * a lens whose reply is still unreadable is skipped, any other failure ends the run. Every
-     * lens is judged against the same stored-bank snapshot at the strict floor, and against its
-     * siblings' output only at {@link BulletTextRules#CROSS_LENS_THRESHOLD} (see saveDeduped).
-     */
-    private List<Bullet> generatePerLens(UUID userId, UUID projectId, List<String> categories,
-                                         List<String> subsystems, List<String> bankSnapshot,
-                                         ProgressLog progress, LlmParseException storyFailure) {
-        List<RawGeneration> results = new ArrayList<>();
-        for (String c : categories) {
-            try {
-                results.add(generateBulletsOnly(userId, projectId, c,
-                        categories.stream().filter(o -> !o.equals(c)).toList(), subsystems, progress));
-            } catch (LlmParseException e) {
-                log.warn("BULLET_FALLBACK_LENS_FAILED project={} lens={}", projectId, c);
-                progress.emit("Lens " + c + ": unreadable output - skipped.");
-            }
-        }
-        if (results.isEmpty()) throw storyFailure;
-        recordMeasureDiagnostics(userId, projectId, results, progress);
-        List<String> siblingTexts = new ArrayList<>();
-        List<Bullet> saved = new ArrayList<>();
-        for (RawGeneration gen : results) {
-            saved.addAll(saveDeduped(userId, projectId, gen, new ArrayList<>(bankSnapshot), siblingTexts, progress));
-        }
-        progress.emit("Done (per-lens fallback) - generated " + saved.size() + " bullets across "
-                + results.size() + " of " + categories.size() + " lenses.");
-        return saved;
     }
 
     /**

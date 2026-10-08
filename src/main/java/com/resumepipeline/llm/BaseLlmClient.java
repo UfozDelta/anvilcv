@@ -368,7 +368,7 @@ public abstract class BaseLlmClient implements LlmClient {
                     prove the story, including every number a bullet about it could cite. Copy
                     character for character; do not paraphrase, merge or tidy. Only the source
                     material counts — not your own knowledge. Quotes not found in it are discarded.
-                  - lenses: 1 to 3 of these lens slugs, and only these: %s. Tag a lens only when a
+                  - lenses: 1 to 3 of these lens slugs, and only these, best fit first: %s. Tag a lens only when a
                     reviewer for that role would genuinely care about this work. A requested lens that
                     no story fits should stay untagged — never stretch a story to cover it.
 
@@ -588,6 +588,127 @@ public abstract class BaseLlmClient implements LlmClient {
                 tokens.getPromptTokens(), tokens.getCandidatesTokens(), tokens.getCostUsd());
         progress.emit("Wrote " + out.size() + " bullets for " + stories.size() + " stories.");
         return new BulletGenerationResult(out);
+    }
+
+    /**
+     * One slot of the bank build. Same source and rules as writeStoryBullets, but one story and one
+     * lens, and no repair pass: a wording the filter cuts is simply gone. Parse failures propagate.
+     */
+    @Override
+    public SlotCandidates writeSlotCandidates(GenerateBulletsRequest src, Story story, String lens, int count,
+                                              List<String> alreadyWritten, ProgressLog progress, TokenAccumulator tokens) {
+        boolean experience = src.kind() == SourceKind.EXPERIENCE;
+        GenerationConfig cfg = configService.get(src.userId());
+
+        StringBuilder evidence = new StringBuilder();
+        story.evidence().forEach(e -> evidence.append("  evidence: \"").append(e).append("\"\n"));
+        String written = alreadyWritten.isEmpty() ? "" : """
+
+                ## ALREADY WRITTEN — say it differently
+                These wordings exist already. Write different sentences with different details and openers.
+                """ + alreadyWritten.stream().map(t -> "  - " + t + "\n").collect(java.util.stream.Collectors.joining());
+
+        String prompt = sourceMaterial(src) + styleOverrides(cfg) + """
+
+                ─────────────────────────────────────────────────────────────
+                You are writing resume bullet points for a %s from the STORY below.
+                EVERY rule below is mandatory.
+
+                """.formatted(experience ? "ROLE" : "PROJECT")
+                + writingRules(cfg)
+                + """
+
+                ─────────────────────────────────────────────────────────────
+                ## STORY — what to write
+
+                  - %s: %s
+                %s%s
+                Write %d different wordings of this story, each a complete bullet aimed at a reviewer for
+                the lens below. Write only what the evidence supports; every number must come from the
+                story's evidence or the source material.
+
+                Lens definition:
+
+                %s
+                """.formatted(story.id(), story.title(), evidence, written, count, lensDefinitions(List.of(lens)));
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                        "text", SchemaSpec.string(),
+                        "tags", SchemaSpec.array(SchemaSpec.string())
+                )), List.of("text", "tags")))
+        )), List.of("bullets"));
+
+        progress.emit("Writing " + count + " wordings...");
+        String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Candidates");
+        BulletsEnvelope env;
+        try {
+            env = parseBullets(json);
+        } catch (LlmParseException e) {
+            env = parseBullets(retryMalformed(generateModel(), prompt, schema, cfg.getTemperature(),
+                    progress, tokens, "Candidates", e));
+        }
+        List<BulletJson> raw = env.bullets == null ? List.of() : env.bullets;
+        String source = sourceContext(src);
+        List<Candidate> kept = new ArrayList<>();
+        for (BulletJson b : raw) {
+            if (b == null || b.text == null || b.text.isBlank()) continue;
+            String text = BulletTextRules.ensureTerminalPeriod(b.text);
+            if (BulletTextRules.hasForbiddenOpener(text)
+                    || BulletTextRules.vanityCount(text) != null
+                    || BulletTextRules.isPadded(text)
+                    || !BulletTextRules.fabricatedNumbers(text, source).isEmpty()
+                    || BulletTextRules.decide(BulletTextRules.charCount(text), cfg) != BulletTextRules.Decision.KEPT) {
+                continue;
+            }
+            List<String> tags = (b.tags == null ? List.<String>of() : b.tags).stream()
+                    .filter(t -> KeywordScorer.mentions(text, t)).toList();
+            kept.add(new Candidate(text, tags));
+        }
+        log.info("BULLET_SLOT story={} lens={} written={} kept={} in_tok={} out_tok={}",
+                story.id(), lens, raw.size(), kept.size(), tokens.getPromptTokens(), tokens.getCandidatesTokens());
+        return new SlotCandidates(kept, raw.size(), raw.size() - kept.size());
+    }
+
+    /** Recruiter judge for one slot. Notes come first in the schema so the model writes them before picking. */
+    @Override
+    public List<Integer> judgeCandidates(Story story, List<String> candidates, ProgressLog progress,
+                                         TokenAccumulator tokens) {
+        StringBuilder list = new StringBuilder();
+        for (int i = 0; i < candidates.size(); i++) {
+            list.append("  ").append(i).append(": ").append(candidates.get(i)).append('\n');
+        }
+        String evidence = story.evidence().stream().map(e -> "  \"" + e + "\"").collect(java.util.stream.Collectors.joining("\n"));
+        String prompt = """
+                You are a technical recruiter reading resume bullets for one piece of work: "%s".
+                The bullets must rest on this evidence:
+                %s
+                Candidates (index: text):
+                %s
+                First, for every candidate write a short note: "good" (what a reviewer would value) and
+                "bad" (what is weak: activity instead of an outcome, generic tech, fluff, a claim the
+                evidence does not back, or a near-restatement of another candidate).
+                Then pick the 1 or 2 best indexes. Prefer a concrete result over activity, specific tech
+                and scale, plain verbs, no fluff. Pick only from the listed indexes.
+                """.formatted(story.title(), evidence, list);
+
+        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                "notes", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
+                        "i", SchemaSpec.integer(),
+                        "good", SchemaSpec.string(),
+                        "bad", SchemaSpec.string()
+                )), List.of("i", "good", "bad"))),
+                "picks", SchemaSpec.array(SchemaSpec.integer())
+        )), List.of("notes", "picks"));
+        try {
+            String json = callJson(cleanJdModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, false, "Judge");
+            JudgeEnvelope env = readLenient(json, JudgeEnvelope.class, "judge");
+            return env.picks == null ? List.of() : env.picks;
+        } catch (RuntimeException e) {
+            // No retry: the caller already has a score-based fallback.
+            log.warn("BULLET_JUDGE_FAILED story={} cause={}", story.id(), LogText.abbreviate(e.getMessage(), 120));
+            return List.of();
+        }
     }
 
     /**
@@ -1898,6 +2019,8 @@ public abstract class BaseLlmClient implements LlmClient {
     protected static class BulletJson { public String text; public List<String> tags; public String storyId; public String lens; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoriesEnvelope { public List<StoryJson> stories; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class JudgeEnvelope { public List<Integer> picks; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoryJson { public String id; public String title; public List<String> evidence; public List<String> lenses; }
     @JsonIgnoreProperties(ignoreUnknown = true)

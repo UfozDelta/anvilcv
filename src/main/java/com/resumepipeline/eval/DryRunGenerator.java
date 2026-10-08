@@ -45,8 +45,7 @@ import java.util.UUID;
  * compile on the semaphore user previews share, for rows the stand-in repo throws away.
  *
  * <p>Token spend is logged as {@value #USAGE_SOURCE}, not bullet_generation, so admin cost
- * views keep eval runs apart from real users' generation. The per-lens fallback is off: an eval
- * must score the story generator, not quietly score the old path when the story pass fails.
+ * views keep eval runs apart from real users' generation.
  *
  * <p>Coupling to the generation code is only BulletService's constructor and generateBank's
  * signature; a change to either is a compile error here, not a silent behavior change.
@@ -79,7 +78,6 @@ public class DryRunGenerator {
                 projectRepo, renderer, compiler, noMeasure,
                 inMemory(BulletMeasureDiagnosticRepository.class), applicationRepo,
                 inMemory(StoryRepository.class), TransactionOperations.withoutTransaction());
-        this.generator.disableLensFallback();
     }
 
     /** Unsaved bullets the current generator writes for this project and these lenses. */

@@ -24,6 +24,20 @@ public interface LlmClient {
     BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
                                              TokenAccumulator tokens);
 
+    /**
+     * One (story, lens) slot of the bank build: writes {@code count} wordings and drops the ones
+     * the code filter rejects. Dedup and rating are the caller's. {@code alreadyWritten} are
+     * wordings the story already has; the model is asked to say them differently.
+     */
+    SlotCandidates writeSlotCandidates(GenerateBulletsRequest source, Story story, String lens, int count,
+                                       List<String> alreadyWritten, ProgressLog progress, TokenAccumulator tokens);
+
+    /**
+     * Recruiter judge over a slot's top candidates: writes a note per candidate, then returns the
+     * indexes of the 1-2 best. Empty when the reply is unreadable; the caller falls back to score.
+     */
+    List<Integer> judgeCandidates(Story story, List<String> candidates, ProgressLog progress, TokenAccumulator tokens);
+
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
     /**
@@ -148,6 +162,10 @@ public interface LlmClient {
     /** id: the model's own key ("s1"), only meaningful within one generation run. */
     record Story(String id, String title, List<String> evidence, List<String> lenses) {}
     record StoryResult(List<Story> stories, List<String> unsupportedLenses) {}
+    /** A wording that passed the code filter. Tags are the ones the bullet actually mentions. */
+    record Candidate(String text, List<String> tags) {}
+    /** {@code written} is what the model returned; {@code kept} is what survived the filter. */
+    record SlotCandidates(List<Candidate> kept, int written, int filtered) {}
 
     /**
      * A batch of over/under-length bullets to rewrite. Ids are opaque to the LLM layer and
