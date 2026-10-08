@@ -1,53 +1,18 @@
-/* /lab/lists — the ledger table with story columns. Builds on ledger.css and story-flow/flow.css. */
+/* /lab/lists — production ledger (ledger.css) plus stack, bullet count and repo per row. */
 
-.ll-row, .ll-row--head { grid-template-columns: minmax(0, 1fr) 112px 200px 76px 64px 76px auto; gap: 16px; min-height: 60px; }
-.ll-row[data-kind='exp'], .ll-row--head[data-kind='exp'] { grid-template-columns: minmax(0, 1fr) 112px 200px 76px 76px auto; }
-.ll-row--head { min-height: 0; }
-.ll-row .ld-name strong { font-size: 14px; }
-.ll-row .ld-desc { font-size: 11.5px; }
-.ll-row .ld-edited { font-size: 11.5px; }
+/* Experiences gain a Stack column; Projects keep .pj-row as-is. */
+.ls-xp-row { grid-template-columns: minmax(0, 1fr) 150px 120px 90px 170px 40px; }
 
-/* filters: lens tags as toggles, same chip as the story page */
-.ll-lenses { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
-.ll-lf { height: 28px; padding: 0 10px; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink); font: 700 10.5px var(--mono); letter-spacing: 0.04em; cursor: pointer; transition: background 120ms ease, transform 140ms var(--ease-out); }
-.ll-lf[aria-pressed='true'] { background: var(--ink); color: var(--acid); }
-.ll-lf:active { transform: scale(0.97); }
-.ll-lf:focus-visible { outline: 3px solid var(--acid); outline-offset: 0; }
-@media (hover: hover) and (pointer: fine) { .ll-lf[aria-pressed='false']:hover { background: var(--acid); } }
+.ls-stack { display: block; cursor: help; }
+.ls-more { color: var(--ink); font-weight: 700; }
+.ld-bullets { cursor: help; }
+.ls-repo { display: inline-flex; align-items: center; gap: 5px; }
+.ls-gh { flex: none; }
 
-.ll-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.ll-tag { padding: 2px 5px; font-size: 9.5px; border-width: 1px; }
-.ll-none { font: 12px var(--mono); color: var(--muted); }
-.ll-bul { font: 700 13px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }
-.ll-ok { font-weight: 400; color: var(--muted); }
-.ll-count { cursor: help; }
-.ll-count b { font-size: 14px; }
-
-.ll-acts { display: flex; justify-content: flex-end; gap: 6px; }
-.ll-acts .minibtn { display: inline-flex; align-items: center; justify-content: center; height: 26px; padding: 0 9px; text-decoration: none; transition: background 120ms ease, color 120ms ease, transform 140ms var(--ease-out); }
-.ll-acts .minibtn:active:not(:disabled) { transform: scale(0.97); }
-.ll-gen { min-width: 76px; }
-.ll-gen[aria-busy] { cursor: progress; opacity: 1; }
-.ll-gen .ps-spin { width: 10px; height: 10px; }
-
-/* Generate landed: the count flashes acid once, the row edge settles. */
-@keyframes ll-flash { from { background: var(--acid); } to { background: transparent; } }
-.ll-count[data-new] { animation: ll-flash 1400ms ease both; }
-.ll-row[data-new] { animation: sf-edge 1600ms ease both; }
-
-/* the inline line only exists on narrow screens, where the columns hide */
-.ll-inline { display: none; }
-.ll-norepo { font: 700 10px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-
+/* Phone: the hidden columns fold into one line under the name. */
+.ls-inline { display: none; }
 @media (max-width: 760px) {
-  .ll-row, .ll-row--head, .ll-row[data-kind='exp'], .ll-row--head[data-kind='exp'] { grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; }
-  .ll-row { align-items: start; padding: 12px 0; }
-  .ll-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; }
-  .ll-inline .ll-bul { font-size: 11.5px; }
-  .ll-stories { padding-top: 1px; }
-  .ll-acts .ll-open { display: none; }
-}
-@media (max-width: 420px) {
-  .ll-count { white-space: normal; }
-  .ll-gen { min-width: 0; }
+  .ls-xp-row { grid-template-columns: minmax(0, 1fr) 96px 40px; }
+  .ls-inline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ls-inline .ls-stack { min-width: 0; font-size: 11.5px; }
 }
