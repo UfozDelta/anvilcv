@@ -336,7 +336,7 @@ public abstract class BaseLlmClient implements LlmClient {
         return new BulletGenerationResult(kept);
     }
 
-    // -------- story bank: findStories + writeStoryBullets --------
+    // -------- story bank: findStories + writeSlotCandidates --------
 
     /**
      * Pass 1 of the bank build. One call for the whole project instead of one per lens: the
@@ -425,7 +425,7 @@ public abstract class BaseLlmClient implements LlmClient {
 
     /**
      * What the bank already covers, for {@link #findStories} only: after the shared source
-     * prefix, so writeStoryBullets still caches it. Same wording style as generateBullets'
+     * prefix, so the slot writes still cache it. Same wording style as generateBullets'
      * ALREADY COVERED block. Empty when the bank holds nothing.
      */
     static String bankBlock(BankCoverage bank) {
@@ -488,110 +488,7 @@ public abstract class BaseLlmClient implements LlmClient {
     }
 
     /**
-     * Pass 2 of the bank build: one call writes every story's bullets. The source material
-     * leads the prompt exactly as in {@link #findStories}, so the two calls share their largest
-     * block as a cacheable prefix.
-     */
-    @Override
-    public BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
-                                                    TokenAccumulator tokens) {
-        if (stories.isEmpty()) return new BulletGenerationResult(List.of());
-        GenerateBulletsRequest src = req.source();
-        boolean experience = src.kind() == SourceKind.EXPERIENCE;
-        GenerationConfig cfg = configService.get(src.userId());
-
-        StringBuilder storyList = new StringBuilder();
-        List<String> used = new ArrayList<>();
-        int expected = 0;
-        for (Story st : stories) {
-            storyList.append("  - ").append(st.id()).append(": ").append(st.title())
-                    .append("   [lenses: ").append(String.join(", ", st.lenses())).append("]\n");
-            for (String e : st.evidence()) storyList.append("      evidence: \"").append(e).append("\"\n");
-            st.lenses().stream().filter(l -> !used.contains(l)).forEach(used::add);
-            expected += Math.max(2, st.lenses().size());
-        }
-
-        String prompt = sourceMaterial(src) + styleOverrides(cfg) + """
-
-                ─────────────────────────────────────────────────────────────
-                You are writing resume bullet points for a %s from the STORIES at the end.
-                EVERY rule below is mandatory.
-
-                """.formatted(experience ? "ROLE" : "PROJECT")
-                + writingRules(cfg)
-                + """
-
-                ─────────────────────────────────────────────────────────────
-                ## STORIES — what to write
-
-                For each story, write one bullet per lens listed on it, aimed at a reviewer for that
-                lens (definitions below): lead with what that reviewer cares about and pick different
-                details — not a reworded copy of the story's other bullet. For a story with a single
-                lens, write two bullets with different emphasis: one 1-line and one 2-line.
-                Write only what the story's evidence supports. The source material above is there so
-                you understand the work, not licence to add claims; every number must come from the
-                story's evidence. Return every bullet with the storyId and lens it was written for.
-
-                %s
-                Lens definitions:
-
-                %s
-                """.formatted(storyList, lensDefinitions(used));
-
-        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
-                "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
-                        "storyId", SchemaSpec.string(),
-                        "lens", SchemaSpec.string(),
-                        "text", SchemaSpec.string(),
-                        "tags", SchemaSpec.array(SchemaSpec.string())
-                )), List.of("storyId", "lens", "text", "tags")))
-        )), List.of("bullets"));
-
-        progress.emit("Writing bullets for " + stories.size() + " stories...");
-        // Numbers are checked against the whole source, not just the story's quotes: a true metric
-        // the model forgot to quote as evidence must not be cut as invented.
-        String sourceContext = sourceContext(src);
-        FilterResult first = callAndFilter(prompt, schema, expected, cfg, progress, tokens, sourceContext, true);
-        List<GeneratedBullet> kept = new ArrayList<>(first.kept());
-        Cuts cuts = first.cuts();
-        int repaired = 0;
-
-        // One repair pass for what the filter cut on form (length, opener, activity count, filler
-        // sentence). Never a top-up: asking for N more bullets is how padding gets in.
-        if (!first.repairable().isEmpty()) {
-            progress.emit("Recovery: repairing " + first.repairable().size() + " rejected bullet(s)...");
-            // A failed repair must not throw away the first pass, which is already paid for.
-            try {
-                FilterResult second = callAndFilter(prompt + recoveryNote(first.repairable(), kept, 0, cfg),
-                        schema, first.repairable().size(), cfg, progress, tokens, sourceContext, false);
-                List<String> keptTexts = new ArrayList<>(kept.stream().map(GeneratedBullet::text).toList());
-                for (GeneratedBullet g : second.kept()) {
-                    if (BulletTextRules.isNearDuplicate(g.text(), keptTexts, BulletTextRules.CROSS_LENS_THRESHOLD)) continue;
-                    keptTexts.add(g.text());
-                    kept.add(g);
-                    repaired++;
-                }
-                cuts = cuts.plus(second.cuts());
-            } catch (RuntimeException e) {
-                log.warn("BULLET_REPAIR_FAILED cause={}", LogText.abbreviate(e.getMessage(), 120));
-                progress.emit("Recovery failed - keeping the " + kept.size() + " bullet(s) that already passed.");
-            }
-        }
-
-        List<GeneratedBullet> out = attachToStories(kept, stories);
-        log.info("BULLET_STORY_GEN kind={} stories={} expected={} returned={} kept={} repaired={} orphaned={}"
-                        + " cut_opener={} cut_fabricated={} cut_deadzone={} cut_toolong={} cut_tooshort={}"
-                        + " cut_vanity={} cut_padded={} in_tok={} out_tok={} cost_usd={}",
-                src.kind(), stories.size(), expected, first.returned(), out.size(), repaired, kept.size() - out.size(),
-                cuts.opener(), cuts.fabricated(), cuts.deadZone(), cuts.tooLong(), cuts.tooShort(),
-                cuts.vanity(), cuts.padded(),
-                tokens.getPromptTokens(), tokens.getCandidatesTokens(), tokens.getCostUsd());
-        progress.emit("Wrote " + out.size() + " bullets for " + stories.size() + " stories.");
-        return new BulletGenerationResult(out);
-    }
-
-    /**
-     * One slot of the bank build. Same source and rules as writeStoryBullets, but one story and one
+     * One slot of the bank build. Same source and rules as the story pass used to, but one story and one
      * lens, and no repair pass: a wording the filter cuts is simply gone. Parse failures propagate.
      */
     @Override
@@ -709,24 +606,6 @@ public abstract class BaseLlmClient implements LlmClient {
             log.warn("BULLET_JUDGE_FAILED story={} cause={}", story.id(), LogText.abbreviate(e.getMessage(), 120));
             return List.of();
         }
-    }
-
-    /**
-     * Drops bullets naming a story that does not exist, and pins a bullet's lens to one its story
-     * carries — the lens decides the stored category, which drives job matching.
-     */
-    static List<GeneratedBullet> attachToStories(List<GeneratedBullet> bullets, List<Story> stories) {
-        Map<String, Story> byId = new LinkedHashMap<>();
-        stories.forEach(s -> byId.put(s.id(), s));
-        List<GeneratedBullet> out = new ArrayList<>();
-        for (GeneratedBullet g : bullets) {
-            Story st = g.storyId() == null ? null : byId.get(g.storyId().trim());
-            if (st == null) continue;
-            String lens = g.lens() == null ? "" : g.lens().trim().toLowerCase();
-            if (!st.lenses().contains(lens)) lens = st.lenses().get(0);
-            out.add(new GeneratedBullet(g.text(), g.tags(), st.id(), lens));
-        }
-        return out;
     }
 
     /** Leads both story prompts, byte-identical between them, so it caches as a shared prefix. */

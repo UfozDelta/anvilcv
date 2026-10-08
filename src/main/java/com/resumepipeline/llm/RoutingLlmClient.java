@@ -49,12 +49,6 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
-    public BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
-                                                    TokenAccumulator tokens) {
-        return current().writeStoryBullets(req, stories, progress, tokens);
-    }
-
-    @Override
     public SlotCandidates writeSlotCandidates(GenerateBulletsRequest source, Story story, String lens, int count,
                                               List<String> alreadyWritten, ProgressLog progress, TokenAccumulator tokens) {
         return current().writeSlotCandidates(source, story, lens, count, alreadyWritten, progress, tokens);

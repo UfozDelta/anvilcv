@@ -104,56 +104,10 @@ class StoryGenerationTest {
         assertEquals(List.of("security"), r.unsupportedLenses());
     }
 
-    @Test
-    void attachDropsOrphansAndPinsLensToTheStory() {
-        List<LlmClient.Story> stories = List.of(new LlmClient.Story("s1", "t", List.of("q"), List.of("systems", "frontend")));
-        List<LlmClient.GeneratedBullet> out = BaseLlmClient.attachToStories(List.of(
-                new LlmClient.GeneratedBullet("a.", List.of(), "s1", "Frontend"),
-                new LlmClient.GeneratedBullet("b.", List.of(), "s1", "devops"),
-                new LlmClient.GeneratedBullet("c.", List.of(), "s9", "systems")), stories);
-
-        assertEquals(List.of("frontend", "systems"), out.stream().map(LlmClient.GeneratedBullet::lens).toList());
-    }
-
-    // ---- end to end through a provider, no network ----
-
     private static final String STORIES_REPLY = """
             {"choices":[{"message":{"content":"{\\"stories\\":[{\\"id\\":\\"s1\\",\\"title\\":\\"Book resync\\",\\"evidence\\":[\\"Sequence-gap detection triggers a full resync\\"],\\"lenses\\":[\\"systems\\"]}]}"}}],
              "usage":{"prompt_tokens":10,"completion_tokens":5}}
             """;
-
-    @Test
-    void storyPassParsesAndVerifiesAgainstTheSource() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GenerationConfig cfg = new GenerationConfig();
-        cfg.setWordFilterEnabled(false);
-        OpenCodeLlmClient client = new OpenCodeLlmClient(builder, "g", "m", "c", new GenerationConfigService(null) {
-            @Override public GenerationConfig get(UUID userId) { return cfg; }
-        });
-        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
-                .andRespond(withSuccess(STORIES_REPLY, MediaType.APPLICATION_JSON));
-        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
-                .andRespond(withSuccess("""
-                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"storyId\\":\\"s1\\",\\"lens\\":\\"systems\\",\\"text\\":\\"Built sequence-gap detection that resyncs the order book.\\",\\"tags\\":[]},{\\"storyId\\":\\"s1\\",\\"lens\\":\\"systems\\",\\"text\\":\\"Kept the order book honest with gap-triggered full resyncs.\\",\\"tags\\":[]}]}"}}],
-                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
-                        """, MediaType.APPLICATION_JSON));
-
-        LlmClient.GenerateBulletsRequest src = new LlmClient.GenerateBulletsRequest(UUID.randomUUID(),
-                LlmClient.SourceKind.PROJECT, "general", "Terminal", SOURCE, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, List.of(), List.of(), null);
-        LlmClient.StoryRequest req = new LlmClient.StoryRequest(src, List.of("systems", "frontend"));
-
-        LlmClient.StoryResult stories = client.findStories(req, ProgressLog.noOp(), new TokenAccumulator());
-        assertEquals(1, stories.stories().size());
-        assertEquals(List.of("frontend"), stories.unsupportedLenses());
-
-        LlmClient.BulletGenerationResult out = client.writeStoryBullets(req, stories.stories(),
-                ProgressLog.noOp(), new TokenAccumulator());
-        assertEquals(2, out.bullets().size());
-        assertTrue(out.bullets().stream().allMatch(b -> "s1".equals(b.storyId()) && "systems".equals(b.lens())));
-        server.verify();
-    }
 
     @Test
     void bankBlockListsLiveCoveredAndDismissedWork() {
@@ -169,7 +123,7 @@ class StoryGenerationTest {
     }
 
     @Test
-    void onlyTheStoryPassIsShownTheBank() {
+    void onlyTheStoryPassIsShownTheBank() {  // the slot writes never see the bank
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GenerationConfig cfg = new GenerationConfig();
@@ -195,7 +149,8 @@ class StoryGenerationTest {
                 List.of(new LlmClient.KnownStory("Venue failover drill", List.of("systems"))), List.of(), List.of()), 5);
 
         LlmClient.StoryResult stories = client.findStories(req, ProgressLog.noOp(), new TokenAccumulator());
-        client.writeStoryBullets(req, stories.stories(), ProgressLog.noOp(), new TokenAccumulator());
+        client.writeSlotCandidates(src, new LlmClient.Story("s1", "Failover runbook", List.of("q"), List.of("systems")),
+                "systems", 15, List.of(), ProgressLog.noOp(), new TokenAccumulator());
         server.verify();
     }
 

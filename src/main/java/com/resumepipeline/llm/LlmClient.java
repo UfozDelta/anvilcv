@@ -20,10 +20,6 @@ public interface LlmClient {
      */
     StoryResult findStories(StoryRequest req, ProgressLog progress, TokenAccumulator tokens);
 
-    /** Bank pass 2 of 2: write bullets for those stories, each tagged with its story id and lens. */
-    BulletGenerationResult writeStoryBullets(StoryRequest req, List<Story> stories, ProgressLog progress,
-                                             TokenAccumulator tokens);
-
     /**
      * One (story, lens) slot of the bank build: writes {@code count} wordings and drops the ones
      * the code filter rejects. Dedup and rating are the caller's. {@code alreadyWritten} are
@@ -135,7 +131,7 @@ public interface LlmClient {
             String lensFocus
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
-    /** storyId and lens are set only by {@link #writeStoryBullets}; null on the single-lens path. */
+    /** storyId and lens are set on the story bank path; null on the single-lens path. */
     record GeneratedBullet(String text, List<String> tags, String storyId, String lens) {
         public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null); }
     }
