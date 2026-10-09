@@ -269,6 +269,34 @@ class BulletServiceTest {
     }
 
     @Test
+    void aFailingSlotKeepsTheSlotsBeforeIt() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(
+                story("s1", "backend"), story("s2", "data"), story("s3", "general")), List.of()));
+        String a = "Cut payout latency batching settlements nightly across ledgers.";
+        String b = "Chose batch settlement over per transfer writes for lower load.";
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenAnswer(inv -> {
+            LlmClient.Story st = inv.getArgument(1);
+            if (st.id().equals("s1")) return batch(cand(a));
+            if (st.id().equals("s2")) return batch(cand(b));
+            throw new RuntimeException("boom");
+        });
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
+            List<LlmClient.Candidate> cs = inv.getArgument(1);
+            return cs.stream().map(c -> new LlmClient.JudgeScore(5)).toList();
+        });
+
+        BulletService.PartialRunException e = assertThrows(BulletService.PartialRunException.class,
+                () -> service.generateBank(user, proj, List.of("backend", "data", "general"), ProgressLog.noOp()));
+
+        assertTrue(e.getMessage().startsWith("2 wording(s) saved before the failure: boom"), e.getMessage());
+        verify(repo, times(2)).save(any());
+    }
+
+    @Test
     void parseFailureInASlotFailsTheRunAndSavesNothing() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
         when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
@@ -276,8 +304,10 @@ class BulletServiceTest {
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenThrow(new LlmParseException("bad json", null));
 
-        assertThrows(LlmParseException.class,
+        BulletService.PartialRunException e = assertThrows(BulletService.PartialRunException.class,
                 () -> service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp()));
+        assertTrue(e.getMessage().startsWith("0 wording(s) saved before the failure: "), e.getMessage());
+        assertTrue(e.getCause() instanceof LlmParseException);
         verify(repo, never()).save(any());
         verify(llm, never()).scoreCandidates(any(), any(), any(), any());
     }

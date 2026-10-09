@@ -611,15 +611,21 @@ public class BulletService {
         List<String> bankTexts = existing.stream().map(Bullet::getText).toList();
         List<String> seen = new ArrayList<>(bankTexts);
         List<LlmClient.GeneratedBullet> kept = new ArrayList<>();
+        List<Bullet> saved = new ArrayList<>();
         TokenAccumulator candidateTokens = new TokenAccumulator();
         TokenAccumulator judgeTokens = new TokenAccumulator();
         try {
             for (LlmClient.Story s : stories) {
                 List<LlmClient.GeneratedBullet> slot = runSlot(source, s, s.lenses().get(0), seen, List.of(),
                         p.getTechStack(), candidateTokens, judgeTokens, progress);
+                // Each slot is saved as it finishes, so a later slot's failure keeps these wordings.
+                // Dedup sees the bank and every earlier slot's wordings, as before.
+                saved.addAll(saveStoryBullets(userId, projectId, slot, List.of(s), List.copyOf(seen), progress));
                 slot.forEach(g -> seen.add(g.text()));
                 kept.addAll(slot);
             }
+        } catch (RuntimeException e) {
+            throw new PartialRunException(saved.size(), e);
         } finally {
             llmUsageService.record(userId, "story_candidates", candidateTokens, null, projectId);
             llmUsageService.record(userId, "story_judge", judgeTokens, null, projectId);
@@ -632,7 +638,6 @@ public class BulletService {
                 .map(e -> new RawGeneration(e.getKey(), new LlmClient.BulletGenerationResult(e.getValue())))
                 .toList(), progress);
 
-        List<Bullet> saved = saveStoryBullets(userId, projectId, kept, stories, bankTexts, progress);
         progress.emit("Done — generated " + saved.size() + " bullets from " + stories.size() + " stories.");
         return saved;
     }
@@ -724,6 +729,16 @@ public class BulletService {
         return repo.findByProjectIdOrderByCreatedAtAsc(projectId).stream()
                 .filter(b -> storyId.equals(b.getStoryId()) && !"REJECTED".equals(b.getStatus()))
                 .toList();
+    }
+
+    /**
+     * A story run that failed after some slots had already saved. The message says how many
+     * wordings were kept; the original failure is the cause, so its type and text are still there.
+     */
+    public static final class PartialRunException extends RuntimeException {
+        public PartialRunException(int saved, RuntimeException cause) {
+            super(saved + " wording(s) saved before the failure: " + cause.getMessage(), cause);
+        }
     }
 
     /** Progress prefix for one slot, e.g. {@code [backend · "Ledger service"]}. */
