@@ -19,7 +19,10 @@ export function WordingRow({ b, cfg, onApprove, onEdit, onTrash }: {
     <div className="sf-b" data-on={on || undefined}>
       <div className="sf-b__text"><RichText text={b.text} /></div>
       <div className="sf-b__side">
-        <span className="sf-b__meta"><Fit text={b.text} cfg={cfg} /></span>
+        <span className="sf-b__meta">
+          {b.angle && <span className="kw" data-angle={b.angle}>{b.angle}</span>}
+          <Fit text={b.text} cfg={cfg} />
+        </span>
         <span className="sf-b__acts">
           <button type="button" className="sf-b__ok" aria-pressed={on} onClick={onApprove}>{on ? '✓ Approved' : 'Approve'}</button>
           <button type="button" className="minibtn" onClick={onEdit}>Edit</button>

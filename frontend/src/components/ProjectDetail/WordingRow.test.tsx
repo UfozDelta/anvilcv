@@ -32,4 +32,20 @@ describe('WordingRow', () => {
     );
     expect(html).toContain('✓ Approved');
   });
+
+  it('shows the angle label when the wording has one', () => {
+    const html = renderToStaticMarkup(
+      <WordingRow b={{ ...bullet('PENDING', 'backend'), angle: 'scale' }} cfg={cfg} onApprove={() => {}} onEdit={() => {}} onTrash={() => {}} />,
+    );
+    expect(html).toContain('data-angle="scale"');
+    expect(html).toContain('>scale</span>');
+  });
+
+  it('shows no angle label for an unlabelled wording, and keeps Edit', () => {
+    const html = renderToStaticMarkup(
+      <WordingRow b={{ ...bullet('PENDING', 'backend'), angle: null }} cfg={cfg} onApprove={() => {}} onEdit={() => {}} onTrash={() => {}} />,
+    );
+    expect(html).not.toContain('data-angle');
+    expect(html).toContain('>Edit</button>');
+  });
 });

@@ -118,6 +118,8 @@ export interface Bullet {
   updatedAt: string;
   /** Wordings of one story share it; null for a bullet of its own. */
   storyId?: string | null;
+  /** outcome, decision, scale or failure: the angle the story bank gave this wording. Null when none. */
+  angle?: string | null;
   /** Only the project's bullet list fills it. */
   storyTitle?: string | null;
 }
