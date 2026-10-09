@@ -752,19 +752,45 @@ class BulletSelectorTest {
         }
     }
 
+    /** The order pass 1 visits the ranking in when every candidate is kept. */
     private static List<String> rankedTexts(String... texts) {
         UUID proj = UUID.randomUUID();
         Map<UUID, Bullet> byId = new HashMap<>();
-        List<LlmClient.RankedBullet> ranked = new ArrayList<>();
+        List<LlmClient.RankedBullet> pending = new ArrayList<>();
         for (int i = 0; i < texts.length; i++) {
             UUID id = UUID.randomUUID();
             Bullet b = TestFixtures.bullet(id, proj, null);
             b.setText(texts[i]);
             byId.put(id, b);
-            ranked.add(new LlmClient.RankedBullet(id.toString(), i + 1, ""));
+            pending.add(new LlmClient.RankedBullet(id.toString(), i + 1, ""));
         }
-        return BulletSelector.preferFreshVerbs(ranked, byId).stream()
-                .map(r -> byId.get(UUID.fromString(r.bulletId())).getText()).toList();
+        List<Bullet> selected = new ArrayList<>();
+        List<String> out = new ArrayList<>();
+        while (!pending.isEmpty()) {
+            Bullet b = byId.get(UUID.fromString(pending.remove(BulletSelector.nextFreshIndex(pending, selected, byId)).bulletId()));
+            selected.add(b);
+            out.add(b.getText());
+        }
+        return out;
+    }
+
+    @Test
+    void verbsOfSkippedBulletsDoNotCountAgainstThePage() {
+        // Only "Cut a" was kept. Earlier cut bullets that the loop skipped are not in the selection,
+        // so the next "cut" is still allowed to go first.
+        UUID proj = UUID.randomUUID();
+        Map<UUID, Bullet> byId = new HashMap<>();
+        List<LlmClient.RankedBullet> pending = new ArrayList<>();
+        for (String t : List.of("Cut c", "Cut d", "Built e")) {
+            UUID id = UUID.randomUUID();
+            Bullet b = TestFixtures.bullet(id, proj, null);
+            b.setText(t);
+            byId.put(id, b);
+            pending.add(new LlmClient.RankedBullet(id.toString(), pending.size() + 1, ""));
+        }
+        List<Bullet> selected = new ArrayList<>(List.of(TestFixtures.bullet(UUID.randomUUID(), proj, null)));
+        selected.get(0).setText("Cut a");
+        assertEquals(0, BulletSelector.nextFreshIndex(pending, selected, byId));
     }
 
     @Test

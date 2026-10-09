@@ -216,7 +216,9 @@ public final class BulletSelector {
             selectedTexts.add(b.getText());
             lines += BulletTextRules.estimatedLines(b.getText());
         }
-        for (LlmClient.RankedBullet rb : preferFreshVerbs(rankedSorted, bulletById)) {
+        List<LlmClient.RankedBullet> pending = new ArrayList<>(rankedSorted);
+        while (!pending.isEmpty()) {
+            LlmClient.RankedBullet rb = pending.remove(nextFreshIndex(pending, selected, bulletById));
             if (selected.size() >= MAX_TOTAL) break;
             UUID bid = parseUuid(rb.bulletId());
             if (bid == null || excluded.contains(bid)) continue;
@@ -560,32 +562,23 @@ public final class BulletSelector {
     }
 
     /**
-     * Soft page-level verb cap. Walks the ranking and, at each step, takes the first of the next
-     * {@link #VERB_TIE_WINDOW} bullets whose opening verb is still under {@link #VERB_PAGE_CAP}; if
-     * none is, it takes the top one. So a verb only yields order to a near-equal alternative, and
-     * the strongest remaining bullet is never pushed further than the window. Bullets with no
-     * known verb are never counted against the cap.
+     * Soft page-level verb cap, applied as pass 1 goes. Of the next {@link #VERB_TIE_WINDOW} pending
+     * bullets, returns the first whose opening verb is still under {@link #VERB_PAGE_CAP} among the
+     * bullets already selected; if none is, the top one. Only bullets the loop keeps count, so a
+     * bullet skipped for a repeat story or a project cap never uses up a verb.
      */
-    static List<LlmClient.RankedBullet> preferFreshVerbs(List<LlmClient.RankedBullet> ranked, Map<UUID, Bullet> bulletById) {
-        List<LlmClient.RankedBullet> remaining = new ArrayList<>(ranked);
+    static int nextFreshIndex(List<LlmClient.RankedBullet> pending, List<Bullet> selected, Map<UUID, Bullet> bulletById) {
         Map<String, Integer> verbs = new HashMap<>();
-        List<LlmClient.RankedBullet> out = new ArrayList<>(ranked.size());
-        while (!remaining.isEmpty()) {
-            int window = Math.min(VERB_TIE_WINDOW, remaining.size());
-            int pick = 0;
-            for (int i = 0; i < window; i++) {
-                String v = verbOf(remaining.get(i), bulletById);
-                if (v.isEmpty() || verbs.getOrDefault(v, 0) < VERB_PAGE_CAP) {
-                    pick = i;
-                    break;
-                }
-            }
-            LlmClient.RankedBullet rb = remaining.remove(pick);
-            String v = verbOf(rb, bulletById);
+        for (Bullet s : selected) {
+            String v = BulletTextRules.openingVerb(s.getText());
             if (!v.isEmpty()) verbs.merge(v, 1, Integer::sum);
-            out.add(rb);
         }
-        return out;
+        int window = Math.min(VERB_TIE_WINDOW, pending.size());
+        for (int i = 0; i < window; i++) {
+            String v = verbOf(pending.get(i), bulletById);
+            if (v.isEmpty() || verbs.getOrDefault(v, 0) < VERB_PAGE_CAP) return i;
+        }
+        return 0;
     }
 
     private static String verbOf(LlmClient.RankedBullet rb, Map<UUID, Bullet> bulletById) {
