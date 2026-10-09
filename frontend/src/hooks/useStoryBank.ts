@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type Bullet, type RefitResponse, type Story, type StoriesResponse } from '../lib/api';
 import { STORY_CAP } from '../lib/config';
 import { useBulletPreview } from './useBulletPreview';
+import { attempt, trashWording } from '../lib/storyBankActions';
 
 /** Load, edit and job wiring for one project's story bank. Every write reloads, so counts and stories stay true. */
 export function useStoryBank(projectId: string) {
@@ -39,33 +40,44 @@ export function useStoryBank(projectId: string) {
 
   /** Approve toggles between APPROVED and PENDING. */
   async function approve(b: Bullet) {
-    await setStatus(b.id, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED');
-    await load();
+    await attempt(async () => {
+      await setStatus(b.id, b.status === 'APPROVED' ? 'PENDING' : 'APPROVED');
+      await load();
+    }, setError);
   }
 
-  async function edit(b: Bullet, text: string, tags: string[]) {
-    await api.put<Bullet>(`/api/bullets/${b.id}`, { text, tags });
-    await load();
+  /** Resolves true when saved, so the editor closes only then. */
+  async function edit(b: Bullet, text: string, tags: string[]): Promise<boolean> {
+    return attempt(async () => {
+      await api.put<Bullet>(`/api/bullets/${b.id}`, { text, tags });
+      await load();
+    }, setError);
   }
 
-  /** Soft delete: the wording goes to REJECTED and stays there until Undo. */
+  /** Soft delete. The undo state is recorded only after the server confirms the trash. */
   async function trash(b: Bullet) {
-    setUndo({ id: b.id, prev: b.status });
-    await setStatus(b.id, 'REJECTED');
-    await load();
+    await attempt(async () => {
+      setUndo(await trashWording(b, setStatus));
+      await load();
+    }, setError);
   }
 
   async function restore() {
-    if (!undo) return;
     const u = undo;
-    setUndo(null);
-    await setStatus(u.id, u.prev);
-    await load();
+    if (!u) return;
+    await attempt(async () => {
+      await setStatus(u.id, u.prev);
+      setUndo(null);
+      await load();
+    }, setError);
   }
 
-  async function add(text: string, tags: string[], category: string) {
-    await api.post<Bullet>(`/api/projects/${projectId}/bullets`, { text, tags, category });
-    await load();
+  /** Resolves true when saved, so the add form closes only then. */
+  async function add(text: string, tags: string[], category: string): Promise<boolean> {
+    return attempt(async () => {
+      await api.post<Bullet>(`/api/projects/${projectId}/bullets`, { text, tags, category });
+      await load();
+    }, setError);
   }
 
   async function refit(): Promise<RefitResponse> {

@@ -24,7 +24,7 @@ export function StoryBullets({ cfg, sb }: { cfg: GenerationConfig; sb: SB }) {
   // Editing is available on every wording, whatever its status or lens (see WordingRow).
   const row = (b: Bullet) => editing === b.id ? (
     <EditBullet key={b.id} bullet={b} cfg={cfg} onCancel={() => setEditing(null)}
-      onSave={async (text, tags) => { await sb.edit(b, text, tags); setEditing(null); }} />
+      onSave={async (text, tags) => { if (await sb.edit(b, text, tags)) setEditing(null); }} />
   ) : (
     <WordingRow key={b.id} b={b} cfg={cfg} onApprove={() => sb.approve(b)}
       onEdit={() => setEditing(b.id)} onTrash={() => sb.trash(b)} />
@@ -54,7 +54,7 @@ export function StoryBullets({ cfg, sb }: { cfg: GenerationConfig; sb: SB }) {
       )}
       {adding && (
         <AddWording onCancel={() => setAdding(false)}
-          onSave={async (text, category) => { await sb.add(text, [], category); setAdding(false); }} />
+          onSave={async (text, category) => { if (await sb.add(text, [], category)) setAdding(false); }} />
       )}
 
       {live.length === 0 && !adding && (
