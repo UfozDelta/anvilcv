@@ -808,6 +808,11 @@ public class BulletService {
     private List<LlmClient.Candidate> judgeTop(LlmClient.Story story, String lens, List<LlmClient.Candidate> top,
                                                TokenAccumulator judgeTokens, ProgressLog progress) {
         int n = top.size();
+        // One candidate has nothing to rank against, so the judge is not called and it carries no note.
+        if (n == 1) {
+            LlmClient.Candidate only = top.get(0);
+            return List.of(new LlmClient.Candidate(only.text(), only.tags(), only.angle(), null));
+        }
         List<Integer> shuffled = new ArrayList<>();
         for (int i = 0; i < n; i++) shuffled.add(i);
         Collections.shuffle(shuffled, new Random((story.id() + "|" + lens).hashCode()));

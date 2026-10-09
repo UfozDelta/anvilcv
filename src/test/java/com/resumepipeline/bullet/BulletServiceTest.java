@@ -259,7 +259,7 @@ class BulletServiceTest {
                     ? batch(cand("Built a ledger service that settles payouts nightly."))
                     : batch(cand("Ingested exchange fills from three brokers into one schema."));
         });
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
+        lenient().when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend", "data"), ProgressLog.noOp());
 
@@ -283,10 +283,6 @@ class BulletServiceTest {
             if (st.id().equals("s1")) return batch(cand(a));
             if (st.id().equals("s2")) return batch(cand(b));
             throw new RuntimeException("boom");
-        });
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
-            List<LlmClient.Candidate> cs = inv.getArgument(1);
-            return cs.stream().map(c -> new LlmClient.JudgeScore(5)).toList();
         });
 
         BulletService.PartialRunException e = assertThrows(BulletService.PartialRunException.class,
@@ -369,14 +365,16 @@ class BulletServiceTest {
         when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
                 new LlmClient.SlotCandidates(List.of(
-                        new LlmClient.Candidate("Cut payout latency 40% by batching settlements.", List.of(), "outcome")), 1, 0));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
+                        new LlmClient.Candidate("Cut payout latency 40% by batching settlements.", List.of(), "outcome"),
+                        new LlmClient.Candidate("Chose batch settlement over per transfer writes for lower load.", List.of(), "decision")), 2, 0));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(
+                List.of(new LlmClient.JudgeScore(5), new LlmClient.JudgeScore(4)));
 
         service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
         ArgumentCaptor<List<LlmClient.Candidate>> judged = ArgumentCaptor.forClass(List.class);
         verify(llm, atLeastOnce()).scoreCandidates(any(), judged.capture(), any(), any());
-        assertEquals("outcome", judged.getValue().get(0).angle());
+        assertEquals(List.of("decision", "outcome"), judged.getValue().stream().map(LlmClient.Candidate::angle).sorted().toList());
     }
 
     /** Runs one slot with these candidates and judge scores; returns the saved wordings in order. */
@@ -386,7 +384,8 @@ class BulletServiceTest {
         when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(new LlmClient.SlotCandidates(cands, cands.size(), 0));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
+        // Lenient: a near-twin is removed by dedup before the judge, so this stub may go unused.
+        lenient().when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
             List<LlmClient.Candidate> cs = inv.getArgument(1);
             return cs.stream().map(x -> new LlmClient.JudgeScore(scoreByText.getOrDefault(x.text(), 1))).toList();
         });
@@ -524,12 +523,12 @@ class BulletServiceTest {
         String cut = "Cut payout latency 40% by batching settlements.";
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(batch(cand("Built a ledger service in Go for payouts."), cand(cut)));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
         assertEquals(List.of(cut), out.stream().map(Bullet::getText).toList());
-        verify(llm, times(2)).scoreCandidates(any(), argThat(l -> l.size() == 1), any(), any());
+        // One candidate is not judged at all.
+        verify(llm, never()).scoreCandidates(any(), any(), any(), any());
     }
 
     @Test
@@ -577,7 +576,7 @@ class BulletServiceTest {
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
                 batch(cand("Cut payout latency 40% by batching settlements.")),
                 batch(cand("Reduced reconciliation errors across regions.")));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
+        lenient().when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateWordings(user, proj, st.getId(), List.of("data", "data"), List.of(), ProgressLog.noOp());
 
@@ -639,13 +638,18 @@ class BulletServiceTest {
         stubStoryRun(user, proj);
         when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
-                .thenReturn(batch(cand(PAIR_A)));
-        when(llm.scoreCandidates(any(), any(), any(), any()))
-                .thenReturn(List.of(new LlmClient.JudgeScore(5, "good: concrete result; bad: none")));
+                .thenReturn(batch(cand(PAIR_A), cand("Chose batch settlement over per transfer writes for lower load.")));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
+            List<LlmClient.Candidate> cs = inv.getArgument(1);
+            return cs.stream().map(c -> c.text().equals(PAIR_A)
+                    ? new LlmClient.JudgeScore(5, "good: concrete result; bad: none")
+                    : new LlmClient.JudgeScore(4, "good: x; bad: y")).toList();
+        });
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
-        assertEquals("good: concrete result; bad: none", out.get(0).getJudgeNote());
+        Bullet kept = out.stream().filter(b -> b.getText().equals(PAIR_A)).findFirst().orElseThrow();
+        assertEquals("good: concrete result; bad: none", kept.getJudgeNote());
     }
 
     @Test
