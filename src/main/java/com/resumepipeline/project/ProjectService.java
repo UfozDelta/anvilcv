@@ -219,6 +219,7 @@ public class ProjectService {
         }
         for (var b : bulletRepo.findByProjectIdOrderByCreatedAtAsc(src.getId())) {
             var clone = new com.resumepipeline.bullet.Bullet(saved.getId(), b.getText(), b.getTags(), b.getCategory());
+            clone.setAngle(b.getAngle());
             clone.setStatus(b.getStatus());
             clone.setStoryId(b.getStoryId() == null ? null : storyCopy.get(b.getStoryId()));
             bulletRepo.save(clone);

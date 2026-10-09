@@ -61,6 +61,11 @@ public class Bullet {
     public String[] getTags() { return tags; }
     public void setTags(String[] tags) { this.tags = tags == null ? new String[0] : tags; }
     public String getCategory() { return category; }
+
+    @Column(name = "angle", length = 20)
+    private String angle;
+    public String getAngle() { return angle; }
+    public void setAngle(String angle) { this.angle = angle; }
     public void setCategory(String category) { this.category = com.resumepipeline.llm.CategoryLenses.normalize(category); }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

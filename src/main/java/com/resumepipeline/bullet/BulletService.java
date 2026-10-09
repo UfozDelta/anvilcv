@@ -776,7 +776,7 @@ public class BulletService {
         }
         progress.emit(tag + " kept " + chosen.size());
         return chosen.stream()
-                .map(c -> new LlmClient.GeneratedBullet(c.text(), c.tags(), story.id(), lens))
+                .map(c -> new LlmClient.GeneratedBullet(c.text(), c.tags(), story.id(), lens, c.angle()))
                 .toList();
     }
 
@@ -980,6 +980,7 @@ public class BulletService {
             String text = BulletTextRules.capBoldSpans(g.text(), BulletTextRules.maxBoldSpans(cfg, g.text()));
             sameStory.add(text);
             Bullet b = new Bullet(projectId, text, g.tags().toArray(new String[0]), g.lens());
+            b.setAngle(g.angle());
             b.setStoryId(storyUuid.computeIfAbsent(g.storyId(),
                     k -> attachTo == null ? UUID.randomUUID() : attachTo.getId()));
             saved.add(repo.save(b));

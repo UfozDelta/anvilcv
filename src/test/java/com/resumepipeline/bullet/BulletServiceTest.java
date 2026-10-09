@@ -573,6 +573,17 @@ class BulletServiceTest {
 
     @SuppressWarnings("unchecked")
     @Test
+    void savedWordingsKeepTheirAngle() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(configService.get(any())).thenReturn(new GenerationConfig());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        List<Bullet> out = service.saveStoryBullets(user, proj, List.of(
+                new LlmClient.GeneratedBullet("Cut payout latency by batching settlements nightly.", List.of(), "s1", "backend", "scale")),
+                List.of(story("s1", "backend")), List.of(), ProgressLog.noOp());
+        assertEquals("scale", out.get(0).getAngle());
+    }
+
+    @Test
     void storyRowsAreSavedOnlyForStoriesThatKeptAWording() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
         when(configService.get(any())).thenReturn(new GenerationConfig());

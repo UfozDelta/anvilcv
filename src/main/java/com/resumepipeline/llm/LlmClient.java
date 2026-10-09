@@ -133,8 +133,9 @@ public interface LlmClient {
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     /** storyId and lens are set on the story bank path; null on the single-lens path. */
-    record GeneratedBullet(String text, List<String> tags, String storyId, String lens) {
-        public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null); }
+    record GeneratedBullet(String text, List<String> tags, String storyId, String lens, String angle) {
+        public GeneratedBullet(String text, List<String> tags, String storyId, String lens) { this(text, tags, storyId, lens, null); }
+        public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null, null); }
     }
 
     /**

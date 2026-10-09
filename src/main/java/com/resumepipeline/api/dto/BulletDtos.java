@@ -28,7 +28,9 @@ public class BulletDtos {
             Instant updatedAt,
             UUID storyId,
             /** Null for a storyless bullet, and on every endpoint but the project's bullet list. */
-            String storyTitle
+            String storyTitle,
+            /** outcome, decision, scale or failure; null when the wording was not labelled. */
+            String angle
     ) {
         public static BulletResponse from(Bullet b) {
             return from(b, null);
@@ -38,7 +40,7 @@ public class BulletDtos {
             return new BulletResponse(b.getId(), b.getProjectId(), b.getText(),
                     b.getTags() == null ? List.of() : List.of(b.getTags()),
                     b.getCategory(), b.getStatus(),
-                    b.getCreatedAt(), b.getUpdatedAt(), b.getStoryId(), storyTitle);
+                    b.getCreatedAt(), b.getUpdatedAt(), b.getStoryId(), storyTitle, b.getAngle());
         }
     }
 }
