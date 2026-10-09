@@ -42,7 +42,9 @@ class RepoMapServiceTest {
         RepoMap map = new RepoMapService(llm).build("app", "abcdef1", snap(), ProgressLog.noOp(), new TokenAccumulator());
 
         RepoMap.Module core = map.modules().stream().filter(m -> m.path().equals("src/core")).findFirst().orElseThrow();
-        assertEquals("Keeps jobs for 600 seconds.", core.summary()); // "50K" appears nowhere in the code
+        // The code says "ttl = 600" with no unit, so "600 seconds" is unsourced and the sentence is cut.
+        // "50K" appears nowhere in the code either.
+        assertEquals("", core.summary());
         RepoMap.Module ui = map.modules().stream().filter(m -> m.path().equals("src/ui")).findFirst().orElseThrow();
         assertNull(ui.summary(), "a failed module leaves a gap, not a failed run");
 

@@ -441,4 +441,41 @@ class BulletTextRulesTest {
         assertEquals(List.of("80ms"), BulletTextRules.fabricatedNumbers("Ran in 80ms.", "Took 80 files to finish."));
         assertTrue(BulletTextRules.fabricatedNumbers("Ran in 80ms.", "Ran in 80ms p95.").isEmpty());
     }
+
+    @Test
+    void aMillionClaimIsVouchedForBySpelledOutMillions() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Loaded 3M rows nightly.", "Loaded 3 million rows nightly.").isEmpty());
+        assertEquals(List.of("3M"), BulletTextRules.fabricatedNumbers("Loaded 3M rows nightly.", "Loaded 3 files nightly."));
+    }
+
+    @Test
+    void aSecondsClaimIsVouchedForBySpelledOutSeconds() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Ran in 5s.", "Ran in 5 seconds.").isEmpty());
+        assertEquals(List.of("5s"), BulletTextRules.fabricatedNumbers("Ran in 5s.", "Ran 5 files."));
+    }
+
+    @Test
+    void aSpelledSecondsClaimIsCheckedAgainstTheSource() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Ran in 5 seconds.", "Ran in 5s.").isEmpty());
+        assertEquals(List.of("5s"), BulletTextRules.fabricatedNumbers("Ran in 5 seconds.", "Ran 5 files."));
+    }
+
+    @Test
+    void aDollarMillionClaimIsVouchedForByTwoMillionDollars() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Saved $2M a year.", "Saved $2 million a year.").isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("Saved $2M a year.", "Saved 2 million dollars a year.").isEmpty());
+        assertEquals(List.of("$200"), BulletTextRules.fabricatedNumbers("Saved $200 a month.", "Saved 200 files a month."));
+    }
+
+    @Test
+    void aDollarsSourceVouchesForADollarClaim() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Saved $200 a month.", "Saved 200 dollars a month.").isEmpty());
+    }
+
+    @Test
+    void minutesAndHoursAreTimeClasses() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Cut builds to 10 min.", "Builds now take 10 minutes.").isEmpty());
+        assertTrue(BulletTextRules.fabricatedNumbers("Cut builds to 2hr.", "Builds now take 2 hours.").isEmpty());
+        assertEquals(List.of("10min"), BulletTextRules.fabricatedNumbers("Cut builds to 10 min.", "Builds 10 files."));
+    }
 }

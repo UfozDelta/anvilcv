@@ -37,7 +37,7 @@ public final class BulletTextRules {
     // number: a currency/percent/plus marker, a time unit, a multiplier, or a magnitude
     // suffix. "s"/"ms"/"x" and the magnitudes need a word boundary, so "64K" and "3 x"
     // read as quantities while "S3 buckets", "2dsphere" and "Java 17 stack" do not.
-    private static final String UNIT = "(?:%|\\+|(?:ms|s|[xXkKmMbB])\\b)";
+    private static final String UNIT = "(?:%|\\+|(?:ms|min|hr|h|s|[xXkKmMbB])\\b)";
     // $-prefixed or unit-bearing digit run. The unit may be glued on (group 3) or one
     // space away (group 4, matched inside a lookahead so it stays out of the reported
     // token). Everything else is skipped — see fabricatedNumbers.
@@ -177,7 +177,7 @@ public final class BulletTextRules {
 
         List<String> fabricated = new ArrayList<>();
         // Bold markers are dropped so "**64K**" and "**3 to 180** ms" read as plain text.
-        Matcher m = QUANTITY.matcher(stripThousands(text.replace("**", "")));
+        Matcher m = QUANTITY.matcher(spelledUnits(stripThousands(text.replace("**", ""))));
         while (m.find()) {
             String unit = m.group(3) != null ? m.group(3) : m.group(4);
             String prefix = m.group(1);
@@ -208,7 +208,7 @@ public final class BulletTextRules {
         if (prefix != null) return "$";
         if (unit == null) return BARE;
         if (unit.equals("%")) return "%";
-        if (unit.equals("ms") || unit.equals("s")) return "time";
+        if (unit.equals("ms") || unit.equals("s") || unit.equals("min") || unit.equals("hr") || unit.equals("h")) return "time";
         if (unit.length() == 1 && "kKmMbB".indexOf(unit.charAt(0)) >= 0) return "mag";
         if (unit.equalsIgnoreCase("x")) return "x";
         return unit;
@@ -232,7 +232,7 @@ public final class BulletTextRules {
     /** Every quantity the source states, keyed by value and unit class. */
     private static Set<String> sourceKeys(String sourceContext) {
         Set<String> keys = new HashSet<>();
-        String src = stripThousands(sourceContext);
+        String src = spelledUnits(stripThousands(sourceContext));
         Matcher q = QUANTITY.matcher(src);
         while (q.find()) {
             String unit = q.group(3) != null ? q.group(3) : q.group(4);
@@ -243,9 +243,6 @@ public final class BulletTextRules {
         // Digit runs QUANTITY does not match (glued to letters, like K8s) still count as bare numbers.
         Matcher d = DIGITS.matcher(src);
         while (d.find()) keys.add(key(stripLeadingZeros(d.group()), BARE));
-        // "40 percent" states a percentage in words.
-        Matcher pct = PERCENT_WORDS.matcher(src);
-        while (pct.find()) keys.add(key(stripLeadingZeros(pct.group(1)), "%"));
         // Spelled-out numbers ("forty", "two thousand") cannot say their unit, so they vouch for every class.
         for (String w : wordNumbersToDigits(sourceContext)) {
             for (String c : ALL_CLASSES) keys.add(key(w, c));
@@ -253,9 +250,25 @@ public final class BulletTextRules {
         return keys;
     }
 
-    private static final Pattern PERCENT_WORDS = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(?:percent|per cent)\\b",
-            Pattern.CASE_INSENSITIVE);
-
+    /**
+     * Spelled-out units become the abbreviations the claim check reads: "3 million" -> "3M",
+     * "40 percent" -> "40%", "5 seconds" -> "5s", "200 dollars" -> "$200". Applied to the claim and
+     * to the source alike, so either may spell the unit.
+     */
+    static String spelledUnits(String s) {
+        String t = s;
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*million\\b", "$1M");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*billion\\b", "$1B");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*thousand\\b", "$1K");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*(?:percent|per cent)\\b", "$1%");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*(?:milliseconds?|msecs?)\\b", "$1ms");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*(?:seconds?|secs?)\\b", "$1s");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*(?:minutes?|mins?)\\b", "$1min");
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?)\\s*(?:hours?|hrs?)\\b", "$1hr");
+        // Money reads from a leading $, so the currency word moves in front of the number.
+        t = t.replaceAll("(?i)(\\d+(?:\\.\\d+)?[MKB]?)\\s*(?:dollars?|usd)\\b", "\\$$1");
+        return t;
+    }
     private static final java.util.Map<String, Integer> SMALL_NUMBER_WORDS = java.util.Map.ofEntries(
             java.util.Map.entry("zero", 0), java.util.Map.entry("one", 1), java.util.Map.entry("two", 2),
             java.util.Map.entry("three", 3), java.util.Map.entry("four", 4), java.util.Map.entry("five", 5),
