@@ -18,7 +18,6 @@ const SORTS: { key: Sort; label: string }[] = [
 /** Bar scale for bullet counts (a full bank). */
 const FULL_BANK = 12;
 
-/** Repo state from what the API says: none, linked but still being read, or read. */
 /** The explicit "I currently work here" flag; older rows fall back to what the dates text says. */
 const isCurrent = (p: Project) => p.current ?? looksCurrent(p.dates);
 const endKeyOf = (p: Project) => (isCurrent(p) ? Infinity : endKey(p.dates, p.createdAt));
