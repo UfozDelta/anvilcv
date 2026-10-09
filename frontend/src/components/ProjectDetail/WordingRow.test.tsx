@@ -48,4 +48,20 @@ describe('WordingRow', () => {
     expect(html).not.toContain('data-angle');
     expect(html).toContain('>Edit</button>');
   });
+
+  it('shows the judge note when the wording has one', () => {
+    const html = renderToStaticMarkup(
+      <WordingRow b={{ ...bullet('PENDING', 'backend'), judgeNote: 'good: concrete result; bad: none' }} cfg={cfg} onApprove={() => {}} onEdit={() => {}} onTrash={() => {}} />,
+    );
+    expect(html).toContain('sf-b__why');
+    expect(html).toContain('good: concrete result; bad: none');
+  });
+
+  it('shows no judge note when it is null, and keeps Edit', () => {
+    const html = renderToStaticMarkup(
+      <WordingRow b={{ ...bullet('APPROVED', 'backend'), judgeNote: null }} cfg={cfg} onApprove={() => {}} onEdit={() => {}} onTrash={() => {}} />,
+    );
+    expect(html).not.toContain('sf-b__why');
+    expect(html).toContain('>Edit</button>');
+  });
 });

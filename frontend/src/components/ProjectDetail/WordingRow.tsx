@@ -17,7 +17,10 @@ export function WordingRow({ b, cfg, onApprove, onEdit, onTrash }: {
   const on = b.status === 'APPROVED';
   return (
     <div className="sf-b" data-on={on || undefined}>
-      <div className="sf-b__text"><RichText text={b.text} /></div>
+      <div className="sf-b__text">
+        <RichText text={b.text} />
+        {b.judgeNote && <p className="label muted sf-b__why" title={b.judgeNote}>{b.judgeNote}</p>}
+      </div>
       <div className="sf-b__side">
         <span className="sf-b__meta">
           {b.angle && <span className="kw" data-angle={b.angle}>{b.angle}</span>}

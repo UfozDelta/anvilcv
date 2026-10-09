@@ -120,6 +120,8 @@ export interface Bullet {
   storyId?: string | null;
   /** outcome, decision, scale or failure: the angle the story bank gave this wording. Null when none. */
   angle?: string | null;
+  /** The judge's short "good: ...; bad: ..." note on this wording. Null when it was not scored. */
+  judgeNote?: string | null;
   /** Only the project's bullet list fills it. */
   storyTitle?: string | null;
 }
