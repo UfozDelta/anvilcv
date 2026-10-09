@@ -224,3 +224,24 @@
 /* The bullet render frame: full width, and 80% of the visible viewport (dvh) where the browser has it. */
 .sf-render { display: block; width: 100%; max-width: 100%; height: min(900px, 80vh); height: min(900px, 80dvh);
   border: 2px solid var(--ink); background: #fff; margin-bottom: 16px; }
+
+/* Native feel, on these pages only: no grey flash on tap, no double-tap zoom delay, and no iOS zoom
+   when a field is focused (the input floor is 16px, as the lab sets it at 560px). */
+.sf-page button, .sf-page a, .sf-page [role='radio'], .sf-page [role='tab'],
+.pl-page button, .pl-page a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+@media (max-width: 560px) {
+  .sf-page .field__input, .sf-page .field__textarea, .sf-page select, .sf-page .sf-b__input,
+  .pl-page .field__input, .pl-page .field__textarea, .pl-page select { font-size: 16px; }
+}
+
+/* Touch: the title buttons and the description and meta actions get a 44px target too. */
+@media (pointer: coarse) {
+  .sf-group__name, .sf-desc__acts .minibtn, .sf-meta .minibtn { min-height: 44px; min-width: 44px; }
+  .sf-group__name { display: inline-flex; align-items: center; }
+}
+
+/* Reduced motion: nothing on these pages animates or eases between states. */
+@media (prefers-reduced-motion: reduce) {
+  .sf-page *, .pl-page * { transition: none !important; }
+}
+
