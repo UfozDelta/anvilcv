@@ -783,8 +783,10 @@ public class BulletService {
     /**
      * Two judge runs over the top candidates: one in a seeded shuffle (the seed comes from the slot,
      * so a rerun asks in the same order) and one in reverse, so position bias cancels out. Scores
-     * are averaged. Pick #1 is the best average. Pick #2 is drawn only from candidates within one
-     * point of the best, and is the best of those after a variety penalty for resembling pick #1.
+     * are averaged. Pick #1 is the best average. Pick #2 is drawn only from candidates within
+     * {@link #PAIR_SCORE_MARGIN} (1.5) points of pick #1, with a different angle when both are known
+     * and similarity below {@link #ANGLE_SIMILARITY_MAX}. Among those, the best is the one with the
+     * highest score after the variety penalty: average minus {@link #VARIETY_PENALTY} times similarity.
      * Empty when neither run is readable. Logs one line per slot: pick #1's code rank and whether
      * the two runs agreed on the best candidate.
      */
@@ -834,7 +836,7 @@ public class BulletService {
         out.add(new LlmClient.Candidate(one.text(), one.tags(), one.angle(), notes[first]));
         if (KEEP_PER_SLOT >= 2) {
             int second = -1;
-            double secondVariety = 0;
+            double secondScore = 0;
             int sameAngle = 0, nearTwin = 0, outOfMargin = 0;
             for (int i = 0; i < n; i++) {
                 if (i == first) continue;
@@ -844,10 +846,10 @@ public class BulletService {
                 if (sim >= ANGLE_SIMILARITY_MAX) { nearTwin++; continue; }
                 // A missing angle on either side cannot prove a difference, so similarity alone decides.
                 if (c.angle() != null && one.angle() != null && c.angle().equals(one.angle())) { sameAngle++; continue; }
-                double variety = avg[i] - VARIETY_PENALTY * sim;
-                if (second < 0 || avg[i] > avg[second] || (avg[i] == avg[second] && variety > secondVariety)) {
+                double score = avg[i] - VARIETY_PENALTY * sim;
+                if (second < 0 || score > secondScore) {
                     second = i;
-                    secondVariety = variety;
+                    secondScore = score;
                 }
             }
             if (second >= 0) {

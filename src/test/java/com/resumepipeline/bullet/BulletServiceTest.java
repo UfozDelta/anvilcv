@@ -415,6 +415,35 @@ class BulletServiceTest {
     }
 
     @Test
+    void pickTwoAppliesTheVarietyPenaltyToTheScore() {
+        // X is pick #1 (average 5). A averages 4.5 and is 0.333 similar to X; B averages 4 and is unrelated.
+        // A's score after the penalty is 4.5 - 2 * 0.333 = 3.83, so B (4.0) wins, though A has the higher average.
+        String x = "Cut payout latency batching settlements nightly across ledgers.";
+        String a = "Cut payout latency batching ledger reviews weekly fast";
+        String b = "Chose batch settlement over per transfer writes for lower load.";
+        java.util.concurrent.atomic.AtomicInteger run = new java.util.concurrent.atomic.AtomicInteger();
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
+                .thenReturn(batch(cand(x), cand(a), cand(b)));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
+            List<LlmClient.Candidate> cs = inv.getArgument(1);
+            boolean first = run.getAndIncrement() == 0;
+            return cs.stream().map(c -> {
+                if (c.text().equals(x)) return new LlmClient.JudgeScore(5);
+                if (c.text().equals(a)) return new LlmClient.JudgeScore(first ? 5 : 4);
+                return new LlmClient.JudgeScore(4);
+            }).toList();
+        });
+
+        List<String> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())
+                .stream().map(Bullet::getText).toList();
+
+        assertEquals(List.of(x, b), out);
+    }
+
+    @Test
     void oneUnreadableJudgeRunStillRanksFromTheOther() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
         stubStoryRun(user, proj);
