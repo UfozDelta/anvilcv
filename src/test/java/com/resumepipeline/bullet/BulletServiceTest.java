@@ -305,8 +305,8 @@ class BulletServiceTest {
     }
 
     private static List<Integer> scoreByPrefix(org.mockito.invocation.InvocationOnMock inv) {
-        List<String> ts = inv.getArgument(1);
-        return ts.stream().map(t -> t.startsWith("Cut") ? 5 : t.startsWith("Built") ? 4 : 1).toList();
+        List<LlmClient.Candidate> cs = inv.getArgument(1);
+        return cs.stream().map(c -> c.text().startsWith("Cut") ? 5 : c.text().startsWith("Built") ? 4 : 1).toList();
     }
 
     @Test
@@ -326,6 +326,24 @@ class BulletServiceTest {
         // cut 5 is pick #1; built 4 is within one point of it and is pick #2. reduced 1 is not.
         assertEquals(List.of(cut, built), out.stream().map(Bullet::getText).toList());
         verify(llm, times(2)).scoreCandidates(any(), any(), any(), any());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void theJudgeIsShownEachCandidatesAngle() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
+                new LlmClient.SlotCandidates(List.of(
+                        new LlmClient.Candidate("Cut payout latency 40% by batching settlements.", List.of(), "outcome")), 1, 0));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
+
+        service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+
+        ArgumentCaptor<List<LlmClient.Candidate>> judged = ArgumentCaptor.forClass(List.class);
+        verify(llm, atLeastOnce()).scoreCandidates(any(), judged.capture(), any(), any());
+        assertEquals("outcome", judged.getValue().get(0).angle());
     }
 
     @Test
@@ -358,8 +376,8 @@ class BulletServiceTest {
                 .thenReturn(batch(cand(a), cand(b), cand(c)));
         // a and b tie at 5 and nearly repeat each other; c is one point lower and differs.
         stubScores(inv -> {
-            List<String> ts = inv.getArgument(1);
-            return ts.stream().map(t -> t.startsWith("Reduced") ? 4 : 5).toList();
+            List<LlmClient.Candidate> cs = inv.getArgument(1);
+            return cs.stream().map(x -> x.text().startsWith("Reduced") ? 4 : 5).toList();
         });
 
         List<String> texts = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())

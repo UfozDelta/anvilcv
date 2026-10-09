@@ -796,7 +796,7 @@ public class BulletService {
         double[] sum = new double[n];
         List<Integer> bests = new ArrayList<>();
         for (List<Integer> order : List.of(shuffled, reversed)) {
-            List<Integer> scores = llm.scoreCandidates(story, order.stream().map(i -> top.get(i).text()).toList(),
+            List<Integer> scores = llm.scoreCandidates(story, order.stream().map(top::get).toList(),
                     progress, judgeTokens);
             if (scores == null || scores.size() != n) continue;
             int best = -1;

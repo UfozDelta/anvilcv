@@ -591,18 +591,20 @@ public abstract class BaseLlmClient implements LlmClient {
      * the schema so the model writes them before scoring. Scores come back in the order given.
      */
     @Override
-    public List<Integer> scoreCandidates(Story story, List<String> candidates, ProgressLog progress,
+    public List<Integer> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress,
                                          TokenAccumulator tokens) {
         StringBuilder list = new StringBuilder();
         for (int i = 0; i < candidates.size(); i++) {
-            list.append("  ").append(i).append(": ").append(candidates.get(i)).append('\n');
+            Candidate c = candidates.get(i);
+            list.append("  ").append(i).append(": [").append(c.angle() == null ? "unknown" : c.angle()).append("] ")
+                    .append(c.text()).append('\n');
         }
         String evidence = story.evidence().stream().map(e -> "  \"" + e + "\"").collect(java.util.stream.Collectors.joining("\n"));
         String prompt = """
                 You are a technical recruiter scoring resume bullets for one piece of work: "%s".
                 The bullets must rest on this evidence:
                 %s
-                Candidates (index: text):
+                Candidates (index: [angle] text). The angle is what the wording covers:
                 %s
                 Score each candidate 1-5 against this checklist, every point:
                   - the claim is supported by the evidence;

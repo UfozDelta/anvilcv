@@ -33,7 +33,7 @@ public interface LlmClient {
      * then a 1-5 score for each. Returns one score per candidate, or empty when the reply is
      * unreadable or does not line up with the candidates.
      */
-    List<Integer> scoreCandidates(Story story, List<String> candidates, ProgressLog progress, TokenAccumulator tokens);
+    List<Integer> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress, TokenAccumulator tokens);
 
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
