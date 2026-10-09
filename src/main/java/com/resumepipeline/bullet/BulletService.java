@@ -985,6 +985,7 @@ public class BulletService {
             sameStory.add(text);
             Bullet b = new Bullet(projectId, text, g.tags().toArray(new String[0]), g.lens());
             b.setAngle(g.angle());
+            b.setJudgeNote(g.note());
             b.setStoryId(storyUuid.computeIfAbsent(g.storyId(),
                     k -> attachTo == null ? UUID.randomUUID() : attachTo.getId()));
             saved.add(repo.save(b));

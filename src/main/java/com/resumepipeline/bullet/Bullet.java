@@ -66,6 +66,11 @@ public class Bullet {
     private String angle;
     public String getAngle() { return angle; }
     public void setAngle(String angle) { this.angle = angle; }
+
+    @Column(name = "judge_note", columnDefinition = "text")
+    private String judgeNote;
+    public String getJudgeNote() { return judgeNote; }
+    public void setJudgeNote(String judgeNote) { this.judgeNote = judgeNote; }
     public void setCategory(String category) { this.category = com.resumepipeline.llm.CategoryLenses.normalize(category); }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

@@ -30,7 +30,9 @@ public class BulletDtos {
             /** Null for a storyless bullet, and on every endpoint but the project's bullet list. */
             String storyTitle,
             /** outcome, decision, scale or failure; null when the wording was not labelled. */
-            String angle
+            String angle,
+            /** The judge's short good/bad note; null when the wording was not scored. */
+            String judgeNote
     ) {
         public static BulletResponse from(Bullet b) {
             return from(b, null);
@@ -40,7 +42,7 @@ public class BulletDtos {
             return new BulletResponse(b.getId(), b.getProjectId(), b.getText(),
                     b.getTags() == null ? List.of() : List.of(b.getTags()),
                     b.getCategory(), b.getStatus(),
-                    b.getCreatedAt(), b.getUpdatedAt(), b.getStoryId(), storyTitle, b.getAngle());
+                    b.getCreatedAt(), b.getUpdatedAt(), b.getStoryId(), storyTitle, b.getAngle(), b.getJudgeNote());
         }
     }
 }

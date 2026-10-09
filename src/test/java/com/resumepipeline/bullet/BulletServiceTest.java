@@ -298,6 +298,8 @@ class BulletServiceTest {
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
         assertEquals(List.of(cut, reduced), out.stream().map(Bullet::getText).toList());
+        // The fallback has no judge, so there is no note to keep.
+        assertTrue(out.stream().allMatch(b -> b.getJudgeNote() == null));
     }
 
     /** Scores by candidate text: "Cut" 5, "Built" 4, anything else 1. Works for any presented order. */
@@ -572,6 +574,21 @@ class BulletServiceTest {
     }
 
     @SuppressWarnings("unchecked")
+    @Test
+    void theKeptWordingKeepsItsJudgeNote() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
+                .thenReturn(batch(cand(PAIR_A)));
+        when(llm.scoreCandidates(any(), any(), any(), any()))
+                .thenReturn(List.of(new LlmClient.JudgeScore(5, "good: concrete result; bad: none")));
+
+        List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+
+        assertEquals("good: concrete result; bad: none", out.get(0).getJudgeNote());
+    }
+
     @Test
     void savedWordingsKeepTheirAngle() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
