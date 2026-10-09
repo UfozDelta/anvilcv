@@ -671,6 +671,21 @@ public class BulletService {
     }
 
     /**
+     * Synchronous checks for a new-stories run: a project already generating, or a bank at the cap, is
+     * answered before a job starts (409). The run re-checks when it starts, so a race between the two
+     * is still refused there, but later.
+     */
+    public void checkStories(UUID userId, UUID projectId) {
+        projectService.get(userId, projectId);
+        if (generating.contains(projectId)) {
+            throw new IllegalStateException("Bullets are already being generated for this project — wait for that run to finish.");
+        }
+        if (liveStoryIds(repo.findByProjectIdOrderByCreatedAtAsc(projectId)).size() >= STORY_CAP) {
+            throw new IllegalStateException("Story bank full (" + STORY_CAP + "). Trash a story's wordings to make room.");
+        }
+    }
+
+    /**
      * More wordings for one story: one slot per chosen lens (repeats run again; a lens the story
      * does not carry is a weak fit and still runs). Existing live wordings are passed as already
      * written. The new wordings join the story and widen its lenses; no story row is added.

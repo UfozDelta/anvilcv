@@ -174,4 +174,33 @@ class ProjectControllerTest {
         verify(bullets).checkWordings(userId, id, storyId, List.of("data", "data"));
         verify(jobStore).start(any(), eq(userId));
     }
+
+    @Test
+    void storiesSubmitIsRefusedUpFrontWhenBusyOrFull() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
+        doThrow(new IllegalStateException("Story bank full (12). Trash a story's wordings to make room."))
+                .when(bullets).checkStories(userId, id);
+
+        mvc.perform(post("/api/projects/" + id + "/stories/submit")
+                        .with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict());
+
+        verifyNoInteractions(jobStore);
+    }
+
+    @Test
+    void storiesSubmitStartsAJobWhenTheChecksPass() throws Exception {
+        UUID userId = UUID.randomUUID(), id = UUID.randomUUID();
+
+        mvc.perform(post("/api/projects/" + id + "/stories/submit")
+                        .with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isAccepted());
+
+        verify(bullets).checkStories(userId, id);
+        verify(jobStore).start(any(), eq(userId));
+    }
 }

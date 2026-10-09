@@ -147,6 +147,7 @@ public class ProjectController {
     public SubmitResponse storiesSubmit(Authentication auth, @PathVariable UUID id,
                                         @RequestBody(required = false) SubsystemsRequest req) {
         UUID userId = AuthUtils.userId(auth);
+        bullets.checkStories(userId, id);
         List<String> subs = req == null || req.subsystems() == null ? List.of() : req.subsystems();
         List<String> lenses = List.copyOf(CategoryLenses.LENSES.keySet());
         return submitJob(userId, id, progress -> bullets.generateBank(userId, id, lenses, subs, progress));

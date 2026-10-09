@@ -794,6 +794,28 @@ class BulletServiceTest {
     }
 
     @Test
+    void checkStoriesRefusesAFullBank() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        liveBank(proj, BulletService.STORY_CAP);
+
+        assertThrows(IllegalStateException.class, () -> service.checkStories(user, proj));
+    }
+
+    @Test
+    void checkStoriesRefusesAProjectThatIsAlreadyGenerating() {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
+        // Inside the run's findStories call the project is busy, so a second check must refuse.
+        when(llm.findStories(any(), any(), any())).thenAnswer(inv -> {
+            assertThrows(IllegalStateException.class, () -> service.checkStories(user, proj));
+            return new LlmClient.StoryResult(List.of(), List.of());
+        });
+
+        service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
+    }
+
+    @Test
     void aSecondGenerateOnTheSameProjectFailsFast() {
         UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
         when(projectService.get(user, proj)).thenReturn(project(user, Project.Kind.PROJECT));
