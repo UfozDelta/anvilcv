@@ -577,6 +577,24 @@ public abstract class BaseLlmClient implements LlmClient {
         return new SlotCandidates(kept, raw.size(), raw.size() - kept.size());
     }
 
+    /** Longest judge note kept; longer ones are cut with an ellipsis. */
+    static final int JUDGE_NOTE_MAX = 300;
+
+    /**
+     * The judge's note for one candidate: "good: ...; bad: ...", on one line and at most
+     * {@link #JUDGE_NOTE_MAX} characters. Null when the judge gave neither part.
+     */
+    static String judgeNote(String good, String bad) {
+        String g = oneLine(good), b = oneLine(bad);
+        if (g.isEmpty() && b.isEmpty()) return null;
+        String note = "good: " + g + "; bad: " + b;
+        return note.length() <= JUDGE_NOTE_MAX ? note : note.substring(0, JUDGE_NOTE_MAX - 3) + "...";
+    }
+
+    private static String oneLine(String s) {
+        return s == null ? "" : s.replaceAll("\\s+", " ").trim();
+    }
+
     /** The four angles a slot's wordings are asked to take; anything else, including "unknown", is null. */
     static final java.util.Set<String> ANGLES = java.util.Set.of("outcome", "decision", "scale", "failure");
 
@@ -591,7 +609,7 @@ public abstract class BaseLlmClient implements LlmClient {
      * the schema so the model writes them before scoring. Scores come back in the order given.
      */
     @Override
-    public List<Integer> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress,
+    public List<LlmClient.JudgeScore> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress,
                                          TokenAccumulator tokens) {
         StringBuilder list = new StringBuilder();
         for (int i = 0; i < candidates.size(); i++) {
@@ -633,7 +651,16 @@ public abstract class BaseLlmClient implements LlmClient {
                         env.scores == null ? 0 : env.scores.size());
                 return List.of();
             }
-            return env.scores;
+            // A note is matched to a candidate by its position in this call, as the scores are.
+            java.util.Map<Integer, String> noteAt = new java.util.HashMap<>();
+            if (env.notes != null) {
+                for (JudgeNoteJson n : env.notes) {
+                    if (n != null && n.i != null) noteAt.putIfAbsent(n.i, judgeNote(n.good, n.bad));
+                }
+            }
+            List<LlmClient.JudgeScore> out = new ArrayList<>();
+            for (int k = 0; k < env.scores.size(); k++) out.add(new LlmClient.JudgeScore(env.scores.get(k), noteAt.get(k)));
+            return out;
         } catch (RuntimeException e) {
             // No retry: the caller already has a score-based fallback.
             log.warn("BULLET_JUDGE_FAILED story={} cause={}", story.id(), LogText.abbreviate(e.getMessage(), 120));
@@ -1932,7 +1959,9 @@ public abstract class BaseLlmClient implements LlmClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoriesEnvelope { public List<StoryJson> stories; }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    protected static class JudgeEnvelope { public List<Integer> scores; }
+    protected static class JudgeEnvelope { public List<Integer> scores; public List<JudgeNoteJson> notes; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    protected static class JudgeNoteJson { public Integer i; public String good; public String bad; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoryJson { public String id; public String title; public List<String> evidence; public List<String> lenses; }
     @JsonIgnoreProperties(ignoreUnknown = true)

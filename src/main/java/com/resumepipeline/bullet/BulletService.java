@@ -776,7 +776,7 @@ public class BulletService {
         }
         progress.emit(tag + " kept " + chosen.size());
         return chosen.stream()
-                .map(c -> new LlmClient.GeneratedBullet(c.text(), c.tags(), story.id(), lens, c.angle()))
+                .map(c -> new LlmClient.GeneratedBullet(c.text(), c.tags(), story.id(), lens, c.angle(), c.note()))
                 .toList();
     }
 
@@ -798,17 +798,20 @@ public class BulletService {
         for (int i = n - 1; i >= 0; i--) reversed.add(i);
 
         double[] sum = new double[n];
+        // Each candidate's note comes from the first run that gave one.
+        String[] notes = new String[n];
         List<Integer> bests = new ArrayList<>();
         for (List<Integer> order : List.of(shuffled, reversed)) {
-            List<Integer> scores = llm.scoreCandidates(story, order.stream().map(top::get).toList(),
+            List<LlmClient.JudgeScore> scores = llm.scoreCandidates(story, order.stream().map(top::get).toList(),
                     progress, judgeTokens);
             if (scores == null || scores.size() != n) continue;
             int best = -1;
             int bestScore = 0;
             for (int k = 0; k < n; k++) {
                 int idx = order.get(k);
-                int s = scores.get(k);
+                int s = scores.get(k).score();
                 sum[idx] += s;
+                if (notes[idx] == null) notes[idx] = scores.get(k).note();
                 if (best < 0 || s > bestScore || (s == bestScore && idx < best)) {
                     best = idx;
                     bestScore = s;
@@ -828,7 +831,7 @@ public class BulletService {
 
         List<LlmClient.Candidate> out = new ArrayList<>();
         LlmClient.Candidate one = top.get(first);
-        out.add(one);
+        out.add(new LlmClient.Candidate(one.text(), one.tags(), one.angle(), notes[first]));
         if (KEEP_PER_SLOT >= 2) {
             int second = -1;
             double secondVariety = 0;
@@ -848,7 +851,8 @@ public class BulletService {
                 }
             }
             if (second >= 0) {
-                out.add(top.get(second));
+                LlmClient.Candidate two = top.get(second);
+                out.add(new LlmClient.Candidate(two.text(), two.tags(), two.angle(), notes[second]));
             } else {
                 log.info("BULLET_PAIR story={} single: no second wording qualifies (same_angle={} near_twin={} out_of_margin={})",
                         story.id(), sameAngle, nearTwin, outOfMargin);

@@ -57,7 +57,7 @@ class DryRunGeneratorTest {
                 new LlmClient.SlotCandidates(List.of(
                         new LlmClient.Candidate("Built a Redis cache for pricing.", List.of("backend")),
                         new LlmClient.Candidate("Designed an ETL job for billing data.", List.of("data"))), 15, 13));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5, 4));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5), new LlmClient.JudgeScore(4)));
 
         DryRunGenerator gen = new DryRunGenerator(projectService, llm, usage, configService, projectRepo,
                 renderer, compiler, applicationRepo);

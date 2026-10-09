@@ -33,7 +33,7 @@ public interface LlmClient {
      * then a 1-5 score for each. Returns one score per candidate, or empty when the reply is
      * unreadable or does not line up with the candidates.
      */
-    List<Integer> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress, TokenAccumulator tokens);
+    List<JudgeScore> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress, TokenAccumulator tokens);
 
     JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
 
@@ -133,9 +133,10 @@ public interface LlmClient {
     ) {}
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     /** storyId and lens are set on the story bank path; null on the single-lens path. */
-    record GeneratedBullet(String text, List<String> tags, String storyId, String lens, String angle) {
-        public GeneratedBullet(String text, List<String> tags, String storyId, String lens) { this(text, tags, storyId, lens, null); }
-        public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null, null); }
+    record GeneratedBullet(String text, List<String> tags, String storyId, String lens, String angle, String note) {
+        public GeneratedBullet(String text, List<String> tags, String storyId, String lens, String angle) { this(text, tags, storyId, lens, angle, null); }
+        public GeneratedBullet(String text, List<String> tags, String storyId, String lens) { this(text, tags, storyId, lens, null, null); }
+        public GeneratedBullet(String text, List<String> tags) { this(text, tags, null, null, null, null); }
     }
 
     /**
@@ -164,8 +165,13 @@ public interface LlmClient {
      * A wording that passed the code filter. Tags are the ones the bullet actually mentions.
      * {@code angle} is one of outcome, decision, scale, failure, or null when the model gave none.
      */
-    record Candidate(String text, List<String> tags, String angle) {
-        public Candidate(String text, List<String> tags) { this(text, tags, null); }
+    record Candidate(String text, List<String> tags, String angle, String note) {
+        public Candidate(String text, List<String> tags, String angle) { this(text, tags, angle, null); }
+        public Candidate(String text, List<String> tags) { this(text, tags, null, null); }
+    }
+    /** One candidate's judge score (1-5) and its short good/bad note; the note is null when the judge gave none. */
+    record JudgeScore(int score, String note) {
+        public JudgeScore(int score) { this(score, null); }
     }
     /** {@code written} is what the model returned; {@code kept} is what survived the filter. */
     record SlotCandidates(List<Candidate> kept, int written, int filtered) {}

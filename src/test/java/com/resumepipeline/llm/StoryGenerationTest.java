@@ -149,6 +149,40 @@ class StoryGenerationTest {
     }
 
     @Test
+    void judgeNotesAreMatchedToCandidatesByPosition() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GenerationConfig cfg = new GenerationConfig();
+        cfg.setWordFilterEnabled(false);
+        OpenCodeLlmClient client = new OpenCodeLlmClient(builder, "g", "m", "c", new GenerationConfigService(null) {
+            @Override public GenerationConfig get(UUID userId) { return cfg; }
+        });
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"notes\\":[{\\"i\\":1,\\"good\\":\\"g1\\",\\"bad\\":\\"b1\\"},{\\"i\\":0,\\"good\\":\\"g0\\",\\"bad\\":\\"b0\\"}],\\"scores\\":[4,2]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        List<LlmClient.JudgeScore> out = client.scoreCandidates(
+                new LlmClient.Story("s1", "Ledger", List.of("quote"), List.of("backend")),
+                List.of(new LlmClient.Candidate("Cut payout latency by batching settlements nightly.", List.of()),
+                        new LlmClient.Candidate("Chose batch settlement for lower load.", List.of())),
+                ProgressLog.noOp(), new TokenAccumulator());
+
+        assertEquals(List.of(new LlmClient.JudgeScore(4, "good: g0; bad: b0"),
+                new LlmClient.JudgeScore(2, "good: g1; bad: b1")), out);
+        server.verify();
+    }
+
+    @Test
+    void judgeNotesAreOneLineAndCapped() {
+        String note = BaseLlmClient.judgeNote("x".repeat(400), "bad\nline");
+        assertTrue(note.length() <= BaseLlmClient.JUDGE_NOTE_MAX, note);
+        assertFalse(note.contains("\n"));
+        assertEquals(null, BaseLlmClient.judgeNote(null, "  "));
+    }
+
+    @Test
     void slotPromptAsksForVariedAngles() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

@@ -259,7 +259,7 @@ class BulletServiceTest {
                     ? batch(cand("Built a ledger service that settles payouts nightly."))
                     : batch(cand("Ingested exchange fills from three brokers into one schema."));
         });
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend", "data"), ProgressLog.noOp());
 
@@ -301,13 +301,13 @@ class BulletServiceTest {
     }
 
     /** Scores by candidate text: "Cut" 5, "Built" 4, anything else 1. Works for any presented order. */
-    private void stubScores(org.mockito.stubbing.Answer<List<Integer>> answer) {
+    private void stubScores(org.mockito.stubbing.Answer<List<LlmClient.JudgeScore>> answer) {
         when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(answer);
     }
 
-    private static List<Integer> scoreByPrefix(org.mockito.invocation.InvocationOnMock inv) {
+    private static List<LlmClient.JudgeScore> scoreByPrefix(org.mockito.invocation.InvocationOnMock inv) {
         List<LlmClient.Candidate> cs = inv.getArgument(1);
-        return cs.stream().map(c -> c.text().startsWith("Cut") ? 5 : c.text().startsWith("Built") ? 4 : 1).toList();
+        return cs.stream().map(c -> new LlmClient.JudgeScore(c.text().startsWith("Cut") ? 5 : c.text().startsWith("Built") ? 4 : 1)).toList();
     }
 
     @Test
@@ -338,7 +338,7 @@ class BulletServiceTest {
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
                 new LlmClient.SlotCandidates(List.of(
                         new LlmClient.Candidate("Cut payout latency 40% by batching settlements.", List.of(), "outcome")), 1, 0));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
@@ -356,7 +356,7 @@ class BulletServiceTest {
                 .thenReturn(new LlmClient.SlotCandidates(cands, cands.size(), 0));
         when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
             List<LlmClient.Candidate> cs = inv.getArgument(1);
-            return cs.stream().map(x -> scoreByText.getOrDefault(x.text(), 1)).toList();
+            return cs.stream().map(x -> new LlmClient.JudgeScore(scoreByText.getOrDefault(x.text(), 1))).toList();
         });
         return service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())
                 .stream().map(Bullet::getText).toList();
@@ -423,7 +423,7 @@ class BulletServiceTest {
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(batch(cand(built, "Go"), cand(reduced), cand(cut)));
         // Top list in code order is cut, reduced, built. The second run is reversed: built, reduced, cut.
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(), List.of(4, 1, 5));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(), List.of(new LlmClient.JudgeScore(4), new LlmClient.JudgeScore(1), new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
@@ -443,7 +443,7 @@ class BulletServiceTest {
         // a and b tie at 5 and nearly repeat each other; c is one point lower and differs.
         stubScores(inv -> {
             List<LlmClient.Candidate> cs = inv.getArgument(1);
-            return cs.stream().map(x -> x.text().startsWith("Reduced") ? 4 : 5).toList();
+            return cs.stream().map(x -> new LlmClient.JudgeScore(x.text().startsWith("Reduced") ? 4 : 5)).toList();
         });
 
         List<String> texts = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())
@@ -463,7 +463,7 @@ class BulletServiceTest {
         String cut = "Cut payout latency 40% by batching settlements.";
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(batch(cand("Built a ledger service in Go for payouts."), cand(cut)));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp());
 
@@ -516,7 +516,7 @@ class BulletServiceTest {
         when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any())).thenReturn(
                 batch(cand("Cut payout latency 40% by batching settlements.")),
                 batch(cand("Reduced reconciliation errors across regions.")));
-        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(5));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5)));
 
         List<Bullet> out = service.generateWordings(user, proj, st.getId(), List.of("data", "data"), List.of(), ProgressLog.noOp());
 
