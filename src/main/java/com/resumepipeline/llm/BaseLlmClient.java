@@ -530,18 +530,21 @@ public abstract class BaseLlmClient implements LlmClient {
                   - scale: the load, data size or users it ran at, when the evidence gives one;
                   - failure prevented: what broke or could have broken, and how it was kept from happening.
                 Start each wording with a different verb. No verb may open more than two of the wordings.
+                Label each wording with the angle it takes: outcome, decision, scale, or failure. Use
+                unknown when none of them fits.
 
                 Lens definition:
 
                 %s
                 """.formatted(story.id(), story.title(), evidence, written, count, lensDefinitions(List.of(lens)));
 
-        SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
-                "bullets", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
-                        "text", SchemaSpec.string(),
-                        "tags", SchemaSpec.array(SchemaSpec.string())
-                )), List.of("text", "tags")))
-        )), List.of("bullets"));
+        Map<String, SchemaSpec> wording = new LinkedHashMap<>();
+        wording.put("text", SchemaSpec.string());
+        wording.put("tags", SchemaSpec.array(SchemaSpec.string()));
+        wording.put("angle", SchemaSpec.string());
+        Map<String, SchemaSpec> props = new LinkedHashMap<>();
+        props.put("bullets", SchemaSpec.array(SchemaSpec.object(wording, List.of("text", "tags", "angle"))));
+        SchemaSpec schema = SchemaSpec.object(props, List.of("bullets"));
 
         progress.emit("Writing " + count + " wordings...");
         String json = callJsonWithRetry(generateModel(), prompt, schema, cfg.getTemperature(), progress, tokens, false, "Candidates");
@@ -567,11 +570,20 @@ public abstract class BaseLlmClient implements LlmClient {
             }
             List<String> tags = (b.tags == null ? List.<String>of() : b.tags).stream()
                     .filter(t -> KeywordScorer.mentions(text, t)).toList();
-            kept.add(new Candidate(text, tags));
+            kept.add(new Candidate(text, tags, normalizeAngle(b.angle)));
         }
         log.info("BULLET_SLOT story={} lens={} written={} kept={} in_tok={} out_tok={}",
                 story.id(), lens, raw.size(), kept.size(), tokens.getPromptTokens(), tokens.getCandidatesTokens());
         return new SlotCandidates(kept, raw.size(), raw.size() - kept.size());
+    }
+
+    /** The four angles a slot's wordings are asked to take; anything else, including "unknown", is null. */
+    static final java.util.Set<String> ANGLES = java.util.Set.of("outcome", "decision", "scale", "failure");
+
+    static String normalizeAngle(String raw) {
+        if (raw == null) return null;
+        String a = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        return ANGLES.contains(a) ? a : null;
     }
 
     /**
@@ -1914,7 +1926,7 @@ public abstract class BaseLlmClient implements LlmClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class BulletsEnvelope { public List<BulletJson> bullets; }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    protected static class BulletJson { public String text; public List<String> tags; public String storyId; public String lens; }
+    protected static class BulletJson { public String text; public List<String> tags; public String storyId; public String lens; public String angle; }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class StoriesEnvelope { public List<StoryJson> stories; }
     @JsonIgnoreProperties(ignoreUnknown = true)

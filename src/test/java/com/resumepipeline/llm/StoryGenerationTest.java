@@ -123,6 +123,32 @@ class StoryGenerationTest {
     }
 
     @Test
+    void candidatesCarryAGoodAngleAndDropAnUnknownOne() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GenerationConfig cfg = new GenerationConfig();
+        cfg.setWordFilterEnabled(false);
+        OpenCodeLlmClient client = new OpenCodeLlmClient(builder, "g", "m", "c", new GenerationConfigService(null) {
+            @Override public GenerationConfig get(UUID userId) { return cfg; }
+        });
+        server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
+                .andRespond(withSuccess("""
+                        {"choices":[{"message":{"content":"{\\"bullets\\":[{\\"text\\":\\"Cut payout latency by batching settlements nightly.\\",\\"tags\\":[],\\"angle\\":\\"outcome\\"},{\\"text\\":\\"Chose batch settlement over per-transfer writes for lower load.\\",\\"tags\\":[],\\"angle\\":\\"bogus\\"}]}"}}],
+                         "usage":{"prompt_tokens":10,"completion_tokens":5}}
+                        """, MediaType.APPLICATION_JSON));
+
+        LlmClient.GenerateBulletsRequest src = new LlmClient.GenerateBulletsRequest(UUID.randomUUID(),
+                LlmClient.SourceKind.PROJECT, "general", "Terminal", SOURCE, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, List.of(), List.of(), null);
+        LlmClient.SlotCandidates out = client.writeSlotCandidates(src,
+                new LlmClient.Story("s1", "Ledger", List.of("quote"), List.of("backend")),
+                "backend", 15, List.of(), ProgressLog.noOp(), new TokenAccumulator());
+
+        assertEquals(java.util.Arrays.asList("outcome", null), out.kept().stream().map(LlmClient.Candidate::angle).toList());
+        server.verify();
+    }
+
+    @Test
     void slotPromptAsksForVariedAngles() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:8080");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

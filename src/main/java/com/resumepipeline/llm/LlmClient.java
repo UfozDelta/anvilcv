@@ -159,8 +159,13 @@ public interface LlmClient {
     /** id: the model's own key ("s1"), only meaningful within one generation run. */
     record Story(String id, String title, List<String> evidence, List<String> lenses) {}
     record StoryResult(List<Story> stories, List<String> unsupportedLenses) {}
-    /** A wording that passed the code filter. Tags are the ones the bullet actually mentions. */
-    record Candidate(String text, List<String> tags) {}
+    /**
+     * A wording that passed the code filter. Tags are the ones the bullet actually mentions.
+     * {@code angle} is one of outcome, decision, scale, failure, or null when the model gave none.
+     */
+    record Candidate(String text, List<String> tags, String angle) {
+        public Candidate(String text, List<String> tags) { this(text, tags, null); }
+    }
     /** {@code written} is what the model returned; {@code kept} is what survived the filter. */
     record SlotCandidates(List<Candidate> kept, int written, int filtered) {}
 
