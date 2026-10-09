@@ -84,6 +84,10 @@ public class BulletService {
     static final int JUDGE_TOP_N = 5;
     /** Similarity to pick #1 costs this many judge points when choosing pick #2. */
     static final double VARIETY_PENALTY = 2.0;
+    /** Pick #2 must be less similar than this to pick #1 (wordings at or above it are near-twins). */
+    static final double ANGLE_SIMILARITY_MAX = 0.35;
+    /** Pick #2 may trail pick #1 by at most this many judge points. */
+    static final double PAIR_SCORE_MARGIN = 1.5;
     /** Code-score weights, 0-100 in total. Length fit is constant: every candidate reaching rating is in band. */
     static final int SCORE_LENGTH = 30;
     static final int SCORE_OUTCOME = 30;
@@ -823,19 +827,32 @@ public class BulletService {
                 runs == 2 && bests.get(0).equals(bests.get(1)));
 
         List<LlmClient.Candidate> out = new ArrayList<>();
-        out.add(top.get(first));
+        LlmClient.Candidate one = top.get(first);
+        out.add(one);
         if (KEEP_PER_SLOT >= 2) {
             int second = -1;
-            double secondScore = 0;
+            double secondVariety = 0;
+            int sameAngle = 0, nearTwin = 0, outOfMargin = 0;
             for (int i = 0; i < n; i++) {
-                if (i == first || avg[i] < avg[first] - 1.0) continue;
-                double v = avg[i] - VARIETY_PENALTY * BulletTextRules.similarity(top.get(i).text(), top.get(first).text());
-                if (second < 0 || v > secondScore) {
+                if (i == first) continue;
+                LlmClient.Candidate c = top.get(i);
+                if (avg[i] < avg[first] - PAIR_SCORE_MARGIN) { outOfMargin++; continue; }
+                double sim = BulletTextRules.similarity(c.text(), one.text());
+                if (sim >= ANGLE_SIMILARITY_MAX) { nearTwin++; continue; }
+                // A missing angle on either side cannot prove a difference, so similarity alone decides.
+                if (c.angle() != null && one.angle() != null && c.angle().equals(one.angle())) { sameAngle++; continue; }
+                double variety = avg[i] - VARIETY_PENALTY * sim;
+                if (second < 0 || avg[i] > avg[second] || (avg[i] == avg[second] && variety > secondVariety)) {
                     second = i;
-                    secondScore = v;
+                    secondVariety = variety;
                 }
             }
-            if (second >= 0) out.add(top.get(second));
+            if (second >= 0) {
+                out.add(top.get(second));
+            } else {
+                log.info("BULLET_PAIR story={} single: no second wording qualifies (same_angle={} near_twin={} out_of_margin={})",
+                        story.id(), sameAngle, nearTwin, outOfMargin);
+            }
         }
         return out;
     }

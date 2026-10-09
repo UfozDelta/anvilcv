@@ -22,6 +22,7 @@ import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -344,6 +345,71 @@ class BulletServiceTest {
         ArgumentCaptor<List<LlmClient.Candidate>> judged = ArgumentCaptor.forClass(List.class);
         verify(llm, atLeastOnce()).scoreCandidates(any(), judged.capture(), any(), any());
         assertEquals("outcome", judged.getValue().get(0).angle());
+    }
+
+    /** Runs one slot with these candidates and judge scores; returns the saved wordings in order. */
+    private List<String> slotWith(List<LlmClient.Candidate> cands, Map<String, Integer> scoreByText) {
+        UUID user = UUID.randomUUID(), proj = UUID.randomUUID();
+        stubStoryRun(user, proj);
+        when(llm.findStories(any(), any(), any())).thenReturn(new LlmClient.StoryResult(List.of(story("s1", "backend")), List.of()));
+        when(llm.writeSlotCandidates(any(), any(), any(), anyInt(), any(), any(), any()))
+                .thenReturn(new LlmClient.SlotCandidates(cands, cands.size(), 0));
+        when(llm.scoreCandidates(any(), any(), any(), any())).thenAnswer(inv -> {
+            List<LlmClient.Candidate> cs = inv.getArgument(1);
+            return cs.stream().map(x -> scoreByText.getOrDefault(x.text(), 1)).toList();
+        });
+        return service.generateBank(user, proj, List.of("backend"), ProgressLog.noOp())
+                .stream().map(Bullet::getText).toList();
+    }
+
+    private static final String PAIR_A = "Cut payout latency 40% by batching settlements.";
+
+    @Test
+    void pairKeepsADifferentAngleWordingThatIsNotATwin() {
+        String b = "Chose batch settlement over per-transfer writes for lower load.";
+        assertEquals(List.of(PAIR_A, b), slotWith(List.of(
+                new LlmClient.Candidate(PAIR_A, List.of(), "outcome"),
+                new LlmClient.Candidate(b, List.of(), "decision")), Map.of(PAIR_A, 5, b, 4)));
+    }
+
+    @Test
+    void pairRejectsTheSameAngle() {
+        String b = "Ran settlement batches at lower load with fewer retries.";
+        assertEquals(List.of(PAIR_A), slotWith(List.of(
+                new LlmClient.Candidate(PAIR_A, List.of(), "outcome"),
+                new LlmClient.Candidate(b, List.of(), "outcome")), Map.of(PAIR_A, 5, b, 4)));
+    }
+
+    @Test
+    void pairRejectsANearTwinEvenWithADifferentAngle() {
+        String twin = "Cut payout latency 40% by batching the settlement jobs.";
+        assertEquals(List.of(PAIR_A), slotWith(List.of(
+                new LlmClient.Candidate(PAIR_A, List.of(), "outcome"),
+                new LlmClient.Candidate(twin, List.of(), "decision")), Map.of(PAIR_A, 5, twin, 4)));
+    }
+
+    @Test
+    void pairWithUnknownAngleKeepsADistinctWording() {
+        String b = "Chose batch settlement over per-transfer writes for lower load.";
+        assertEquals(List.of(PAIR_A, b), slotWith(List.of(
+                new LlmClient.Candidate(PAIR_A, List.of(), null),
+                new LlmClient.Candidate(b, List.of(), null)), Map.of(PAIR_A, 5, b, 4)));
+    }
+
+    @Test
+    void pairWithUnknownAngleStillRejectsANearTwin() {
+        String twin = "Cut payout latency 40% by batching the settlement jobs.";
+        assertEquals(List.of(PAIR_A), slotWith(List.of(
+                new LlmClient.Candidate(PAIR_A, List.of(), "outcome"),
+                new LlmClient.Candidate(twin, List.of(), null)), Map.of(PAIR_A, 5, twin, 4)));
+    }
+
+    @Test
+    void pairIsSingleWhenNothingQualifies() {
+        String c = "Reduced reconciliation errors across regions.";
+        assertEquals(List.of(PAIR_A), slotWith(List.of(
+                new LlmClient.Candidate(PAIR_A, List.of(), "outcome"),
+                new LlmClient.Candidate(c, List.of(), "decision")), Map.of(PAIR_A, 5, c, 2)));
     }
 
     @Test
