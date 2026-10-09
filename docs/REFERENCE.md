@@ -37,13 +37,13 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
 ## Features
 
 **Bullet bank**
-- Story-based generation. `findStories` (one LLM call) picks the strongest pieces of work and tags
-  each with up to 3 of the four lenses (`ai-ml`, `backend`, `data`, `general`); evidence quotes not
-  found in the source are dropped. Each new story then runs one slot on its best lens: `story_candidates`
-  writes 15 wordings, code filters cut them, dedup drops repeats of the bank and of each other, a code
-  score (length, outcome, tech, fresh opener) picks the top 5, and the `story_judge` call picks 1-2.
-  Wordings of one story share a `story_id`; each kept story is saved as a `story` row (title,
-  evidence quotes, lenses). Old lens slugs (frontend, security, devops, systems, comms) map to `general`.
+- Story-based generation. One `findStories` call picks the strongest pieces of work and tags each
+  with up to 3 of the four lenses (`ai-ml`, `backend`, `data`, `general`); evidence quotes not found
+  in the source are dropped. Each new story is then one **slot** on its best lens, run by the
+  [story bank pipeline](#story-bank-pipeline). Each kept story is saved as a `story` row (title,
+  evidence quotes, lenses), and its wordings share its `story_id`. Retired lens slugs (`frontend`,
+  `security`, `devops`, `systems`, `comms`) map to `general`: V42 remapped the stored rows, and new
+  writes normalize the same way.
 - Reruns build on the bank. `findStories` is shown the live stories, storyless bullets as
   covered work, and dismissed stories (every wording rejected), and asks for up to
   `min(8, 12 - live)` new ones. A found story is dropped as a repeat if at least half of its
@@ -55,17 +55,31 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
   and not counted; a story whose wordings are all trashed is deleted and is never re-found.
 - Distinct progress messages when nothing is generated: no new stories, all duplicated, or bank
   full.
-- Project page: Bullets, Generate and Repo tabs. The header shows the story count (a warning under 3,
-  "Full" at 12). Every wording keeps an Edit control. Experiences edit title, company, location and dates
-  inline. The Repo tab keeps the tree, map and explorer.
+- Project and experience pages (`/projects/:id`, `/experiences/:id`): a header with the story count
+  (a warning under 3, "Full" at 12), a description block, and Bullets · Generate · Repo tabs.
+  - Bullets: wordings grouped under their story, sub-grouped by lens. Each wording can show its
+    angle (outcome, decision, scale, failure) and the judge's note, and its Edit control is always
+    there, whatever its status or lens. Trash is a soft delete (status `REJECTED`, hidden); Undo
+    restores the previous status once. Failed writes show an error line and leave the list as it was.
+  - Generate: three steps, Story -> Lens -> Generate. Pick *New stories* or one story, pick lenses
+    (repeats allowed, a lens the story does not carry is a weak fit), then run it as a background job
+    shown in the progress panel.
+  - Repo: the file tree and viewer, the repo map and the explorer. Experiences have it too, behind a
+    warning and an acknowledgement (see [What is stored and sent](#what-is-stored-and-sent)).
+  - Experiences edit title, company, location and dates inline (one *I currently work here* box
+    sets the end date to Present).
 - XYZ format, with the Y (a measured result) only when the source states it.
 - Deterministic filters: activity counts (commits, lines, tests...), filler sentences, numbers
-  absent from the source, and lengths outside the one-line / two-line bands (a dead zone between
-  is rejected; bands are per-user config, checked in rendered characters). One repair pass
-  rewrites what was cut on form.
-- Additive: generation never changes a bullet already in the bank, approved or not. If the
-  story pass returns unreadable JSON, the run fails (no per-lens fallback).
-- Triage workflow — every bullet is `PENDING`, `APPROVED`, or `REJECTED`.
+  absent from the source (unit-aware: `40%` needs a percentage in the source; spelled-out units such
+  as "3 million" or "5 seconds" count), banned openers, and lengths outside the one-line / two-line
+  bands (a dead zone between is rejected; bands are per-user config, checked in rendered characters).
+  The single-lens path (`POST /bullets/generate`) keeps one repair pass for what it cut on form; the
+  story pipeline has no repair pass.
+- Additive: generation never changes a bullet already in the bank, approved or not. If a story run
+  gets an unreadable reply, the run fails; slots already saved stay saved, and the job error says how
+  many wordings were saved. There is no per-lens fallback.
+- Triage: the stored statuses are `PENDING`, `APPROVED` and `REJECTED`. The UI shows `PENDING` as
+  Bullet and `APPROVED` as Approved; `REJECTED` is the trash and is hidden everywhere.
 - Manual create/edit/tag, plus a rule-based importer for pasting in an existing resume.
 
 **Tailoring pipeline**
@@ -80,6 +94,12 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
   opening verb within an entry, and unreviewed bullets with vanity counts skipped. An entry left
   with under 2 bullets is swapped for the next-best entry of the same kind (never a locked
   entry, the refit target, or one the kind floor needs).
+- Across the whole page, a verb opens at most 2 bullets as a soft preference (`VERB_PAGE_CAP`). The
+  selector looks at the next 3 ranks (`VERB_TIE_WINDOW`) and never passes over the top remaining
+  bullet for a weaker one outside that window. Only bullets it keeps count toward the page's verbs.
+- Two bullets of one story are not printed together by the automatic passes. The exception is
+  bullets you lock yourself: locked bullets are seeded without that check, so two locked wordings
+  of one story can both print.
 - LLM also picks the relevant skill categories and coursework per JD. Skills come only from your
   profile; skills rows and each project's tech line list JD keywords first. The ATS report counts
   keywords in bullets, every printed skills row (AI & Integrations included; an empty saved row
@@ -103,8 +123,8 @@ Full writeup: [github-repo-explorer.html](github-repo-explorer.html).
 
 - Connect a GitHub App with read-only access to the repos you pick, private included. See
   [GitHub App](#github-app).
-- Import a repo as a project, pinned to a commit. The Repo tab shows its tree and files beside
-  the bullet bank.
+- Import a repo as a project, pinned to a commit. The Repo tab shows its tree, the file viewer, the
+  repo map and the explorer. The bullet bank is on the Bullets tab.
 - A server-side explorer (an LLM tool loop over `list_tree` / `read_file` / `search_code` /
   `git_log`) fills project context from the code. It runs under step, file, token, and time budgets. Output is re-verified:
   evidence citing unread files is dropped, and sentences with numbers absent from the repo are
@@ -121,6 +141,14 @@ Full writeup: [github-repo-explorer.html](github-repo-explorer.html).
     flows.
   - Generation gets the overview plus the modules of the requested lenses' subsystems (or the
     subsystems you tick) as source material for the story pass.
+- <a id="what-is-stored-and-sent"></a>**What is stored and sent.** Stored on the project: the repo map
+  (module summaries, purposes, facts, flows) and `repo_evidence`, which holds the source lines the
+  explorer cites (up to 15 lines per claim, verbatim). Story evidence quotes and wording text are
+  stored too. The full repository is downloaded into memory for a run and is not written to disk.
+  Sent to the AI provider you configured: each top module's first source file (its head), the README,
+  the manifests, the explorer's file reads (up to 12,000 characters per read), and the source material
+  for bullet generation. The Repo tab for an experience shows this as a warning, and the explore and
+  map buttons stay disabled until you acknowledge it.
 
 **Jobs**
 - `/jobs` feed with remote, added-within, tech-stack chip, and "My skills" (stack overlaps your
@@ -328,11 +356,11 @@ stored key undecryptable — they have to be re-entered.
 | Path | Contents |
 |---|---|
 | `src/main/java/com/resumepipeline/` | Spring Boot backend |
-| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V41` |
+| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V43` |
 | `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
 | `src/main/resources/repo-explorer-instructions.md` | System prompt for the server-side repo explorer |
-| `src/test/java/` | ~535 backend tests |
+| `src/test/java/` | about 585 backend tests |
 | `frontend/` | React + Vite SPA |
 | `.github/workflows/ci.yml` | Maven job + Vite job |
 | `start.ps1`, `Dockerfile`, `compose.yml`, `pom.xml` | Build and run |
@@ -349,7 +377,7 @@ stored key undecryptable — they have to be re-entered.
 | `auth` | `SecurityConfig`, login/register, seed user runner, bucket4j register rate limit |
 | `profile` | One profile row per user — contact, education (JSONB), skill categories |
 | `project` | Projects and EXPERIENCE entries, plus the regex resume importer |
-| `bullet` | Bullet CRUD and parallel per-category generation |
+| `bullet` | Bullet CRUD, the story bank (`BulletService`: the per-slot pipeline, judge pairing and saving) |
 | `application` | `ApplicationService` (the pipeline), `BulletSelector`, `ApplicationRenderer` |
 | `llm` | `LlmClient` interface, `RoutingLlmClient`, provider clients, `KeywordScorer`, `BulletTextRules`, `CategoryLenses`, GitHub context fetch, token accounting |
 | `llm.settings` | `LlmSettings` entity + `SecretCipher` (AES-256-GCM) |
@@ -394,7 +422,7 @@ admin    GET /api/admin/stats  /logs  /bullet-measure-diagnostics
          GET /api/admin/eval/sets  /compare   POST /api/admin/eval/snapshot  /generate
          DELETE /api/admin/eval/sets/{id}
 github   GET /api/github/status  /connect  /callback  /repos      DELETE /api/github
-         POST /api/github/link           GET /api/github/projects/{id}/tree|file|map|bullet-sources
+         POST /api/github/link           GET /api/github/projects/{id}/tree|file|map|bullet-sources   (bullet-sources is still served; the UI no longer calls it)
          POST /api/github/projects/{id}/explore/submit[?rebuildMap=true]   (polls /api/projects/jobs/{jobId}/progress)
 ```
 
@@ -406,7 +434,64 @@ Session-cookie auth (`JSESSIONID`, httpOnly), BCrypt passwords, `/api/admin/**` 
 `/` landing, `/login`, `/register`, `/docs`, `/pricing`, and `/jobs` are public, as are the
 `/lab/*` UI prototypes (placeholder data, no API calls). `/projects`, `/experiences`,
 `/projects/:id`, `/experiences/:id`, `/new`, `/applications`, `/applications/:id`, `/flow`,
-`/profile`, `/settings`, `/admin`, `/upload` sit behind `RequireAuth`.
+`/profile`, `/settings`, `/admin`, `/upload` sit behind `RequireAuth`. The production pages never
+import from `frontend/src/lab/`; the lab prototypes are kept for reference and can be removed without
+touching production.
+
+### Story bank pipeline
+
+Entry point: `BulletService.generateBank` (used by `POST /stories/submit`, and by the eval dry run).
+`generateStories` runs `findStories` once, drops repeats, then runs one slot per new story on its
+best lens. Each slot is saved as soon as it finishes.
+
+Per slot (`runSlot`):
+
+1. **Write.** `writeSlotCandidates` asks for 15 wordings (`CANDIDATES_PER_SLOT`), each labelled with
+   one of four angles: `outcome`, `decision`, `scale`, `failure` (other labels become null). The prompt
+   asks for no verb to open more than two wordings; the code does not count that.
+2. **Code filter** (same call). Drops banned openers, activity counts (`vanityCount`), padded
+   sentences, numbers not in the source (unit-aware, including spelled-out units), and lengths outside
+   the bands. Tags are kept only if the bullet mentions them.
+3. **Dedup.** Against the bank, live and trashed, and against the wordings kept so far in the run
+   (`BulletTextRules.isNearDuplicate`: word overlap at 0.6, or the same numbers in different prose).
+4. **Code score**, 0-100 (`codeScore`): length 30 (constant, since every kept wording is in band),
+   outcome 30 when a number appears, 15 for a result verb without one, tech 20 when a tag is in the
+   project's tech stack, 10 for tags that are not, opener 20 (fresh), 10 (repeated in this batch), 0
+   (already in the bank). The top 5 (`JUDGE_TOP_N`) go to the judge; a slot with one candidate skips the
+   judge.
+5. **Judge** (`judgeTop`, `scoreCandidates`). Two runs over the top 5: one in a shuffle seeded from
+   the story and lens (so reruns match), one in reverse, so position bias cancels. Each run gives a
+   1-5 score and a short good/bad note per candidate, against a checklist (supported by the evidence,
+   concrete outcome or failure prevented, specific tech, one plain sentence, no inflated ownership).
+   Scores are averaged over the runs that were readable.
+6. **Pick #1** is the best average (ties go to the better code score). **Pick #2** must be within
+   `PAIR_SCORE_MARGIN` (1.5) of pick #1's average; have a different angle when both angles are known;
+   and have similarity below `ANGLE_SIMILARITY_MAX` (0.35). Among those, the one with the highest score
+   after the variety penalty (average minus `VARIETY_PENALTY`, 2.0, times similarity) wins. If none
+   qualifies, the slot keeps one wording and logs `BULLET_PAIR`.
+7. **Fallback.** If neither judge run is readable, the slot keeps the top two by code score, with no
+   notes. A slot with one candidate keeps it with no note.
+
+Constants and where they live: `BulletService` (`STORY_CAP` 12, `MAX_NEW_STORIES` 8,
+`MIN_OVERLAP_QUOTE` 40, `CANDIDATES_PER_SLOT` 15, `KEEP_PER_SLOT` 2, `JUDGE_TOP_N` 5,
+`VARIETY_PENALTY` 2.0, `ANGLE_SIMILARITY_MAX` 0.35, `PAIR_SCORE_MARGIN` 1.5, `SCORE_*`), `BaseLlmClient`
+(`JUDGE_NOTE_MAX` 300), `BulletSelector` (`VERB_PAGE_CAP` 2, `VERB_TIE_WINDOW` 3).
+
+Failure: a slot that throws stops the run. Earlier slots are already saved, and the job error reads
+`N wording(s) saved before the failure: <cause>` (`BulletService.PartialRunException`, whose cause is
+the original exception). A parse failure is not retried per lens; it fails the run the same way.
+
+Reading the logs (`BULLET_JUDGE`, `BULLET_PAIR`, `BULLET_SLOT` in the application log):
+- `BULLET_JUDGE story=… pick_code_rank=R runs=N agreed=B`: one line per judged slot. `R` is the code
+  rank of pick #1 among the top 5. A high share of `R=1` means the judge mostly agrees with the code
+  score (it may be rubber-stamping the top candidate). `agreed=false` means the two runs disagreed on
+  the best candidate; a high share means the judge is noisy. `runs=1` means one run was unreadable.
+- `BULLET_PAIR story=… single: no second wording qualifies (…)`: logged only when no second wording
+  qualified. A slot that kept two wordings logs no `BULLET_PAIR` line, so the single-wording rate is
+  the count of these lines over the count of slots that reached the judge.
+- `BULLET_SLOT story=… lens=… written=W kept=K`: the write and filter stage for one slot.
+- `BULLET_JUDGE_FAILED` and `BULLET_JUDGE_MISMATCH`: a judge call failed, or its reply did not line up
+  with the candidates.
 
 ### Async model
 
@@ -423,7 +508,7 @@ jobs, and it does not survive horizontal scaling.
 | `app_user` | UUID pk, unique username/email, bcrypt hash, `is_admin` |
 | `profile` | one per user; education JSONB, five skill-category columns (one renders as "AI & Integrations") |
 | `project` | `kind` = PROJECT \| EXPERIENCE; GitHub URL + repo context; enrichment fields (tech stack, role, ownership, scale/impact, hardest problem) |
-| `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED, `story_id` (groups wordings of one story; FK to `story`, deferred, on delete set null) — cascades from project |
+| `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED (REJECTED is the trash), `story_id` (groups wordings of one story; FK to `story`, deferred, on delete set null), `angle` (outcome/decision/scale/failure, nullable, V43), `judge_note` (the judge's good/bad note, nullable, V43; edits and refits keep it) — cascades from project |
 | `story` | one per kept story: title, `evidence[]` quotes, `lenses[]`; app-assigned id, cascades from project. V41 backfilled rows for existing story ids |
 | `application` | JD text/URL, ranking JSONB, selected bullet IDs, cover letter, ATS matched/missing, `tex_blob` + `pdf_blob`, `pdf_stale` + `pdf_stale_seq`, tectonic log, token counts and cost, pipeline duration |
 | `outcome_history` | one row per outcome change — feeds the sankey; cascades from application |
@@ -439,7 +524,9 @@ jobs, and it does not survive horizontal scaling.
 `repo_evidence` (JSON of the explorer's verified spans, used for bullet tracing), and
 `repo_map` (JSON repo map for that commit, reused until it changes).
 
-Flyway owns the schema (`out-of-order: true`); JPA only validates it.
+Flyway owns the schema (`out-of-order: true`); JPA only validates it (`ddl-auto: validate`). Migrations
+V37-V43 are the story bank: V37 `bullet.story_id`, V38 eval sets, V39-V40 PDF staleness, V41 `story`,
+V42 remaps lenses to the four current ones, V43 `bullet.angle` and `bullet.judge_note`.
 
 ---
 
@@ -453,7 +540,7 @@ cd frontend && npm test     # vitest run
 Backend tests are all fast units — Mockito service tests plus `@WebMvcTest` slices. No
 Testcontainers, no `@SpringBootTest`, **no database needed**. Heaviest coverage sits on
 `BulletTextRules`, `KeywordScorer`, `LatexEscaper`, `BulletSelector`, and `ApplicationService`.
-Frontend coverage is thin: 6 files, 71 tests.
+Frontend: 8 files, 108 tests (`vitest run`). Backend: about 585 test cases.
 
 CI runs on push to `main` and on every PR — Temurin 21 + `mvn -B verify`, and Node 20 +
 `npm ci && npm test && npm run build`.
@@ -529,3 +616,24 @@ cd frontend && npm run build       # dist/ and a copy into src/main/resources/st
     is stated as fact except the counts, and each count names what it counted.
 18. **Big repos:** the tarball is capped at 100 MB compressed, and the snapshot keeps 25 MB of
     text. Past that, files are dropped and the map says `(repo truncated)`.
+19. **V43 must be applied before this code runs.** It adds `bullet.angle` and `bullet.judge_note`.
+    Hibernate runs with `ddl-auto: validate`, so the app will not start against a database that lacks
+    these columns. V43 has not been applied to any database yet.
+
+## Known limitations
+
+- **Repo map numbers.** The map's unsourced-number check runs over a corpus of bare numbers, so a map
+  sentence with a unit ("600 seconds", "90%") is cut unless the unit appears in that corpus. Fixing it
+  properly means building the corpus from source text.
+- **Judge cost.** A slot with two or more candidates makes two judge calls, so judge cost is roughly
+  doubled. The two runs are sequential; they are not parallelised.
+- **Locked bullets.** Two locked wordings from one story can print together (see the selector notes).
+- **Context fields have no editing UI.** Tech stack, role, ownership, scale and impact come from the
+  GitHub explorer. The Info & Context tab and its paste route were removed, so without GitHub there is
+  no way to enter them in the UI.
+- **Progress panel on phones.** The shared progress panel is inline-styled and may not wrap long log
+  lines on a phone.
+- **Off-band bullets.** Bullets outside the length bands (the dead zone, too long, or too short) are not
+  fixed automatically. Press REFIT on the project page to rewrite them.
+- **Visual check.** The new pages have not been compared by eye with the lab prototypes, and the phone
+  layout has not been checked on a device.

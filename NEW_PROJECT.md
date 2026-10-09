@@ -14,20 +14,21 @@ AnvilCV reads the repo itself and fills the project from what it finds.
    code depends on them, facts counted from the code (tests, endpoints,
    migrations), and summaries from modules up to subsystems, flows, and the
    project. Then a server-side agent uses the map to read the right files
-   and git history, and fills Info & Context. Every claim is re-checked
-   against what it actually read. Evidence citing a file it never opened is
-   dropped, and a sentence quoting a number that appears nowhere in the
-   repo is cut.
-5. **Generate bank**, then approve or reject. Each lens writes from its
-   own part of the map. Tick subsystems in the map to focus every lens on
-   them instead. Each bullet shows the files
-   and commits it traces to. Click one to open the cited lines.
+   and git history, and fills the project's context fields (tech stack, role,
+   ownership, scale and impact). Every claim is re-checked against what it
+   actually read. Evidence citing a file it never opened is dropped, and a
+   sentence quoting a number that appears nowhere in the repo is cut.
+5. **Generate, then approve or reject.** On the Generate tab, pick *New
+   stories* or one story, pick lenses, and run it. Wordings appear on the
+   Bullets tab, where you approve, edit or trash them. Each wording shows its
+   angle and, when the judge scored it, a short note on what the judge
+   liked and disliked.
 
 A field the explorer couldn't verify comes back empty rather than filled
 with something plausible-sounding. That's expected, not a bug. Re-run with
 notes or pins to point it at the right code.
 
 **No GitHub access?** (Code elsewhere, or the app isn't configured on your
-instance.) Run the extractor from
-[anvilcv-context-mcp](../anvilcv-context-mcp) in your own coding agent and
-paste its JSON into **Info & Context › Architecture & Context › paste**.
+instance.) The context fields have no editing UI right now: the Info & Context
+tab and its paste route were removed. See the known limitations in
+[the reference](docs/REFERENCE.md#known-limitations).

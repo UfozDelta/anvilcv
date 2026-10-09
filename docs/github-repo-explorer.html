@@ -81,7 +81,7 @@
     <div class="card"><h3>5 · Summaries</h3><p>Bottom-up, like CodeWiki / RepoAgent. The top 15 modules get what / how / why. Then the project gets an overview, its audience, 3-7 subsystems tagged with the lenses they feed, and 2-3 end-to-end flows. Cached per commit.</p></div>
     <div class="card"><h3>6 · Explorer</h3><p>LLM tool loop (<code>read_file</code>, <code>git_log</code>, <code>search_code</code>, <code>list_tree</code>) that sees the map first. Budgets on steps, files, tokens, and time. Ported from <code>anvilcv-context-mcp</code>'s instructions.</p></div>
     <div class="card"><h3>7 · Verify</h3><p>Citations to files it never read are dropped. Evidence text is re-sliced from the real file. Any sentence whose number appears nowhere in the code is cut. Blank fields keep what the user typed.</p></div>
-    <div class="card"><h3>8 · Generate</h3><p>Two calls. <code>findStories</code> picks the strongest work from the overview and the requested lenses' subsystems (or the ones you ticked); quotes not found in the source are dropped. <code>writeStoryBullets</code> writes one or two wordings per story and lens. Code then cuts vanity counts, filler, invented numbers, and bad lengths, with one repair pass. Approved bullets are never touched.</p></div>
+    <div class="card"><h3>8 · Generate</h3><p>One call picks the strongest work from the overview and the requested lenses' subsystems; quotes not found in the source are dropped. Each new story then gets a slot on its best lens: 15 candidate wordings from four angles (outcome, decision, scale, failure), code filters, dedup, a code score, and a recruiter judge run twice. One or two wordings are kept. Code cuts vanity counts, filler, invented numbers, and bad lengths. Approved bullets are never touched.</p></div>
     <div class="card"><h3>9 · Triage</h3><p>The Repo tab puts the file tree and map beside the bank. Each bullet shows its sources; click one to open the cited lines. Approve or reject inline.</p></div>
   </div>
 
@@ -119,7 +119,10 @@
     <tr><td><code>POST /api/github/link</code></td><td>Create or re-point a project at a repo commit</td></tr>
     <tr><td><code>GET /api/github/projects/{id}/tree · file · map · bullet-sources</code></td><td>Side-loaded repo view</td></tr>
     <tr><td><code>POST /api/github/projects/{id}/explore/submit[?rebuildMap=true]</code></td><td>Async map + explore job (polls the existing progress endpoint)</td></tr>
-    <tr><td><code>POST /api/projects/{id}/bullets/generate-bank/submit</code></td><td>Now accepts optional <code>subsystems</code></td></tr>
+    <tr><td><code>GET /api/projects/{id}/stories</code></td><td>Live stories and the cap</td></tr>
+    <tr><td><code>POST /api/projects/{id}/stories/submit</code></td><td>New-stories job across all lenses (409 if busy or full)</td></tr>
+    <tr><td><code>POST /api/projects/{id}/stories/{storyId}/wordings/submit</code></td><td>More wordings for one story (400, 404 or 409 before the job starts)</td></tr>
+    <tr><td><s><code>POST /api/projects/{id}/bullets/generate-bank[/submit]</code></s></td><td>Removed</td></tr>
     <tr><td><s><code>GET /api/tools/context-agent[/prompt]</code></s></td><td>Removed</td></tr>
   </table>
   </div>
@@ -131,7 +134,7 @@
   <h3>Frontend</h3>
   <ul>
     <li>Settings: GitHub connection panel. Projects: <em>Import from GitHub</em>.</li>
-    <li>Project detail: new <strong>Repo</strong> tab with the file tree and viewer, the repo map (subsystems you can tick), steering controls, and the bank with source links.</li>
+    <li>Project and experience pages: Bullets, Generate (story, lens, generate) and Repo tabs. The Repo tab has the file tree and viewer, the repo map and the explorer. Experiences show a warning and need an acknowledgement before the explorer runs. The bank is on the Bullets tab; the bullet source links are no longer shown in the UI.</li>
   </ul>
 
   <h2>Setup</h2>

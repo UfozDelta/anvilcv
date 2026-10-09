@@ -13,7 +13,7 @@ Java 21, Spring Boot 3.4.0 [repo] (web, data-jpa, security, validation). Postgre
 
 **The prompt is the product.** `content_extract.md` is a 622-line LLM prompt that ships as a classpath resource, is served for download by `ToolsController`, and whose output is parsed back in by `frontend/src/lib/parseExtract.ts` into the app's own project-intake form — the tool that fills AnvilCV's fields is itself a shipped, versioned, unit-tested artifact of AnvilCV [repo].
 
-Paste a job description, get a one-page tailored resume PDF. The pipeline is: clean the JD with an LLM, cheap keyword prefilter over the bullet bank, expensive LLM ranking, selection under hard caps, LaTeX, tectonic, PDF — with the cover letter generated in parallel [repo]. 47 REST endpoints across the controllers (21 GET, 16 POST, 5 PUT, 3 DELETE, 2 PATCH) over 9 JPA entities [repo]. Bullet generation fans out across eight hand-authored "category lenses" on virtual threads, each lens a paragraph of prompt text naming the techniques and units that lens should quantify with [repo]. Selection is a constrained pack, not a top-N: `MAX_TOTAL = MAX_ENTRIES * 3`, `MAX_PER_PROJECT = 3`, `MAX_TOTAL_LINES = 29`, with floors of 2 experience and 3 project entries, and bullets sorted by marginal gain rather than absolute score because a resume is read as a set [repo]. Async throughout: submit returns a job UUID, the client polls; job progress is deliberately in-memory, which the README itself names as the limit on multi-instance deploys [repo].
+Paste a job description, get a one-page tailored resume PDF. The pipeline is: clean the JD with an LLM, cheap keyword prefilter over the bullet bank, expensive LLM ranking, selection under hard caps, LaTeX, tectonic, PDF — with the cover letter generated in parallel [repo]. 47 REST endpoints across the controllers (21 GET, 16 POST, 5 PUT, 3 DELETE, 2 PATCH) over 9 JPA entities [repo]. Bullet generation finds stories in one LLM call, then runs a slot per story (15 candidate wordings, code filters, a two-run recruiter judge, one or two kept) across four lenses [repo]. Selection is a constrained pack, not a top-N: `MAX_TOTAL = MAX_ENTRIES * 3`, `MAX_PER_PROJECT = 3`, `MAX_TOTAL_LINES = 31`, with floors of 2 experience and 3 project entries, and bullets sorted by marginal gain rather than absolute score because a resume is read as a set [repo]. Async throughout: submit returns a job UUID, the client polls; job progress is deliberately in-memory, which the README itself names as the limit on multi-instance deploys [repo].
 
 # Your Role
 → AnvilCV field: **yourRole**
@@ -29,10 +29,10 @@ Sole author. First-person: I built AnvilCV end-to-end — Spring Boot backend, R
 # What You Owned End-to-End
 → AnvilCV field: **ownership**
 
-- **Bullet selection engine** (`BulletSelector`) — built greenfield. Constrained pack under simultaneous caps: 15 bullets, 3 per project, 29 rendered lines, floors of at least 2 experience and 3 project entries. Ranks by *marginal* gain rather than absolute score [repo].
+- **Bullet selection engine** (`BulletSelector`) — built greenfield. Constrained pack under simultaneous caps: 15 bullets, 3 per project, 31 rendered lines, floors of at least 2 experience and 3 project entries. Ranks by *marginal* gain rather than absolute score [repo].
 - **Rendered-length model** (`BulletTextRules`, `GenerationConfig`) — optimized existing. Words are converted to characters at `CHARS_PER_WORD = 5.4` and checked against `CHARS_PER_LINE = 105`, both measured off a compiled `resume.tex` PDF rather than guessed [repo].
 - **Keyword prefilter** (`KeywordScorer`) — rebuilt. n-gram normalisation up to `MAX_NGRAM = 3` with an alias table, so "Kubernetes"/"K8s", "PostgreSQL"/"Postgres", "Node.js"/"NodeJS" match, and "CI/CD" matches at all — the javadoc records that punctuation "previously matched nothing" [repo].
-- **Eight category lenses plus a 428-line `tech-terms.txt`** — authored, not coded. Hand-built domain modelling: per-lens prompt paragraphs naming techniques and units, and a curated canonical-casing allowlist matched longest-term-first, extendable with no code change [repo].
+- **Four category lenses plus a 428-line `tech-terms.txt`** — authored, not coded. Hand-built domain modelling: per-lens prompt paragraphs naming techniques and units, and a curated canonical-casing allowlist matched longest-term-first, extendable with no code change [repo].
 - **`content_extract.md` as a shipped feature** — built greenfield. Classpath resource, `ToolsController` download endpoint, `parseExtract.ts` parser, intake form, with `parseExtract.test.ts` covering the round trip [repo].
 - **Multi-provider LLM layer** — integrated third-party. Three clients behind one interface plus `RoutingLlmClient`, per-call model selection, retry, and executor timeout; token and USD cost logged per application in `llm_usage_log` [repo].
 - **Schema** — 22 Flyway migrations including a user-isolation migration (V7) and a backfill (V18); `ddl-auto: validate` keeps entities honest [repo].
@@ -47,10 +47,10 @@ Not claimed: nothing was subtracted. Phase 2d enumerated all 14 top-level paths 
 - 47 REST endpoints, 9 JPA entities, 22 Flyway migrations [repo]
 - ~7,988 lines of Java across 76 files; ~4,710 lines of TypeScript across 46 files [repo]
 - 28 backend test classes plus 4 frontend Vitest suites [repo]
-- 8 category lenses; 428-line curated technology term list [repo]
+- 4 category lenses; 428-line curated technology term list [repo]
 - 3 LLM providers behind 1 interface [repo]
 - 104 commits over 3.5 months, 2026-05-15 to 2026-08-30 [repo]
-- Config-pinned limits: Hikari pool 5, LLM timeout 30s, register rate limit 5 per IP, JVM container cap 3 GB, selection caps 15 bullets / 3 per project / 29 lines [repo]
+- Config-pinned limits: Hikari pool 5, LLM timeout 30s, register rate limit 5 per IP, JVM container cap 3 GB, selection caps 15 bullets / 3 per project / 31 lines [repo]
 - SSE removal: 100 insertions against 414 deletions, net minus 314 lines, `SseUtils.java` (43 lines) deleted outright [diff]
 - Refit/repair rework `0c49246`: 1,105 insertions against 1,395 deletions — a net deletion of 290 lines while adding a 182-line test [diff]
 
