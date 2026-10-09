@@ -201,9 +201,9 @@
 }
 @media (prefers-reduced-motion: reduce) { .ps-spin { animation-duration: 1.5s; } }
 
-/* Experience header form: two columns, one under 640px. */
+/* Experience header form: two columns, one under the lab's 560px breakpoint. */
 .sf-meta__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
-@media (max-width: 639px) { .sf-meta__grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .sf-meta__grid { grid-template-columns: 1fr; } }
 
 /* List stack cell: two lines, then "+N". */
 .pj-stack { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -211,3 +211,16 @@
 
 /* Experience slug under the role in the list. */
 .ld-slug { font-family: var(--mono); font-size: 11px; }
+
+/* ── Mobile layout. Breakpoints are the lab's: 860 Generate collapses (flow.css), 760 page padding
+   (project-detail.css), 560 one column and the 16px input floor. ── */
+.sf-page, .pl-page { min-width: 0; }
+.sf-opt__name, .sf-group__name { overflow-wrap: anywhere; min-width: 0; }
+@media (max-width: 560px) {
+  .sf-tabs { display: flex; }
+  .sf-tabs button { flex: 1 1 0; min-width: 0; min-height: 44px; }
+}
+
+/* The bullet render frame: full width, and 80% of the visible viewport (dvh) where the browser has it. */
+.sf-render { display: block; width: 100%; max-width: 100%; height: min(900px, 80vh); height: min(900px, 80dvh);
+  border: 2px solid var(--ink); background: #fff; margin-bottom: 16px; }

@@ -80,7 +80,7 @@ export function Projects() {
   const openImport = () => { setShowForm(false); setImporting(true); };
 
   return (
-    <div className="shell ap-page">
+    <div className="shell ap-page pl-page">
       <PageTitle
         title="Projects"
         count={has && <><strong>{rows.length}</strong> project{rows.length === 1 ? '' : 's'} · <strong>{rows.reduce((n, r) => n + (r.bulletCount ?? 0), 0)}</strong> bullets in your bank</>}

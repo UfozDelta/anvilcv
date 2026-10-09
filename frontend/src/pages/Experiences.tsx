@@ -72,7 +72,7 @@ export function Experiences() {
   const has = rows.length > 0;
 
   return (
-    <div className="shell ap-page">
+    <div className="shell ap-page pl-page">
       <PageTitle
         title="Experiences"
         count={has && <><strong>{rows.length}</strong> role{rows.length === 1 ? '' : 's'} · <strong>{rows.reduce((n, r) => n + (r.bulletCount ?? 0), 0)}</strong> bullets in your bank</>}

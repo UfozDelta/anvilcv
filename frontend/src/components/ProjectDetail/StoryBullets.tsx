@@ -50,7 +50,7 @@ export function StoryBullets({ cfg, sb }: { cfg: GenerationConfig; sb: SB }) {
       {sb.error && <div className="err" style={{ marginBottom: 10 }}>{sb.error}</div>}
       {sb.pdf.err && <div className="err" style={{ marginBottom: 10 }}>{sb.pdf.err}</div>}
       {sb.pdf.url && (
-        <iframe src={sb.pdf.url} title="bullet render" style={{ width: '100%', height: 'min(900px, 80vh)', border: '2px solid var(--ink)', background: '#fff', marginBottom: 16 }} />
+        <iframe src={sb.pdf.url} title="bullet render" className="sf-render" />
       )}
       {adding && (
         <AddWording onCancel={() => setAdding(false)}
