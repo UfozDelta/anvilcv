@@ -299,6 +299,31 @@ class ApplicationServiceTest {
         }
 
         @Test
+        void generalistOverrideGivesNoBias() {
+            when(llm.cleanJd(any(), any(), any())).thenReturn(
+                    new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
+            ArgumentCaptor<LlmClient.RankRequest> cap = ArgumentCaptor.forClass(LlmClient.RankRequest.class);
+            crossLensPair();
+
+            Application out = service.create(user, "jd text", null, "generalist", false, ProgressLog.noOp());
+
+            verify(llm).rankBullets(cap.capture(), any(), any());
+            assertEquals("generalist", cap.getValue().roleEmphasis());
+            assertEquals("generalist", out.getRoleEmphasis());
+        }
+
+        @Test
+        void aLensOverrideSelectsThatLens() {
+            when(llm.cleanJd(any(), any(), any())).thenReturn(
+                    new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("data")));
+            crossLensPair();
+
+            Application out = service.create(user, "jd text", null, "backend", false, ProgressLog.noOp());
+
+            assertEquals("backend", out.getRoleEmphasis());
+        }
+
+        @Test
         void noLensFallsBackToGeneralist() {
             crossLensPair();
             Application out = service.create(user, "jd text", null, "  ", false, ProgressLog.noOp());
@@ -316,8 +341,8 @@ class ApplicationServiceTest {
 
             ArgumentCaptor<LlmClient.RankRequest> cap = ArgumentCaptor.forClass(LlmClient.RankRequest.class);
             verify(llm).rankBullets(cap.capture(), any(), any());
-            assertEquals("general", cap.getValue().roleEmphasis());
-            assertEquals("general", out.getRoleEmphasis());
+            assertEquals("generalist", cap.getValue().roleEmphasis());
+            assertEquals("generalist", out.getRoleEmphasis());
         }
 
         @Test
