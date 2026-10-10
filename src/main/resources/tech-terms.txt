@@ -426,3 +426,40 @@ SendGrid
 Auth0
 Clerk
 Keycloak
+
+# --- mechanical engineering (CAD, simulation, manufacturing, test) ---
+# Kept free of ordinary words ("Lean", "Fusion", "Creo" is a product) so a software stack never trips them.
+SolidWorks
+CATIA
+Siemens NX
+NX
+Creo
+Autodesk Inventor
+Fusion 360
+AutoCAD
+Onshape
+Rhino
+KeyShot
+ANSYS
+Abaqus
+COMSOL
+OpenFOAM
+SimScale
+Simulink
+LabVIEW
+Fluent
+Mastercam
+Fusion360
+GD&T
+DFMEA
+FMEA
+DFM
+DFA
+FEA
+CFD
+CAD
+CAM
+CNC
+PLM
+Six Sigma
+3D printing

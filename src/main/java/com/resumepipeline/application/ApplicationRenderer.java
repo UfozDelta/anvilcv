@@ -77,8 +77,18 @@ public class ApplicationRenderer {
                 Map.entry("SKILLS_FRAMEWORKS",selectedSkillValue(selectedSkills, "frameworks", p.getSkillsFrameworks())),
                 Map.entry("SKILLS_DATABASES", selectedSkillValue(selectedSkills, "databases", p.getSkillsDatabases())),
                 Map.entry("SKILLS_DEVOPS",    selectedSkillValue(selectedSkills, "devops", p.getSkillsDevops())),
-                Map.entry("SKILLS_INTERESTS", escapeRich(p.getSkillsInterests()))
+                Map.entry("SKILLS_INTERESTS", escapeRich(p.getSkillsInterests())),
+                Map.entry("SKILL_LABEL_LANGUAGES",  skillLabel(p, 0)),
+                Map.entry("SKILL_LABEL_FRAMEWORKS", skillLabel(p, 1)),
+                Map.entry("SKILL_LABEL_DATABASES",  skillLabel(p, 2)),
+                Map.entry("SKILL_LABEL_DEVOPS",     skillLabel(p, 3)),
+                Map.entry("SKILL_LABEL_INTERESTS",  skillLabel(p, 4))
         ));
+    }
+
+    /** The printed label of skills row {@code i} for the profile's field, LaTeX-escaped. */
+    private String skillLabel(Profile p, int i) {
+        return escapePlain(p.getField().preset().skillLabels().get(i));
     }
 
     /**
@@ -118,7 +128,12 @@ public class ApplicationRenderer {
                 Map.entry("SKILLS_FRAMEWORKS",""),
                 Map.entry("SKILLS_DATABASES", ""),
                 Map.entry("SKILLS_DEVOPS",    ""),
-                Map.entry("SKILLS_INTERESTS", "")
+                Map.entry("SKILLS_INTERESTS", ""),
+                Map.entry("SKILL_LABEL_LANGUAGES",  ""),
+                Map.entry("SKILL_LABEL_FRAMEWORKS", ""),
+                Map.entry("SKILL_LABEL_DATABASES",  ""),
+                Map.entry("SKILL_LABEL_DEVOPS",     ""),
+                Map.entry("SKILL_LABEL_INTERESTS",  "")
         ));
     }
 

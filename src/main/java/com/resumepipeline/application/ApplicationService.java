@@ -52,12 +52,16 @@ public class ApplicationService {
     // restart mid-pass just leaves the page unscored, which the Re-score button already covers.
     private final Set<UUID> scoring = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-    private static final Map<String, String> SKILL_LABELS = Map.of(
-            "languages",  "Languages",
-            "frameworks", "Frameworks",
-            "databases",  "Databases \\& AI",
-            "devops",     "DevOps \\& Tools"
-    );
+    /** The printed (LaTeX-escaped) label of a selectable skills row, for the field's preset. */
+    private static String skillLabel(com.resumepipeline.field.Field field, String key) {
+        int i = switch (key) {
+            case "languages" -> 0;
+            case "frameworks" -> 1;
+            case "databases" -> 2;
+            default -> 3;   // devops
+        };
+        return com.resumepipeline.field.Field.orDefault(field).preset().skillLabels().get(i).replace("&", "\\&");
+    }
 
     public ApplicationService(ApplicationRepository repo, OutcomeHistoryRepository outcomeHistoryRepo,
                               BulletRepository bulletRepo,
@@ -294,7 +298,7 @@ public class ApplicationService {
                     + String.join(", ", inventedSkills));
         }
         Map<String, List<String>> floorFilledSkills = BulletSelector.fillSkills(profileSkills, rawSkills);
-        Map<String, List<String>> filledSkills = stretchSkillsToWidth(floorFilledSkills, rawSkills, clean.keywords());
+        Map<String, List<String>> filledSkills = stretchSkillsToWidth(floorFilledSkills, rawSkills, clean.keywords(), field);
         progress.emit("Skills filled: languages=" + filledSkills.get("languages").size()
                 + " fw=" + filledSkills.get("frameworks").size()
                 + " db=" + filledSkills.get("databases").size()
@@ -983,7 +987,8 @@ public class ApplicationService {
      */
     private Map<String, List<String>> stretchSkillsToWidth(Map<String, List<String>> floorFilled,
                                                             Map<String, List<String>> rawSkills,
-                                                            List<String> keywords) {
+                                                            List<String> keywords,
+                                                            com.resumepipeline.field.Field field) {
         Map<String, List<String>> candidates = new LinkedHashMap<>();
         for (String key : BulletSelector.SKILL_KEYS) {
             // Keyword-first across the whole pool, so a JD-matched profile skill outranks an
@@ -998,7 +1003,7 @@ public class ApplicationService {
             int floorCount = floorFilled.getOrDefault(key, List.of()).size();
             for (int count = Math.max(floorCount, 1); count <= seq.size(); count++) {
                 rows.put(key + "_" + count,
-                        new SkillRowMeasurer.Row(SKILL_LABELS.get(key), String.join(", ", seq.subList(0, count))));
+                        new SkillRowMeasurer.Row(skillLabel(field, key), String.join(", ", seq.subList(0, count))));
             }
         }
         if (rows.isEmpty()) return floorFilled;
