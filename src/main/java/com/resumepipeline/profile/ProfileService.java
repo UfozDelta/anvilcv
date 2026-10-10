@@ -3,6 +3,7 @@ package com.resumepipeline.profile;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.field.Field;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,18 @@ public class ProfileService {
             p.setUpdatedAt(Instant.now());
             return repo.save(p);
         });
+    }
+
+    /** The user's field. A user with no profile row yet is a software user. */
+    public Field field(UUID userId) {
+        return repo.findByUserId(userId).map(Profile::getField).orElse(Field.SOFTWARE);
+    }
+
+    public Profile setField(UUID userId, Field field) {
+        Profile p = get(userId);
+        p.setField(field);
+        p.setUpdatedAt(Instant.now());
+        return repo.save(p);
     }
 
     public Profile update(UUID userId, ProfileDto dto) {

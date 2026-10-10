@@ -47,6 +47,10 @@ public class Profile {
     // Legacy name: rendered as "AI & Integrations" (column/field kept to avoid a migration).
     @Column(name = "skills_interests",  nullable = false) private String skillsInterests  = "";
 
+    /** software | mechanical | other. Not part of the profile form: it has its own endpoint. */
+    @Column(nullable = false)
+    private String field = "software";
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -76,6 +80,8 @@ public class Profile {
     public void setSkillsDatabases(String s) { this.skillsDatabases = s == null ? "" : s; }
     public String getSkillsDevops() { return skillsDevops; }
     public void setSkillsDevops(String s) { this.skillsDevops = s == null ? "" : s; }
+    public com.resumepipeline.field.Field getField() { return com.resumepipeline.field.Field.of(field); }
+    public void setField(com.resumepipeline.field.Field f) { this.field = (f == null ? com.resumepipeline.field.Field.SOFTWARE : f).slug(); }
     public String getSkillsInterests() { return skillsInterests; }
     public void setSkillsInterests(String s) { this.skillsInterests = s == null ? "" : s; }
     public Instant getUpdatedAt() { return updatedAt; }

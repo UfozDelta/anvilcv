@@ -91,4 +91,43 @@ class ProfileServiceTest {
         p.setEducation(null);
         assertEquals(List.of(), service.readEducation(p));
     }
+
+    @Test
+    void fieldDefaultsToSoftwareForAUserWithNoProfile() {
+        UUID user = UUID.randomUUID();
+        when(repo.findByUserId(user)).thenReturn(Optional.empty());
+
+        assertEquals(com.resumepipeline.field.Field.SOFTWARE, service.field(user));
+        verify(repo, never()).save(any());   // reading the field never creates a row
+    }
+
+    @Test
+    void settingTheFieldKeepsEverythingElseOnTheProfile() {
+        UUID user = UUID.randomUUID();
+        Profile existing = new Profile();
+        existing.setUserId(user);
+        existing.setName("Ada");
+        when(repo.findByUserId(user)).thenReturn(Optional.of(existing));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Profile saved = service.setField(user, com.resumepipeline.field.Field.MECHANICAL);
+
+        assertEquals(com.resumepipeline.field.Field.MECHANICAL, saved.getField());
+        assertEquals("Ada", saved.getName());
+    }
+
+    @Test
+    void savingTheProfileFormNeverResetsTheField() {
+        UUID user = UUID.randomUUID();
+        Profile existing = new Profile();
+        existing.setUserId(user);
+        existing.setField(com.resumepipeline.field.Field.MECHANICAL);
+        when(repo.findByUserId(user)).thenReturn(Optional.of(existing));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Profile saved = service.update(user, new ProfileService.ProfileDto(
+                "Ada", "555", "ada@x.com", "li", "gh", null, List.of(), "", "", "", "", ""));
+
+        assertEquals(com.resumepipeline.field.Field.MECHANICAL, saved.getField());
+    }
 }
