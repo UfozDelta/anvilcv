@@ -1,0 +1,39 @@
+
+─────────────────────────────────────────────────────────────
+## RECOVERY PASS
+
+Bullets must be EITHER 81-96 characters (fills 1 line) OR 170-200 characters (fills
+2 lines). The 104-163 character range is forbidden — it half-fills line 2. NEVER exceed
+200 characters — that spills onto a third line.
+
+Rewrite each bullet below so it lands in a valid band. Keep the same facts, metrics
+and technologies — change only the phrasing and the level of detail. Never invent a
+number to reach a length.
+
+  - A very long bullet.
+
+Each bullet below opens with a weak or passive phrase. Replace ONLY the opening so it
+starts with a strong action verb (Built, Designed, Shipped, Engineered, Implemented,
+Migrated, Integrated). Keep the level of ownership the original states — never turn a
+contribution into leadership. Keep the facts, metrics, technologies and length as
+they are — this is a verb fix, not a rewrite.
+
+  - Worked on the thing.
+
+Each bullet below cites a count of the author's own work (commits, lines of code,
+files, tests, tables, migrations, builds). Delete that count and keep the actual claim:
+what was built, how, and any result the source states. If nothing is left once the
+count is gone, drop the bullet.
+
+  - Shipped it in 120 commits.
+
+Each bullet below runs to extra sentences or a filler sentence ("This ensured...").
+Rewrite it as ONE sentence: keep the strongest facts, drop the restatement.
+
+  - Built a cache. This ensured speed.
+
+Also write 2 additional NEW bullet(s) covering work from the source material that the
+accepted bullets above do not yet cover. If the source does not support that many,
+write fewer — never invent work to reach a count.
+
+Return the rewritten bullets and any new bullets together in the bullets array.

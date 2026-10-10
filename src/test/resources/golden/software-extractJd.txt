@@ -1,0 +1,12 @@
+=== system ===
+You are a JSON-only assistant. Respond with a single valid JSON object matching exactly this shape — no prose, no markdown fences:
+=== user ===
+Extract structured fields from this job description.
+  - company: the hiring company name.
+  - role: the job title.
+  - keywords: 8-20 specific technical keywords ATS systems would look for (technologies, frameworks, methodologies). No soft skills.
+  - lenses: the 1-2 engineering areas this role leans toward, best first, chosen ONLY from: ai-ml, backend, data, general. Use general when the role is not mainly AI/ML, backend or data.
+
+JD:
+Backend engineer, Java.
+

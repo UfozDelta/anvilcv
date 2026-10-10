@@ -1,0 +1,73 @@
+=== system ===
+You are a JSON-only assistant. Respond with a single valid JSON object matching exactly this shape — no prose, no markdown fences:
+=== user ===
+## PROJECT SOURCE MATERIAL
+
+Project name: Ledger
+
+Project description:
+Settles payouts nightly.
+
+Architecture overview & evidence:
+Architecture notes.
+
+Tech stack: Java 21, PostgreSQL
+Your role: Owner
+
+What you owned:
+The settlement job
+
+Scale & impact: 4 regions
+
+Hardest problem solved:
+Idempotent retries
+
+Key technical decisions — and the failures they prevented:
+Chose batch over streaming
+
+Who it served & why it mattered: Finance team
+
+Security & compliance posture:
+SOC 2
+
+─────────────────────────────────────────────────────────────
+## TASK — pick the stories
+
+You are choosing what a resume should say about this project. Pick up to 8 NEW STORIES from
+the source material above: distinct pieces of work a hiring manager would want to ask
+about in an interview — a hard problem solved, a system built for real users, a design
+decision with a clear tradeoff, a measured result.
+
+For each story return:
+  - id: "s1", "s2", ...
+  - title: one plain line naming the work (not a resume bullet).
+  - evidence: 1 to 4 short quotes copied EXACTLY from the source material above that
+    prove the story, including every number a bullet about it could cite. Copy
+    character for character; do not paraphrase, merge or tidy. Only the source
+    material counts — not your own knowledge. Quotes not found in it are discarded.
+  - lenses: 1 to 3 of these lens slugs, and only these, best fit first: backend, data. Tag a lens only when a
+    reviewer for that role would genuinely care about this work. A requested lens that
+    no story fits should stay untagged — never stretch a story to cover it.
+
+Rules:
+  - Up to 8 new stories. Never repeat or split work listed as already in the bank.
+  - Aim for 3 or more stories in total, the bank's included, only if the source supports them; a small project may have fewer. Fewer or none is valid.
+  - Fewer, stronger stories beat more. Two stories about the same work are one story.
+  - Skip routine work every project has (CRUD screens, login, config, setup, a plain
+    test suite or CI) unless the source shows something unusual about it.
+  - Activity counts (commits, lines of code, files, tests, tables, migrations) are
+    never a story and never evidence of impact.
+
+Lens definitions:
+
+LENS: Backend & Data Architecture.
+Covers: services, APIs, data models and storage behind a product.
+A reviewer for this role looks for: design decisions and their tradeoffs, correctness
+under failure (consistency, idempotency, migrations), and performance at the scale
+the source states.
+
+LENS: Data Engineering.
+Covers: getting data in, cleaning it, transforming it and serving it for analysis.
+A reviewer for this role looks for: sources and volume, how data quality was enforced,
+and what the pipeline made possible downstream.
+
