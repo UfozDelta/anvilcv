@@ -37,7 +37,15 @@ public final class BulletTextRules {
     // number: a currency/percent/plus marker, a time unit, a multiplier, or a magnitude
     // suffix. "s"/"ms"/"x" and the magnitudes need a word boundary, so "64K" and "3 x"
     // read as quantities while "S3 buckets", "2dsphere" and "Java 17 stack" do not.
-    private static final String UNIT = "(?:%|\\+|(?:ms|min|hr|h|s|[xXkKmMbB])\\b)";
+    // Engineering units (MULTI_FIELD_PLAN step 1): an invented "500 psi" or "0.05 mm" is as made-up as
+    // "200ms". Deliberately left out: "in" and "bar" (ordinary words), "m" and "K" (already the
+    // million and thousand suffixes). A bare capital N counts only when no letter follows it.
+    private static final String ENGINEERING_UNIT =
+            "(?:(?i:psi|mpa|kpa|gpa|rpm|mm|cm|kg|lbs?|kw|hp|hz|khz|mhz|ghz|mph|nm|kn|lbf)|N|\u00B0[CF])(?![A-Za-z])";
+    private static final String UNIT = "(?:%|\\+|(?:ms|min|hr|h|s|[xXkKmMbB])\\b|" + ENGINEERING_UNIT + ")";
+    private static final Set<String> ENGINEERING_CLASSES = Set.of(
+            "psi", "mpa", "kpa", "gpa", "rpm", "mm", "cm", "kg", "lb", "lbs", "kw", "hp", "hz", "khz", "mhz", "ghz",
+            "mph", "nm", "kn", "lbf", "n", "\u00B0c", "\u00B0f");
     // $-prefixed or unit-bearing digit run. The unit may be glued on (group 3) or one
     // space away (group 4, matched inside a lookahead so it stays out of the reported
     // token). Everything else is skipped — see fabricatedNumbers.
@@ -211,11 +219,14 @@ public final class BulletTextRules {
         if (unit.equals("ms") || unit.equals("s") || unit.equals("min") || unit.equals("hr") || unit.equals("h")) return "time";
         if (unit.length() == 1 && "kKmMbB".indexOf(unit.charAt(0)) >= 0) return "mag";
         if (unit.equalsIgnoreCase("x")) return "x";
+        String lower = unit.toLowerCase(java.util.Locale.ROOT);
+        if (ENGINEERING_CLASSES.contains(lower)) return lower;
         return unit;
     }
 
-    /** Which source classes can state a claim of this class. Bare digits never state %, time or money. */
+    /** Which source classes can state a claim of this class. Bare digits never state %, time, money or an engineering unit. */
     private static Set<String> vouchers(String cls) {
+        if (ENGINEERING_CLASSES.contains(cls)) return Set.of(cls);   // "500 cycles" never states "500 psi"
         return switch (cls) {
             case "%", "time", "$" -> Set.of(cls);
             case "mag" -> Set.of(BARE, "mag");
