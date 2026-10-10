@@ -1,5 +1,6 @@
 package com.resumepipeline.llm;
 
+import com.resumepipeline.field.Field;
 import com.resumepipeline.progress.ProgressLog;
 
 import java.util.List;
@@ -35,14 +36,23 @@ public interface LlmClient {
      */
     List<JudgeScore> scoreCandidates(Story story, List<Candidate> candidates, ProgressLog progress, TokenAccumulator tokens);
 
-    JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
+    default JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+        return cleanJd(rawJd, Field.SOFTWARE, progress, tokens);
+    }
+
+    /** {@code field} picks the lenses the posting is read against. */
+    JdCleanResult cleanJd(String rawJd, Field field, ProgressLog progress, TokenAccumulator tokens);
 
     /**
      * Like {@link #cleanJd} but the model only extracts company, role and keywords; the
      * returned cleanJd is the (capped) input text as-is. For JD text that is already just the
      * posting (JSON-LD), where re-writing it out costs output tokens and adds nothing.
      */
-    JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens);
+    default JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+        return extractJd(rawJd, Field.SOFTWARE, progress, tokens);
+    }
+
+    JdCleanResult extractJd(String rawJd, Field field, ProgressLog progress, TokenAccumulator tokens);
 
     RankResult rankBullets(RankRequest req, ProgressLog progress, TokenAccumulator tokens);
 
@@ -129,8 +139,27 @@ public interface LlmClient {
              * user), with their modules' what/how/why. Null when the project has no map. Varies
              * per lens, so it goes at the prompt's tail with the lens, not in the shared prefix.
              */
-            String lensFocus
-    ) {}
+            String lensFocus,
+            /** The user's field: which lenses, verbs and examples the prompt speaks in. Null reads as software. */
+            Field field
+    ) {
+        public GenerateBulletsRequest {
+            field = Field.orDefault(field);
+        }
+
+        /** Before fields existed: a software request. */
+        public GenerateBulletsRequest(java.util.UUID userId, SourceKind kind, String category, String projectName,
+                                      String description, String contextDescription, String repoContext,
+                                      String techStack, String yourRole, String ownership, String scaleImpact,
+                                      String hardestProblem, String technicalDecisions, String userImpact,
+                                      String securityPosture, String title, String company, String location,
+                                      String dates, List<String> existingBullets, List<String> siblingCategories,
+                                      String lensFocus) {
+            this(userId, kind, category, projectName, description, contextDescription, repoContext, techStack,
+                    yourRole, ownership, scaleImpact, hardestProblem, technicalDecisions, userImpact, securityPosture,
+                    title, company, location, dates, existingBullets, siblingCategories, lensFocus, Field.SOFTWARE);
+        }
+    }
     record BulletGenerationResult(List<GeneratedBullet> bullets) {}
     /** storyId and lens are set on the story bank path; null on the single-lens path. */
     record GeneratedBullet(String text, List<String> tags, String storyId, String lens, String angle, String note) {

@@ -5,6 +5,8 @@ import com.resumepipeline.application.ApplicationRepository;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.github.RepoMapRenderer;
 import com.resumepipeline.config.GenerationConfigService;
+import com.resumepipeline.field.Field;
+import com.resumepipeline.profile.ProfileService;
 import com.resumepipeline.llm.BulletTextRules;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.llm.KeywordScorer;
@@ -64,6 +66,7 @@ public class BulletService {
     // recruiter scorecard for those pages stops describing reality — see markStaleFor below.
     private final ApplicationRepository applicationRepo;
     private final StoryRepository storyRepo;
+    private final ProfileService profiles;
     // A story build's bullets and story rows commit together (see saveStoryBullets).
     private final TransactionOperations tx;
     // Projects with a generateBank in flight. In memory, like ApplicationService.scoring: one
@@ -101,7 +104,7 @@ public class BulletService {
                          ProjectRepository projectRepo, ApplicationRenderer renderer, PdfCompiler compiler,
                          BulletLineMeasurer measurer, BulletMeasureDiagnosticRepository diagnosticRepo,
                          ApplicationRepository applicationRepo, StoryRepository storyRepo,
-                         TransactionOperations tx) {
+                         TransactionOperations tx, ProfileService profiles) {
         this.repo = repo;
         this.projectService = projectService;
         this.llm = llm;
@@ -115,6 +118,7 @@ public class BulletService {
         this.applicationRepo = applicationRepo;
         this.storyRepo = storyRepo;
         this.tx = tx;
+        this.profiles = profiles;
     }
 
     /**
@@ -406,8 +410,8 @@ public class BulletService {
     }
 
     /** Everything the project row says, as one generation request. */
-    private static LlmClient.GenerateBulletsRequest sourceRequest(Project p, String category, List<String> existing,
-                                                                 List<String> siblings, String lensFocus) {
+    private LlmClient.GenerateBulletsRequest sourceRequest(Project p, String category, List<String> existing,
+                                                          List<String> siblings, String lensFocus) {
         LlmClient.SourceKind sk = p.getKind() == Project.Kind.EXPERIENCE
                 ? LlmClient.SourceKind.EXPERIENCE
                 : LlmClient.SourceKind.PROJECT;
@@ -418,7 +422,7 @@ public class BulletService {
                 p.getScaleImpact(), p.getHardestProblem(),
                 p.getTechnicalDecisions(), p.getUserImpact(), p.getSecurityPosture(),
                 p.getTitle(), p.getCompany(), p.getLocation(), p.getDates(),
-                existing, siblings, lensFocus);
+                existing, siblings, lensFocus, Field.orDefault(profiles.field(p.getUserId())));
     }
 
     private record RawGeneration(String category, LlmClient.BulletGenerationResult result) {}

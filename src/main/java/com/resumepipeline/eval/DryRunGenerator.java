@@ -60,7 +60,8 @@ public class DryRunGenerator {
     public DryRunGenerator(ProjectService projectService, LlmClient llm, LlmUsageLogRepository usageRepo,
                            GenerationConfigService configService, ProjectRepository projectRepo,
                            ApplicationRenderer renderer, PdfCompiler compiler,
-                           ApplicationRepository applicationRepo) {
+                           ApplicationRepository applicationRepo,
+                           com.resumepipeline.profile.ProfileService profiles) {
         BulletLineMeasurer noMeasure = new BulletLineMeasurer(null, null, null) {
             @Override
             public Map<String, Measured> measure(Map<String, String> textsById) {
@@ -77,7 +78,7 @@ public class DryRunGenerator {
                 inMemory(BulletRepository.class), projectService, llm, usage, configService,
                 projectRepo, renderer, compiler, noMeasure,
                 inMemory(BulletMeasureDiagnosticRepository.class), applicationRepo,
-                inMemory(StoryRepository.class), TransactionOperations.withoutTransaction());
+                inMemory(StoryRepository.class), TransactionOperations.withoutTransaction(), profiles);
     }
 
     /** Unsaved bullets the current generator writes for this project and these lenses. */

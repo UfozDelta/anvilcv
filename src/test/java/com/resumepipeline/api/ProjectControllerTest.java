@@ -32,6 +32,7 @@ class ProjectControllerTest {
     @MockitoBean ProjectService projects;
     @MockitoBean BulletService bullets;
     @MockitoBean JobProgressStore jobStore;
+    @MockitoBean com.resumepipeline.profile.ProfileService profiles;
 
     private static Project project(UUID userId) {
         return new Project(userId, Project.Kind.PROJECT, "P", "desc", null, null, null, null, null);

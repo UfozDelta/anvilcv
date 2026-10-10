@@ -119,7 +119,7 @@ class ApplicationServiceTest {
         @Test
         void throwsWhenBulletBankEmpty() {
             UUID user = UUID.randomUUID();
-            when(llm.cleanJd(any(), any(), any()))
+            when(llm.cleanJd(any(), any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean", "Acme", "Eng", List.of("java")));
             when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of());
 
@@ -132,7 +132,7 @@ class ApplicationServiceTest {
             UUID user = UUID.randomUUID();
             Bullet vanity = TestFixtures.bullet(UUID.randomUUID(), UUID.randomUUID(), new String[0]);
             vanity.setText("Shipped the app across 87 commits with zero broken builds.");
-            when(llm.cleanJd(any(), any(), any()))
+            when(llm.cleanJd(any(), any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean", "Acme", "Eng", List.of("java")));
             when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(vanity));
             List<String> log = new java.util.ArrayList<>();
@@ -159,7 +159,7 @@ class ApplicationServiceTest {
             bullet = TestFixtures.bullet(UUID.randomUUID(), proj, new String[]{"backend"});
 
             Project project = TestFixtures.project(proj, Project.Kind.PROJECT, "P");
-            lenient().when(llm.cleanJd(any(), any(), any()))
+            lenient().when(llm.cleanJd(any(), any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java")));
             when(bulletRepo.findSelectableByProjectUserId(user)).thenReturn(List.of(bullet));
             when(projectRepo.findAllByUserIdOrderByCreatedAtDesc(user)).thenReturn(List.of(project));
@@ -245,7 +245,7 @@ class ApplicationServiceTest {
         @Test
         void aiRowKeywordIsMatchedButNeverSavedAsASelectedSkill() {
             profileService.get(user).setSkillsInterests("LangChain, OpenAI API");
-            when(llm.cleanJd(any(), any(), any()))
+            when(llm.cleanJd(any(), any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("LangChain")));
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
 
@@ -277,7 +277,7 @@ class ApplicationServiceTest {
         @Test
         void inferredLensPicksTheMatchingFramingAndIsPersisted() {
             Bullet[] pair = crossLensPair();
-            when(llm.cleanJd(any(), any(), any())).thenReturn(
+            when(llm.cleanJd(any(), any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
 
             Application out = service.create(user, "jd text", null, null, false, ProgressLog.noOp());
@@ -289,7 +289,7 @@ class ApplicationServiceTest {
         @Test
         void explicitRoleEmphasisOverridesInferredLens() {
             Bullet[] pair = crossLensPair();
-            when(llm.cleanJd(any(), any(), any())).thenReturn(
+            when(llm.cleanJd(any(), any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
 
             Application out = service.create(user, "jd text", null, "general", false, ProgressLog.noOp());
@@ -300,7 +300,7 @@ class ApplicationServiceTest {
 
         @Test
         void generalistOverrideGivesNoBias() {
-            when(llm.cleanJd(any(), any(), any())).thenReturn(
+            when(llm.cleanJd(any(), any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
             ArgumentCaptor<LlmClient.RankRequest> cap = ArgumentCaptor.forClass(LlmClient.RankRequest.class);
             crossLensPair();
@@ -314,7 +314,7 @@ class ApplicationServiceTest {
 
         @Test
         void aLensOverrideSelectsThatLens() {
-            when(llm.cleanJd(any(), any(), any())).thenReturn(
+            when(llm.cleanJd(any(), any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("data")));
             crossLensPair();
 
@@ -334,7 +334,7 @@ class ApplicationServiceTest {
         @Test
         void unknownOverrideBecomesGeneralInStoreAndPrompt() {
             crossLensPair();
-            when(llm.cleanJd(any(), any(), any())).thenReturn(
+            when(llm.cleanJd(any(), any(), any(), any())).thenReturn(
                     new LlmClient.JdCleanResult("clean jd", "Acme", "Eng", List.of("java"), List.of("backend")));
 
             Application out = service.create(user, "jd text", null, "ml", false, ProgressLog.noOp());
@@ -433,21 +433,21 @@ class ApplicationServiceTest {
             service.create(user, null, "https://jobs.example.com/1", "backend", false, ProgressLog.noOp());
 
             verify(jdFetcher).fetch("https://jobs.example.com/1");
-            verify(llm).cleanJd(eq("fetched jd body"), any(), any());
+            verify(llm).cleanJd(eq("fetched jd body"), any(), any(), any());
         }
 
         @Test
         void structuredJdSkipsTheFullCleanAndOnlyExtracts() {
             when(jdFetcher.fetch("https://jobs.example.com/2"))
                     .thenReturn(new JdFetcher.Fetched("json-ld jd body", true));
-            when(llm.extractJd(any(), any(), any()))
+            when(llm.extractJd(any(), any(), any(), any()))
                     .thenReturn(new LlmClient.JdCleanResult("json-ld jd body", "Acme", "Eng", List.of("java")));
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
 
             Application out = service.create(user, null, "https://jobs.example.com/2", "backend", false, ProgressLog.noOp());
 
-            verify(llm).extractJd(eq("json-ld jd body"), any(), any());
-            verify(llm, never()).cleanJd(any(), any(), any());
+            verify(llm).extractJd(eq("json-ld jd body"), any(), any(), any());
+            verify(llm, never()).cleanJd(any(), any(), any(), any());
             assertEquals("Acme", out.getCompany());
         }
     }

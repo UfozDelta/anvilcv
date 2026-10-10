@@ -43,6 +43,7 @@ class BulletServiceTest {
     @Mock BulletMeasureDiagnosticRepository diagnosticRepo;
     @Mock StoryRepository storyRepo;
     @Mock TransactionOperations tx;
+    @Mock com.resumepipeline.profile.ProfileService profiles;
     @InjectMocks BulletService service;
 
     @BeforeEach

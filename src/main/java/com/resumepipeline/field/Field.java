@@ -24,6 +24,9 @@ public enum Field {
     /** The preset the pipeline actually runs for this field. */
     public FieldPreset preset() { return FieldPresets.of(this); }
 
+    /** {@code f}, or {@link #SOFTWARE} when null: callers and test doubles may not know a field. */
+    public static Field orDefault(Field f) { return f == null ? SOFTWARE : f; }
+
     /** The field for a stored or submitted slug; anything unknown or blank is {@link #SOFTWARE}. */
     public static Field of(String slug) {
         if (slug == null) return SOFTWARE;

@@ -61,13 +61,13 @@ public class RoutingLlmClient implements LlmClient {
     }
 
     @Override
-    public JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
-        return current().cleanJd(rawJd, progress, tokens);
+    public JdCleanResult cleanJd(String rawJd, com.resumepipeline.field.Field field, ProgressLog progress, TokenAccumulator tokens) {
+        return current().cleanJd(rawJd, field, progress, tokens);
     }
 
     @Override
-    public JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
-        return current().extractJd(rawJd, progress, tokens);
+    public JdCleanResult extractJd(String rawJd, com.resumepipeline.field.Field field, ProgressLog progress, TokenAccumulator tokens) {
+        return current().extractJd(rawJd, field, progress, tokens);
     }
 
     @Override

@@ -214,7 +214,7 @@ public abstract class BaseLlmClient implements LlmClient {
         // and defeated provider prompt caching on the largest part of the prompt; trailing it
         // makes ~90% of the prompt a shared cacheable prefix. Recency also helps the model
         // weight the lens, which is why the header no longer has to shout "read this FIRST".
-        String lens = CategoryLenses.lensFor(req.category());
+        String lens = CategoryLenses.lensFor(req.category(), req.field());
         // The two clauses after the lens text override the "produce N bullets" instruction at the
         // top of the prompt on purpose. That instruction says "mandatory", so without an explicit
         // override a lens the project cannot support still gets padded out to target — and the
@@ -402,7 +402,7 @@ public abstract class BaseLlmClient implements LlmClient {
                                   + " total, the bank's included, only if the source supports them. Fewer or none is valid."
                                 : "Aim for 3 or more stories in total, the bank's included, only if the source supports"
                                   + " them; a small project may have fewer. Fewer or none is valid.",
-                        lensDefinitions(req.lenses()));
+                        lensDefinitions(req.lenses(), req.source().field()));
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "stories", SchemaSpec.array(SchemaSpec.object(new LinkedHashMap<>(Map.of(
@@ -547,7 +547,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 Lens definition:
 
                 %s
-                """.formatted(story.id(), story.title(), evidence, written, count, lensDefinitions(List.of(lens)));
+                """.formatted(story.id(), story.title(), evidence, written, count, lensDefinitions(List.of(lens), src.field()));
 
         Map<String, SchemaSpec> wording = new LinkedHashMap<>();
         wording.put("text", SchemaSpec.string());
@@ -693,8 +693,8 @@ public abstract class BaseLlmClient implements LlmClient {
                         + req.lensFocus() + "\n" : "");
     }
 
-    private static String lensDefinitions(List<String> lenses) {
-        return lenses.stream().map(CategoryLenses::lensFor).filter(java.util.Objects::nonNull)
+    private static String lensDefinitions(List<String> lenses, com.resumepipeline.field.Field field) {
+        return lenses.stream().map(l -> CategoryLenses.lensFor(l, field)).filter(java.util.Objects::nonNull)
                 .collect(java.util.stream.Collectors.joining("\n\n"));
     }
 
@@ -1060,7 +1060,7 @@ public abstract class BaseLlmClient implements LlmClient {
     }
 
     @Override
-    public JdCleanResult cleanJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+    public JdCleanResult cleanJd(String rawJd, com.resumepipeline.field.Field field, ProgressLog progress, TokenAccumulator tokens) {
         progress.emit("Calling LLM to clean JD and extract keywords...");
         String cappedJd = capJd(rawJd);
         if (rawJd != null && cappedJd.length() < rawJd.length()) {
@@ -1082,7 +1082,7 @@ public abstract class BaseLlmClient implements LlmClient {
 
                 Raw JD:
                 %s
-                """.formatted(CategoryLenses.slugList(), rawJd);
+                """.formatted(CategoryLenses.slugList(field), rawJd);
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "cleanJd",  SchemaSpec.string(),
@@ -1097,7 +1097,7 @@ public abstract class BaseLlmClient implements LlmClient {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
             List<String> kws = env.keywords == null ? List.of() : env.keywords;
             // Emit what we extracted so the user can see the parsed role/company immediately.
-            List<String> lenses = CategoryLenses.validate(env.lenses);
+            List<String> lenses = CategoryLenses.validate(env.lenses, field);
             progress.emit("Extracted: role=" + env.role + ", company=" + env.company
                     + ", lens=" + CategoryLenses.label(lenses)
                     + ", " + kws.size() + " keywords: " + String.join(", ", kws));
@@ -1108,7 +1108,7 @@ public abstract class BaseLlmClient implements LlmClient {
     }
 
     @Override
-    public JdCleanResult extractJd(String rawJd, ProgressLog progress, TokenAccumulator tokens) {
+    public JdCleanResult extractJd(String rawJd, com.resumepipeline.field.Field field, ProgressLog progress, TokenAccumulator tokens) {
         progress.emit("Calling LLM to extract role, company and keywords...");
         String cappedJd = capJd(rawJd);
         String prompt = """
@@ -1123,7 +1123,7 @@ public abstract class BaseLlmClient implements LlmClient {
 
                 JD:
                 %s
-                """.formatted(CategoryLenses.slugList(), cappedJd);
+                """.formatted(CategoryLenses.slugList(field), cappedJd);
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "company",  SchemaSpec.string(),
@@ -1136,7 +1136,7 @@ public abstract class BaseLlmClient implements LlmClient {
         try {
             JdCleanEnvelope env = mapper.readValue(json, JdCleanEnvelope.class);
             List<String> kws = env.keywords == null ? List.of() : env.keywords;
-            List<String> lenses = CategoryLenses.validate(env.lenses);
+            List<String> lenses = CategoryLenses.validate(env.lenses, field);
             progress.emit("Extracted: role=" + env.role + ", company=" + env.company
                     + ", lens=" + CategoryLenses.label(lenses)
                     + ", " + kws.size() + " keywords: " + String.join(", ", kws));

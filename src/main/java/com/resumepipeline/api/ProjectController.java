@@ -37,12 +37,16 @@ public class ProjectController {
     private final BulletService bullets;
     private final JobProgressStore jobStore;
 
+    private final com.resumepipeline.profile.ProfileService profiles;
+
     private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
-    public ProjectController(ProjectService projects, BulletService bullets, JobProgressStore jobStore) {
+    public ProjectController(ProjectService projects, BulletService bullets, JobProgressStore jobStore,
+                             com.resumepipeline.profile.ProfileService profiles) {
         this.projects = projects;
         this.bullets = bullets;
         this.jobStore = jobStore;
+        this.profiles = profiles;
     }
 
     @GetMapping
@@ -149,7 +153,7 @@ public class ProjectController {
         UUID userId = AuthUtils.userId(auth);
         bullets.checkStories(userId, id);
         List<String> subs = req == null || req.subsystems() == null ? List.of() : req.subsystems();
-        List<String> lenses = List.copyOf(CategoryLenses.LENSES.keySet());
+        List<String> lenses = List.copyOf(CategoryLenses.lensesFor(com.resumepipeline.field.Field.orDefault(profiles.field(userId))).keySet());
         return submitJob(userId, id, progress -> bullets.generateBank(userId, id, lenses, subs, progress));
     }
 

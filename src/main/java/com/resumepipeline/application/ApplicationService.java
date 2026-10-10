@@ -152,9 +152,10 @@ public class ApplicationService {
         // A JSON-LD posting is already just the JD, so skip having the model re-write it out —
         // only company/role/keywords are extracted. Scraped page text and pastes still get
         // the full clean, since they can carry navigation and boilerplate.
+        com.resumepipeline.field.Field field = com.resumepipeline.field.Field.orDefault(profileService.field(userId));
         LlmClient.JdCleanResult clean = structuredJd
-                ? llm.extractJd(jdText, progress, tokens)
-                : llm.cleanJd(jdText, progress, tokens);
+                ? llm.extractJd(jdText, field, progress, tokens)
+                : llm.cleanJd(jdText, field, progress, tokens);
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
@@ -178,7 +179,7 @@ public class ApplicationService {
         // one), while "generalist", a typo or a retired slug such as "frontend" is no lens at all.
         // Empty lens list = generalist, which leaves the keyword order untouched and the prompt unbiased.
         boolean overridden = roleEmphasis != null && !roleEmphasis.isBlank();
-        List<String> lenses = overridden ? CategoryLenses.validate(List.of(roleEmphasis)) : clean.lenses();
+        List<String> lenses = overridden ? CategoryLenses.validate(List.of(roleEmphasis), field) : clean.lenses();
         final String emphasis = CategoryLenses.label(lenses);
         progress.emit("Lens: " + emphasis + (overridden ? " (manual)" : " (from JD)"));
         List<Bullet> candidates = preFilter(allBullets, kwLower, lenses);

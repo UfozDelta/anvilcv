@@ -38,6 +38,7 @@ class BulletServiceRefitTest {
     @Mock GenerationConfigService configService;
     @Mock BulletLineMeasurer measurer;
     @Mock BulletMeasureDiagnosticRepository diagnosticRepo;
+    @Mock com.resumepipeline.profile.ProfileService profiles;
     @InjectMocks BulletService service;
 
     private final UUID user = UUID.randomUUID();

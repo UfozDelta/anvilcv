@@ -60,7 +60,7 @@ class DryRunGeneratorTest {
         when(llm.scoreCandidates(any(), any(), any(), any())).thenReturn(List.of(new LlmClient.JudgeScore(5), new LlmClient.JudgeScore(4)));
 
         DryRunGenerator gen = new DryRunGenerator(projectService, llm, usage, configService, projectRepo,
-                renderer, compiler, applicationRepo);
+                renderer, compiler, applicationRepo, mock(com.resumepipeline.profile.ProfileService.class));
         List<Bullet> out = gen.generate(owner, projectId, List.of("backend"), ProgressLog.noOp());
 
         assertEquals(2, out.size());
@@ -87,7 +87,7 @@ class DryRunGeneratorTest {
         when(llm.findStories(any(), any(), any())).thenThrow(new LlmParseException("bad json", null));
 
         DryRunGenerator gen = new DryRunGenerator(projectService, llm, usage, configService, projectRepo,
-                renderer, compiler, applicationRepo);
+                renderer, compiler, applicationRepo, mock(com.resumepipeline.profile.ProfileService.class));
         assertThrows(LlmParseException.class,
                 () -> gen.generate(owner, projectId, List.of("backend"), ProgressLog.noOp()));
         verify(llm, never()).generateBullets(any(), any(), any());
