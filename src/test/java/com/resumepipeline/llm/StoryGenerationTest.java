@@ -268,7 +268,7 @@ class StoryGenerationTest {
 
     @Test
     void writingRulesCarryNoOtherUsersProjectData() {
-        String rules = BaseLlmClient.writingRules(new GenerationConfig());
+        String rules = BaseLlmClient.writingRules(new GenerationConfig(), com.resumepipeline.field.Field.SOFTWARE);
         for (String leak : List.of("MLS", "64K", "180ms", "credit ledger", "React-Leaflet", "2dsphere", "AES-256-GCM")) {
             assertFalse(rules.contains(leak), "prompt still carries " + leak);
         }

@@ -163,7 +163,7 @@ public class ApplicationService {
         tClean.stop();
 
         // Stage: rank bullets — sends top candidates to LLM for scoring against the JD
-        List<Bullet> allBullets = autoSelectable(bulletRepo.findSelectableByProjectUserId(userId), progress);
+        List<Bullet> allBullets = autoSelectable(bulletRepo.findSelectableByProjectUserId(userId), progress, field);
         if (allBullets.isEmpty()) {
             throw new IllegalStateException("No bullets in the bank — generate or add some first.");
         }
@@ -757,7 +757,7 @@ public class ApplicationService {
         // what the selector may pick on its own is narrowed.
         Map<UUID, Bullet> bankById = bank.stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
-        List<Bullet> allBullets = autoSelectable(bank, progress);
+        List<Bullet> allBullets = autoSelectable(bank, progress, com.resumepipeline.field.Field.orDefault(profileService.field(userId)));
         Map<UUID, Bullet> bulletById = allBullets.stream()
                 .collect(Collectors.toMap(Bullet::getId, b -> b));
         Map<UUID, Project> projectById = projectRepo.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
@@ -1061,8 +1061,13 @@ public class ApplicationService {
      * vanity filter existed. APPROVED ones stay: the user chose them. Hand-picks and locks bypass this.
      */
     public static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress) {
+        return autoSelectable(bank, progress, com.resumepipeline.field.Field.SOFTWARE);
+    }
+
+    /** As above, with the activity-count phrases of the user's own field. */
+    public static List<Bullet> autoSelectable(List<Bullet> bank, ProgressLog progress, com.resumepipeline.field.Field field) {
         List<Bullet> kept = bank.stream()
-                .filter(b -> BulletTextRules.autoSelectable(b.getStatus(), b.getText()))
+                .filter(b -> BulletTextRules.autoSelectable(b.getStatus(), b.getText(), field))
                 .toList();
         int dropped = bank.size() - kept.size();
         if (dropped > 0) {

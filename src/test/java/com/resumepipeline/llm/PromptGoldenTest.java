@@ -95,7 +95,7 @@ class PromptGoldenTest {
     private static final LlmClient.Story STORY = new LlmClient.Story("s1", "Nightly settlement", List.of("Settles payouts nightly."), List.of("backend"));
 
     @Test void writingRules() throws IOException {
-        golden("software-writingRules", BaseLlmClient.writingRules(new GenerationConfig()));
+        golden("software-writingRules", BaseLlmClient.writingRules(new GenerationConfig(), Field.SOFTWARE));
     }
 
     @Test void recoveryNote() throws IOException {
@@ -104,7 +104,7 @@ class PromptGoldenTest {
                 new BaseLlmClient.Reject("Worked on the thing.", BaseLlmClient.RejectReason.OPENER),
                 new BaseLlmClient.Reject("Shipped it in 120 commits.", BaseLlmClient.RejectReason.VANITY),
                 new BaseLlmClient.Reject("Built a cache. This ensured speed.", BaseLlmClient.RejectReason.PADDING));
-        golden("software-recoveryNote", BaseLlmClient.recoveryNote(rejects, List.of(), 2, new GenerationConfig()));
+        golden("software-recoveryNote", BaseLlmClient.recoveryNote(rejects, List.of(), 2, new GenerationConfig(), Field.SOFTWARE));
     }
 
     @Test void generateBulletsProject() throws IOException {

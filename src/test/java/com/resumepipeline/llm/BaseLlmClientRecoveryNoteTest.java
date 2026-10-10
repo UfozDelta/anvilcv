@@ -19,7 +19,7 @@ class BaseLlmClientRecoveryNoteTest {
         String note = BaseLlmClient.recoveryNote(
                 List.of(new BaseLlmClient.Reject("Contributed to the billing service.",
                         BaseLlmClient.RejectReason.OPENER)),
-                List.of(), 0, new GenerationConfig());
+                List.of(), 0, new GenerationConfig(), com.resumepipeline.field.Field.SOFTWARE);
 
         assertTrue(note.contains("Contributed to the billing service."));
         assertTrue(note.contains("never turn a"));

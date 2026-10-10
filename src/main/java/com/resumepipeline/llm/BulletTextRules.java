@@ -1,6 +1,7 @@
 package com.resumepipeline.llm;
 
 import com.resumepipeline.config.GenerationConfig;
+import com.resumepipeline.field.Field;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -69,30 +70,30 @@ public final class BulletTextRules {
     }
 
     /**
-     * Counts of the author's own artifacts: activity, not results. A recruiter reads "120 commits"
-     * or "300 unit tests" as padding. Deliberately narrow: domain counts that describe the product
-     * ("12 report types", "3 regions", "30 REST endpoints") are scope, not vanity, and stay.
+     * The vanity phrase in a bullet (e.g. "120 commits"), or null if it has none. Counts of the author's
+     * own artifacts are activity, not results; which phrases count is per field (see {@code FieldPresets}).
      */
-    private static final Pattern VANITY = Pattern.compile(
-            "\\b\\d[\\d,.]*\\+?\\s*(?:\\*\\*)?\\s*(?:in-repo |automated )?(?:commits?|s?loc|lines? of \\w+|source files|files"
-                    + "|(?:unit |integration |e2e |end-to-end )?tests?|test cases|assert(?:ion)?s?(?: checks)?"
-                    + "|(?:database |db )?tables|(?:flyway |database |db |schema )?migrations|contributors)\\b"
-                    + "|\\bzero broken (?:main )?builds\\b",
-            Pattern.CASE_INSENSITIVE);
-
-    /** The vanity phrase in a bullet (e.g. "120 commits"), or null if it has none. */
-    public static String vanityCount(String text) {
+    public static String vanityCount(String text, Field field) {
         if (text == null) return null;
-        Matcher m = VANITY.matcher(text.replace("**", ""));
+        Matcher m = Field.orDefault(field).preset().prompt().vanity().matcher(text.replace("**", ""));
         return m.find() ? m.group() : null;
+    }
+
+    /** {@link #vanityCount(String, Field)} for a software user. */
+    public static String vanityCount(String text) {
+        return vanityCount(text, Field.SOFTWARE);
     }
 
     /**
      * Whether selection may pick a bullet on its own: an unreviewed one padding with an activity
      * count ({@link #vanityCount}) is held back; APPROVED ones stay, the user chose them.
      */
+    public static boolean autoSelectable(String status, String text, Field field) {
+        return "APPROVED".equals(status) || vanityCount(text, field) == null;
+    }
+
     public static boolean autoSelectable(String status, String text) {
-        return "APPROVED".equals(status) || vanityCount(text) == null;
+        return autoSelectable(status, text, Field.SOFTWARE);
     }
 
     // Abbreviations whose period is not a sentence end.
