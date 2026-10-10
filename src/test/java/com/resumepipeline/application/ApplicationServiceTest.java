@@ -388,6 +388,17 @@ class ApplicationServiceTest {
         }
 
         @Test
+        void coverLetterFailureStillShipsResume() {
+            when(compiler.compile(any())).thenReturn(PdfCompiler.Result.success(new byte[]{9}, "log"));
+            when(llm.coverLetter(any(), any(), any())).thenThrow(new RuntimeException("LLM down"));
+
+            Application out = service.create(user, "jd text", null, "backend", true, ProgressLog.noOp());
+
+            assertNull(out.getCoverLetter());
+            assertArrayEquals(new byte[]{9}, out.getPdfBlob());
+        }
+
+        @Test
         void tectonicFailureStillPersistsApplication() {
             when(compiler.compile(any())).thenReturn(PdfCompiler.Result.failure("exit 1", "bad latex"));
 

@@ -1557,44 +1557,68 @@ public abstract class BaseLlmClient implements LlmClient {
                 .map(t -> "  - " + t)
                 .reduce("", (a, b) -> a + b + "\n");
 
+        boolean hasCompany = req.company() != null && !req.company().isBlank();
+        String greeting = hasCompany ? "Hi " + req.company().strip() + " team," : "Hi hiring team,";
+        String companyLine = hasCompany ? "Company: " + req.company().strip() + "\n" : "";
+        String keywordsLine = req.keywords().isEmpty() ? "none listed" : String.join(", ", req.keywords());
+        String fitBlock = "";
+        if (!req.fitStrengths().isEmpty()) {
+            fitBlock += "\nFit strengths (supported by the bullets):\n" + req.fitStrengths().stream()
+                    .map(s -> "  - " + s + "\n").reduce("", String::concat);
+        }
+        if (!req.fitGaps().isEmpty()) {
+            fitBlock += "\nFit gaps (do not claim these):\n" + req.fitGaps().stream()
+                    .map(s -> "  - " + s + "\n").reduce("", String::concat);
+        }
+
         String prompt = """
                 Write a cover letter for this job application.
 
-                Guidelines:
-                  - 3-4 short paragraphs.
-                  - Open by naming the company and role.
-                  - Reference 2-3 of the provided bullets in plain prose (do not list them verbatim).
+                Rules:
+                  - 250-350 words, in 3-4 short paragraphs.
+                  - Use only facts found in the cleaned JD, the selected bullets, or the fit strengths below.
+                    Leave out anything they do not support.
+                  - Gaps stay gaps: never claim a skill, tool or experience the bullets do not show, even if the JD asks for it.
+                  - Open with the greeting "%s", then name the role.
+                  - Reference 2-3 of the selected bullets in plain prose (do not list them verbatim), tying them to the key requirements where they fit.
                   - Close with a brief, confident call to action.
-                  - No "Dear Hiring Manager" — start "Hi %s team," or similar.
+                  - Avoid these words and phrases: delve, underscore, showcasing, intricate, passionate, leverage, "I am excited to".
+                  - No "Dear Hiring Manager".
                   - Plain text only, no markdown.
 
-                Role emphasis: %s
-                Company: %s
+                Role: %s
+                %sRole emphasis: %s
+                Key requirements: %s
 
                 Cleaned JD:
                 %s
 
                 Top selected bullets:
-                %s
+                %s%s
                 """.formatted(
-                        req.company() == null ? "the" : req.company(),
+                        greeting,
+                        req.role() == null || req.role().isBlank() ? "the role" : req.role().strip(),
+                        companyLine,
                         req.roleEmphasis(),
-                        req.company(),
+                        keywordsLine,
                         req.cleanJd(),
-                        bulletsBlock);
+                        bulletsBlock,
+                        fitBlock);
 
         SchemaSpec schema = SchemaSpec.object(new LinkedHashMap<>(Map.of(
                 "coverLetter", SchemaSpec.string()
         )), List.of("coverLetter"));
 
         String json = callJsonWithRetry(matchModel(), prompt, schema, EXTRACTION_TEMPERATURE, progress, tokens, true, "Cover letter");
+        CoverLetterEnvelope env;
         try {
-            CoverLetterEnvelope env = mapper.readValue(json, CoverLetterEnvelope.class);
-            progress.emit("Cover letter generated.");
-            return env.coverLetter;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse LLM cover letter response: " + json, e);
+            env = readLenient(json, CoverLetterEnvelope.class, "cover letter response");
+        } catch (LlmParseException e) {
+            env = readLenient(retryMalformed(matchModel(), prompt, schema, EXTRACTION_TEMPERATURE,
+                    progress, tokens, "Cover letter", e), CoverLetterEnvelope.class, "cover letter response");
         }
+        progress.emit("Cover letter generated.");
+        return env.coverLetter;
     }
 
     // -------- exploreStep --------

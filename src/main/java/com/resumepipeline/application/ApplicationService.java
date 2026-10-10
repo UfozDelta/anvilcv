@@ -337,21 +337,32 @@ public class ApplicationService {
         List<String> selectedTexts = selected.stream().map(Bullet::getText).toList();
         CompletableFuture<PdfCompiler.Result> pdfFuture = CompletableFuture
                 .supplyAsync(Mdc.wrap(() -> compiler.compile(tex)), PARALLEL_EXECUTOR);
+        // Fit was joined above, so its strengths and gaps are known here at no extra cost.
+        List<String> fitStrengths = fit == null ? List.of() : fit.strengths();
+        List<String> fitGaps = fit == null ? List.of() : fit.gaps();
         CompletableFuture<String> coverLetterFuture = includeCoverLetter
                 ? CompletableFuture.supplyAsync(Mdc.wrap(() -> llm.coverLetter(
-                        new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), emphasis, selectedTexts),
+                        new LlmClient.CoverLetterRequest(clean.cleanJd(), clean.company(), clean.role(), emphasis, selectedTexts,
+                                clean.keywords().stream().limit(5).toList(), fitStrengths, fitGaps),
                         progress, tokens)), PARALLEL_EXECUTOR)
                 : CompletableFuture.completedFuture(null);
 
         PipelineTimer tPdf = PipelineTimer.start("tectonic + cover letter");
         PdfCompiler.Result r;
-        String coverLetterText;
         try {
             r = pdfFuture.get();
-            coverLetterText = coverLetterFuture.get();
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             throw new RuntimeException("Pipeline failed: " + cause.getMessage(), cause);
+        }
+        // A failed letter must not cost the user the resume: log it and ship with a null letter.
+        String coverLetterText = null;
+        try {
+            coverLetterText = coverLetterFuture.get();
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            log.warn("Cover letter failed, shipping application without it: {}", cause.getMessage());
+            progress.emit("Cover letter unavailable: " + cause.getMessage());
         }
         tPdf.stop("success=" + r.success());
 

@@ -192,7 +192,8 @@ public interface LlmClient {
     }
 
     record RankRequest(String cleanJd, String company, String role, List<String> keywords, String roleEmphasis, List<BulletForMatch> bullets, List<String> courses, List<SkillCategory> skillCategories) {}
-    record CoverLetterRequest(String cleanJd, String company, String role, String roleEmphasis, List<String> topBulletTexts) {}
+    record CoverLetterRequest(String cleanJd, String company, String role, String roleEmphasis, List<String> topBulletTexts,
+                              List<String> keywords, List<String> fitStrengths, List<String> fitGaps) {}
     record BulletForMatch(String bulletId, String text, List<String> tags, String projectName) {}
     record SkillCategory(String name, List<String> items) {}
     record RankResult(List<RankedBullet> rankedBullets, List<String> atsMatched, List<String> atsMissing, List<String> selectedCourses, java.util.Map<String, List<String>> selectedSkills) {}
