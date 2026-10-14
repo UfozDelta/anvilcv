@@ -11,6 +11,7 @@ import com.resumepipeline.bullet.BulletService;
 import com.resumepipeline.llm.CategoryLenses;
 import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.progress.ProgressLog;
+import com.resumepipeline.quota.QuotaService;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
 import jakarta.validation.Valid;
@@ -38,15 +39,17 @@ public class ProjectController {
     private final JobProgressStore jobStore;
 
     private final com.resumepipeline.profile.ProfileService profiles;
+    private final QuotaService quota;
 
     private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     public ProjectController(ProjectService projects, BulletService bullets, JobProgressStore jobStore,
-                             com.resumepipeline.profile.ProfileService profiles) {
+                             com.resumepipeline.profile.ProfileService profiles, QuotaService quota) {
         this.projects = projects;
         this.bullets = bullets;
         this.jobStore = jobStore;
         this.profiles = profiles;
+        this.quota = quota;
     }
 
     @GetMapping
@@ -96,7 +99,11 @@ public class ProjectController {
 
     @PostMapping("/{id}/bullets/generate")
     public List<BulletResponse> generateBullets(Authentication auth, @PathVariable UUID id) {
-        return bullets.generateForProject(AuthUtils.userId(auth), id).stream().map(BulletResponse::from).toList();
+        UUID userId = AuthUtils.userId(auth);
+        quota.checkGeneration(userId, id);
+        List<BulletResponse> out = bullets.generateForProject(userId, id).stream().map(BulletResponse::from).toList();
+        quota.recordGeneration(userId, id);
+        return out;
     }
 
     /**
@@ -122,6 +129,7 @@ public class ProjectController {
             ProgressLog progress = msg -> jobStore.append(jobId, msg);
             try {
                 work.accept(progress);
+                quota.recordGeneration(userId, projectId);
                 jobStore.complete(jobId, projectId);
             } catch (Exception e) {
                 log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
@@ -152,6 +160,7 @@ public class ProjectController {
                                         @RequestBody(required = false) SubsystemsRequest req) {
         UUID userId = AuthUtils.userId(auth);
         bullets.checkStories(userId, id);
+        quota.checkGeneration(userId, id);
         List<String> subs = req == null || req.subsystems() == null ? List.of() : req.subsystems();
         List<String> lenses = List.copyOf(CategoryLenses.lensesFor(com.resumepipeline.field.Field.orDefault(profiles.field(userId))).keySet());
         return submitJob(userId, id, progress -> bullets.generateBank(userId, id, lenses, subs, progress));
@@ -164,6 +173,7 @@ public class ProjectController {
                                          @RequestBody WordingsRequest req) {
         UUID userId = AuthUtils.userId(auth);
         bullets.checkWordings(userId, id, storyId, req.lenses());
+        quota.checkGeneration(userId, id);
         List<String> subs = req.subsystems() == null ? List.of() : req.subsystems();
         return submitJob(userId, id, progress -> bullets.generateWordings(userId, id, storyId, req.lenses(), subs, progress));
     }

@@ -33,6 +33,15 @@ public class AppUser {
     @Column(name = "first_download_at")
     private OffsetDateTime firstDownloadAt;
 
+    @Column(nullable = false, length = 20)
+    private String plan = "free";
+
+    @Column(name = "plan_started_at")
+    private java.time.Instant planStartedAt;
+
+    @Column(name = "quota_exempt", nullable = false)
+    private boolean quotaExempt = false;
+
     protected AppUser() {}
 
     public AppUser(String username, String email, String passwordHash) {
@@ -49,6 +58,9 @@ public class AppUser {
     public boolean isAdmin() { return admin; }
     public OffsetDateTime getOnboardedAt() { return onboardedAt; }
     public OffsetDateTime getFirstDownloadAt() { return firstDownloadAt; }
+    public String getPlan() { return plan; }
+    public java.time.Instant getPlanStartedAt() { return planStartedAt; }
+    public boolean isQuotaExempt() { return quotaExempt; }
 
     public void setUsername(String username) { this.username = username; }
     public void setEmail(String email) { this.email = email; }
@@ -56,4 +68,7 @@ public class AppUser {
     public void setAdmin(boolean admin) { this.admin = admin; }
     public void setOnboardedAt(OffsetDateTime onboardedAt) { this.onboardedAt = onboardedAt; }
     public void setFirstDownloadAt(OffsetDateTime firstDownloadAt) { this.firstDownloadAt = firstDownloadAt; }
+    public void setPlan(String plan) { this.plan = plan; }
+    public void setPlanStartedAt(java.time.Instant planStartedAt) { this.planStartedAt = planStartedAt; }
+    public void setQuotaExempt(boolean quotaExempt) { this.quotaExempt = quotaExempt; }
 }

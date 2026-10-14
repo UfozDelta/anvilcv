@@ -493,6 +493,29 @@ Reading the logs (`BULLET_JUDGE`, `BULLET_PAIR`, `BULLET_SLOT` in the applicatio
 - `BULLET_JUDGE_FAILED` and `BULLET_JUDGE_MISMATCH`: a judge call failed, or its reply did not line up
   with the candidates.
 
+### Quotas and plans
+
+`quota/QuotaService` checks before work starts and records once it finishes, so a failed run costs nothing. Over the limit is `402` with `{source:"quota", kind, plan, limit, used, resetsAt}`; `GET /api/quota` returns the meter.
+
+| Plan | Tailors | Generations |
+|---|---|---|
+| free | 3 / month | up to 2 projects and 1 work experience (re-running one already written for is free) |
+| starter | 60 / month | 5 / month |
+| pro | 150 / month | 15 / month |
+| pack | 200 total | 20 total |
+
+Months are calendar months (UTC). A tailor is one finished application; a generation is a finished bullets run, new stories or more wordings. Downloads are never counted. Limits live in `quota/Plan.java` and must match `frontend/src/pages/Pricing.tsx`.
+
+**Bypassing the cap by hand (Neon SQL editor or MCP):**
+
+```sql
+UPDATE app_user SET quota_exempt = true  WHERE username = 'someone';   -- lift every cap
+UPDATE app_user SET quota_exempt = false WHERE username = 'someone';   -- back to their plan
+UPDATE app_user SET plan = 'pro', plan_started_at = now() WHERE username = 'someone';
+```
+
+Admins (`is_admin`) are never capped either. V47 set `quota_exempt` for every account that existed then, so only later sign-ups are metered.
+
 ### Async model
 
 No scheduler and no queue. Long work runs on `newVirtualThreadPerTaskExecutor()`; submit endpoints
@@ -505,7 +528,8 @@ jobs, and it does not survive horizontal scaling.
 
 | Table | Notes |
 |---|---|
-| `app_user` | UUID pk, unique username/email, bcrypt hash, `is_admin` |
+| `app_user` | UUID pk, unique username/email, bcrypt hash, `is_admin`, `plan` (free/starter/pro/pack), `plan_started_at`, `quota_exempt` (V47), `onboarded_at`, `first_download_at` (V46) |
+| `usage_event` | one row per finished tailor (`ref_id` = application) or generation (`ref_id` = project); counted for quotas so deleting the thing does not refund it (V47) |
 | `profile` | one per user; education JSONB, five skill-category columns (one renders as "AI & Integrations") |
 | `project` | `kind` = PROJECT \| EXPERIENCE; GitHub URL + repo context; enrichment fields (tech stack, role, ownership, scale/impact, hardest problem) |
 | `bullet` | text, tags, category, `status` PENDING/APPROVED/REJECTED (REJECTED is the trash), `story_id` (groups wordings of one story; FK to `story`, deferred, on delete set null), `angle` (outcome/decision/scale/failure, nullable, V43), `judge_note` (the judge's good/bad note, nullable, V43; edits and refits keep it) — cascades from project |

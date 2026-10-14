@@ -54,6 +54,20 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(com.resumepipeline.quota.QuotaExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleQuota(com.resumepipeline.quota.QuotaExceededException e) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("source", "quota");
+        body.put("status", 402);
+        body.put("message", e.getMessage());
+        body.put("kind", e.kind());
+        body.put("plan", e.plan().slug());
+        body.put("limit", e.limit());
+        body.put("used", e.used());
+        body.put("resetsAt", e.resetsAt() == null ? null : e.resetsAt().toString());
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleBadInput(IllegalArgumentException e) {
         return ResponseEntity.status(400).body(Map.of(

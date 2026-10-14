@@ -32,6 +32,7 @@ class ApplicationControllerTest {
     @MockitoBean ApplicationService service;
     @MockitoBean JobProgressStore jobStore;
     @MockitoBean ProfileRepository profiles;
+    @MockitoBean com.resumepipeline.quota.QuotaService quota;
 
     @Test
     void listForwardsOutcomeFilter() throws Exception {
@@ -53,6 +54,27 @@ class ApplicationControllerTest {
 
         mvc.perform(get("/api/applications/{id}", id).with(user(userId)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void submitIsRefusedWith402WhenThePlanHasNoTailorsLeft() throws Exception {
+        UUID userId = UUID.randomUUID();
+        doThrow(new com.resumepipeline.quota.QuotaExceededException("You have used all 3 tailors on the free plan for this month.",
+                "tailor", com.resumepipeline.quota.Plan.FREE, 3, 3, java.time.Instant.parse("2026-11-01T00:00:00Z")))
+                .when(quota).checkTailor(userId);
+
+        mvc.perform(post("/api/applications/submit").with(user(userId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"jdText\":\"We need a backend engineer who knows Java and Postgres well.\"}"))
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.source").value("quota"))
+                .andExpect(jsonPath("$.kind").value("tailor"))
+                .andExpect(jsonPath("$.plan").value("free"))
+                .andExpect(jsonPath("$.limit").value(3))
+                .andExpect(jsonPath("$.resetsAt").value("2026-11-01T00:00:00Z"));
+
+        verify(jobStore, never()).start(any(), any());
+        verify(service, never()).create(any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.resumepipeline.obs.Mdc;
 import com.resumepipeline.profile.Profile;
 import com.resumepipeline.profile.ProfileRepository;
 import com.resumepipeline.progress.ProgressLog;
+import com.resumepipeline.quota.QuotaService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,13 +38,16 @@ public class ApplicationController {
     private final ApplicationService service;
     private final JobProgressStore jobStore;
     private final ProfileRepository profiles;
+    private final QuotaService quota;
 
     private static final ExecutorService ASYNC_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
-    public ApplicationController(ApplicationService service, JobProgressStore jobStore, ProfileRepository profiles) {
+    public ApplicationController(ApplicationService service, JobProgressStore jobStore, ProfileRepository profiles,
+                                 QuotaService quota) {
         this.service = service;
         this.jobStore = jobStore;
         this.profiles = profiles;
+        this.quota = quota;
     }
 
     @GetMapping
@@ -61,6 +65,7 @@ public class ApplicationController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public SubmitResponse submit(Authentication auth, @RequestBody @Valid CreateApplicationRequest req) {
         UUID userId = AuthUtils.userId(auth);
+        quota.checkTailor(userId);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
         ASYNC_EXECUTOR.submit(Mdc.wrap(() -> {
@@ -68,6 +73,7 @@ public class ApplicationController {
             try {
                 Application a = service.create(userId, req.jdText(), req.jdUrl(), req.roleEmphasis(),
                         req.includeCoverLetter(), progress);
+                quota.recordTailor(userId, a.getId());
                 jobStore.complete(jobId, a.getId());
             } catch (Exception e) {
                 log.error("APP_FAILED job={} cause={}", jobId, e.getMessage(), e);
@@ -95,8 +101,11 @@ public class ApplicationController {
     @PostMapping
     public ApplicationResponse create(Authentication auth, @RequestBody @Valid CreateApplicationRequest req,
                                       @RequestParam(defaultValue = "false") boolean includePdf) {
-        Application a = service.create(AuthUtils.userId(auth), req.jdText(), req.jdUrl(),
+        UUID userId = AuthUtils.userId(auth);
+        quota.checkTailor(userId);
+        Application a = service.create(userId, req.jdText(), req.jdUrl(),
                 req.roleEmphasis(), req.includeCoverLetter(), ProgressLog.noOp());
+        quota.recordTailor(userId, a.getId());
         return ApplicationResponse.from(a, includePdf);
     }
 
