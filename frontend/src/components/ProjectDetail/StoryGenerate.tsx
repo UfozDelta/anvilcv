@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { EventStream } from '../EventStream';
 import { Spin } from '../ledger/parts';
 import { isLive, lensChoice, weakFit } from '../../lib/storyBank';
+import { useField } from '../../lib/field';
 import type { useStoryBank } from '../../hooks/useStoryBank';
 
 type SB = ReturnType<typeof useStoryBank>;
@@ -22,6 +23,9 @@ export const GENERATE_LENSES: { slug: string; name: string; tip: string }[] = [
  * for the lenses picked. The run is a background job shown in the live progress panel.
  */
 export function StoryGenerate({ sb }: { sb: SB }) {
+  const { field, lenses } = useField();
+  // Software keeps its hand-written names and tips; other fields use their preset's.
+  const lensCards = field === 'mechanical' ? lenses.map(l => ({ slug: l.slug, name: l.label, tip: l.blurb })) : GENERATE_LENSES;
   const [story, setStory] = useState<string>(sb.stories[0]?.id ?? NEW);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [job, setJob] = useState<{ submitUrl: string; submitBody: object; title: string } | null>(null);
@@ -74,7 +78,7 @@ export function StoryGenerate({ sb }: { sb: SB }) {
           <p className="sf-auto">Best lens per story</p>
         ) : (
           <div className="sf-lenses">
-            {GENERATE_LENSES.map(l => {
+            {lensCards.map(l => {
               const ch = lensChoice(current, wordings, l.slug);
               const on = picked.has(l.slug);
               return (

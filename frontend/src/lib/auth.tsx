@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api, UnauthorizedError } from './api';
+import { resetField } from './field';
 
 interface Identity { username: string; isAdmin: boolean }
 
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try { await api.post('/api/logout'); } catch { /* ignore */ }
     clear();
+    resetField();
     setUnreachable(false);
   };
 

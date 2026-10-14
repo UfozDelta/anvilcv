@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, CATEGORIES, type Project, type RepoMap, type RepoTree } from '../../lib/api';
+import { api, type Project, type RepoMap, type RepoTree } from '../../lib/api';
 import { EventStream } from '../EventStream';
+import { useField } from '../../lib/field';
 import { RepoPicker } from '../github/RepoPicker';
 import { RepoMapView } from './RepoMapView';
 
@@ -71,7 +72,9 @@ function LinkedRepo({ id, project, onChanged, onRelink, blocked }: { id: string;
   const [pins, setPins] = useState<Set<string>>(new Set());
   const [excludes, setExcludes] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
-  const [lenses, setLenses] = useState<Set<string>>(new Set(CATEGORIES.map(c => c.slug)));
+  const { lenses: fieldLenses } = useField();
+  const [lenses, setLenses] = useState<Set<string>>(new Set(fieldLenses.map(c => c.slug)));
+  useEffect(() => { setLenses(new Set(fieldLenses.map(c => c.slug))); }, [fieldLenses]);
   const [exploring, setExploring] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pulling, setPulling] = useState(false);
@@ -173,7 +176,7 @@ function LinkedRepo({ id, project, onChanged, onRelink, blocked }: { id: string;
           <div className="panel panel--inset stack-sm">
             <div className="label">STEER THE EXPLORER</div>
             <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-              {CATEGORIES.map(c => (
+              {fieldLenses.map(c => (
                 <button key={c.slug} type="button" className="btn btn--sm" title={c.blurb}
                   onClick={() => toggle(lenses, setLenses, c.slug)}
                   style={{ background: lenses.has(c.slug) ? 'var(--ink)' : 'var(--paper)', color: lenses.has(c.slug) ? 'var(--paper)' : 'var(--ink)' }}>

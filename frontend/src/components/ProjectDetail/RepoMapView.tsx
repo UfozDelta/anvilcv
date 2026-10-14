@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { CATEGORIES, type RepoMap } from '../../lib/api';
-
-const LENS_LABEL = Object.fromEntries(CATEGORIES.map(c => [c.slug, c.label]));
+import type { RepoMap } from '../../lib/api';
+import { useField } from '../../lib/field';
 
 /**
  * The repo map, top-down: what the project is, the counted facts, the main flows, then
@@ -15,6 +14,8 @@ export function RepoMapView({ map, picked, onToggle, onOpenFile }: {
   onOpenFile: (path: string) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const { lenses } = useField();
+  const LENS_LABEL = Object.fromEntries(lenses.map(c => [c.slug, c.label]));
   const byPath = Object.fromEntries(map.modules.map(m => [m.path, m]));
   const p = map.project;
 

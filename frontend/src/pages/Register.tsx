@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { z } from 'zod';
 import { useAuth } from '../lib/auth';
+import { saveField } from '../lib/field';
+import { FieldPicker } from '../components/FieldPicker';
 
 const schema = z.object({
   username: z.string().min(3, 'Min 3 characters').max(64, 'Max 64 characters'),
@@ -23,6 +25,7 @@ export function Register() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [field, setField] = useState('software');
 
   function set(k: keyof Fields) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,6 +49,8 @@ export function Register() {
     setBusy(true);
     try {
       await register(result.data.username, result.data.email, result.data.password);
+      // A failed save leaves the software default; the field can be changed in Settings.
+      if (field !== 'software') await saveField(field).catch(() => undefined);
       nav('/projects', { replace: true });
     } catch (ex: unknown) {
       const msg = ex instanceof Error ? ex.message : String(ex);
@@ -118,6 +123,11 @@ export function Register() {
             />
             {fieldErrors.confirm && <div className="err">{fieldErrors.confirm}</div>}
           </label>
+
+          <div className="field">
+            <div className="field__label">Your field</div>
+            <FieldPicker value={field} onChange={setField} disabled={busy} />
+          </div>
 
           {err && <div className="err">{err}</div>}
 

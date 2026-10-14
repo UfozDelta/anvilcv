@@ -3,6 +3,8 @@ import { useGenerationConfig } from '../hooks/useGenerationConfig';
 import { GithubConnection } from '../components/github/GithubConnection';
 import { PageTitle, useUnsavedGuard } from '../components/ledger/shared';
 import type { GenerationConfig } from '../lib/api';
+import { useField } from '../lib/field';
+import { FieldPicker } from '../components/FieldPicker';
 
 type RangeKey = 'singleLine' | 'doubleLine' | 'deadZone';
 const RANGES: { key: RangeKey; label: string; min: number; max: number }[] = [
@@ -40,6 +42,10 @@ function Chips<T extends string>({ label, value, options, onChange }: { label: s
 
 export function SettingsPage() {
   const { cfg, set, loading, loaded, saving, savedAt, err, save } = useGenerationConfig();
+  const { field, setField } = useField();
+  const [fieldErr, setFieldErr] = useState<string | null>(null);
+  // Saves on click, not with the form: the field is not a generation setting and has no Save step.
+  const changeField = (f: string) => { setFieldErr(null); setField(f).catch(() => setFieldErr('Could not change field')); };
   const [base, setBase] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const snap = JSON.stringify(cfg);
@@ -73,6 +79,12 @@ export function SettingsPage() {
       <PageTitle title="Settings" />
 
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
+        <section className="pf-sec">
+          <h2 className="ap-label">Field</h2>
+          <FieldPicker value={field} onChange={changeField} />
+          {fieldErr && <div className="err" role="alert">{fieldErr}</div>}
+        </section>
+
         <section className="pf-sec">
           <h2 className="ap-label">Word filter</h2>
           <label className="st-switch">

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
+import { useField } from '../lib/field';
 import { PageTitle, useUnsavedGuard } from '../components/ledger/shared';
 
 interface EducationEntry {
@@ -85,6 +86,7 @@ function EducationRow({ e, open, onToggle, onChange, onRemove }: {
 }
 
 export function ProfilePage() {
+  const { field, skillLabels } = useField();
   const [p, setP] = useState<ProfileDto | null>(null);
   const [saved, setSaved] = useState('');
   const [loading, setLoading] = useState(true);
@@ -193,8 +195,8 @@ export function ProfilePage() {
         <section className="pf-sec">
           <h2 className="ap-label">Skills</h2>
           <div className="pf-list">
-            {SKILLS.map((s) => (
-              <Row key={s.key} label={s.label}>
+            {SKILLS.map((s, i) => (
+              <Row key={s.key} label={field === 'mechanical' && skillLabels[i] ? skillLabels[i] : s.label}>
                 <textarea
                   rows={1}
                   value={p[s.key]}

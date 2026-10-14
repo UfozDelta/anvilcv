@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { UndoBar } from '../ledger/shared';
 import { EditBullet } from './EditBullet';
 import { WordingRow } from './WordingRow';
-import { CATEGORIES, type Bullet, type GenerationConfig } from '../../lib/api';
+import type { Bullet, GenerationConfig } from '../../lib/api';
+import { useField } from '../../lib/field';
 import { groupStories, isLive, refitNeeded } from '../../lib/storyBank';
 import type { useStoryBank } from '../../hooks/useStoryBank';
 import '../../styles/story.css';
@@ -107,7 +108,8 @@ export function StoryBullets({ cfg, sb }: { cfg: GenerationConfig; sb: SB }) {
 
 function AddWording({ onSave, onCancel }: { onSave: (text: string, category: string) => Promise<void>; onCancel: () => void }) {
   const [text, setText] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0].slug);
+  const { lenses } = useField();
+  const [category, setCategory] = useState(lenses[0].slug);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     if (!text.trim()) return;
@@ -119,7 +121,7 @@ function AddWording({ onSave, onCancel }: { onSave: (text: string, category: str
       <textarea className="field__textarea" aria-label="New bullet" value={text} onChange={e => setText(e.target.value)} rows={3} />
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <select className="field__input" aria-label="Lens" value={category} onChange={e => setCategory(e.target.value)}>
-          {CATEGORIES.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
+          {lenses.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
         </select>
         <button type="button" className="btn btn--acid btn--sm" disabled={busy || !text.trim()} onClick={save}>Save</button>
         <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel}>Cancel</button>
