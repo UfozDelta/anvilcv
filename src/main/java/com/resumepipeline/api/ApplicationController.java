@@ -114,7 +114,7 @@ public class ApplicationController {
 
     @PostMapping("/{id}/rerender")
     public ApplicationResponse rerender(Authentication auth, @PathVariable UUID id,
-                                        @RequestBody RerenderRequest req) {
+                                        @RequestBody @Valid RerenderRequest req) {
         return ApplicationResponse.from(service.rerender(AuthUtils.userId(auth), id,
                 req.selectedBulletIds(), ProgressLog.noOp()));
     }
@@ -122,14 +122,14 @@ public class ApplicationController {
     /** Repeat warnings for a proposed page, in page order. Read-only: nothing is saved. */
     @PostMapping("/selection-check")
     public List<ApplicationService.SelectionWarning> selectionCheck(Authentication auth,
-                                                                    @RequestBody RerenderRequest req) {
+                                                                    @RequestBody @Valid RerenderRequest req) {
         return service.selectionWarnings(AuthUtils.userId(auth), req.selectedBulletIds());
     }
 
     @PostMapping("/{id}/rerender/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public SubmitResponse rerenderSubmit(Authentication auth, @PathVariable UUID id,
-                                         @RequestBody RerenderRequest req) {
+                                         @RequestBody @Valid RerenderRequest req) {
         UUID userId = AuthUtils.userId(auth);
         UUID jobId = UUID.randomUUID();
         jobStore.start(jobId, userId);
@@ -172,7 +172,7 @@ public class ApplicationController {
 
     @PatchMapping("/{id}/locks")
     public ApplicationResponse setLocked(Authentication auth, @PathVariable UUID id,
-                                         @RequestBody LockRequest req) {
+                                         @RequestBody @Valid LockRequest req) {
         return ApplicationResponse.from(service.setLocked(AuthUtils.userId(auth), id, req.lockedBulletIds()));
     }
 

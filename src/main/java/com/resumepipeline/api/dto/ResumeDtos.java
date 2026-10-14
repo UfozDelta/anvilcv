@@ -1,12 +1,13 @@
 package com.resumepipeline.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
 public class ResumeDtos {
 
-    public record ParseResumeRequest(@NotBlank String text) {}
+    public record ParseResumeRequest(@NotBlank @Size(max = 50_000) String text) {}
 
     public record ParsedExperience(
             String name,
@@ -29,6 +30,6 @@ public class ResumeDtos {
     ) {}
 
     public record BulkCreateProjectsRequest(
-            List<ProjectDtos.CreateProjectRequest> items
+            @Size(max = 100) @jakarta.validation.Valid List<ProjectDtos.CreateProjectRequest> items
     ) {}
 }

@@ -50,7 +50,7 @@ public class BulletController {
 
     @PutMapping("/bullets/{id}")
     public BulletResponse update(Authentication auth, @PathVariable UUID id,
-                                 @RequestBody UpdateBulletRequest req) {
+                                 @RequestBody @Valid UpdateBulletRequest req) {
         String[] tags = req.tags() == null ? null : req.tags().toArray(new String[0]);
         return BulletResponse.from(bullets.update(AuthUtils.userId(auth), id, req.text(), tags));
     }
@@ -69,7 +69,7 @@ public class BulletController {
      * many run at once, so there is no job to poll.
      */
     @PostMapping("/bullets/preview")
-    public ResponseEntity<byte[]> preview(Authentication auth, @RequestBody PreviewRequest req) {
+    public ResponseEntity<byte[]> preview(Authentication auth, @RequestBody @Valid PreviewRequest req) {
         PdfCompiler.Result r = bullets.preview(AuthUtils.userId(auth), req.bulletIds());
         HttpHeaders h = new HttpHeaders();
         if (!r.success()) {

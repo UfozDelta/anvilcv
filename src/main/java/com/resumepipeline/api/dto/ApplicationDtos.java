@@ -3,6 +3,7 @@ package com.resumepipeline.api.dto;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.OutcomeHistory;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,17 +21,17 @@ public class ApplicationDtos {
     public record JobProgressResponse(List<String> lines, String status, UUID appId, String error) {}
 
     public record CreateApplicationRequest(
-            String jdText,
-            String jdUrl,
-            String roleEmphasis,   // optional manual override; null/blank = infer the lens from the JD
+            @Size(max = 30_000) String jdText,
+            @Size(max = 2048) String jdUrl,
+            @Size(max = 100) String roleEmphasis,   // optional manual override; null/blank = infer the lens from the JD
             boolean includeCoverLetter
     ) {}
 
     public record UpdateOutcomeRequest(@NotBlank String outcome) {}
 
-    public record RerenderRequest(List<UUID> selectedBulletIds) {}
+    public record RerenderRequest(@Size(max = 200) List<UUID> selectedBulletIds) {}
 
-    public record LockRequest(List<UUID> lockedBulletIds) {}
+    public record LockRequest(@Size(max = 200) List<UUID> lockedBulletIds) {}
 
     /** Refit scope. A null body, or a null {@code projectId}, re-picks the whole page. */
     public record RefitRequest(UUID projectId) {}

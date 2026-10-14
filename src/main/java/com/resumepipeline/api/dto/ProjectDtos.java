@@ -3,6 +3,7 @@ package com.resumepipeline.api.dto;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.render.TechStackSummary;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.util.List;
@@ -13,7 +14,7 @@ public class ProjectDtos {
     public record CreateProjectRequest(
             Project.Kind kind,
             @NotBlank String name,
-            @NotBlank String description,
+            @NotBlank @Size(max = 20_000) String description,
             String githubUrl,
             String title, String company, String location, String dates,
             Boolean current
@@ -21,8 +22,8 @@ public class ProjectDtos {
 
     public record UpdateProjectRequest(
             String name,
-            String description,
-            String contextDescription,
+            @Size(max = 20_000) String description,
+            @Size(max = 20_000) String contextDescription,
             String githubUrl,
             String techStack,
             String yourRole,
@@ -40,8 +41,8 @@ public class ProjectDtos {
             UUID id,
             Project.Kind kind,
             String name,
-            String description,
-            String contextDescription,
+            @Size(max = 20_000) String description,
+            @Size(max = 20_000) String contextDescription,
             String githubUrl,
             boolean repoContextReady,
             String repoBranch,

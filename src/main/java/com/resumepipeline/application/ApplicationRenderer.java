@@ -122,9 +122,17 @@ public class ApplicationRenderer {
         ));
     }
 
+    private static final java.util.regex.Pattern SAFE_URL =
+            java.util.regex.Pattern.compile("(?i)https?://[A-Za-z0-9\\-._~:/?#\\[\\]@!$&'()*+,;=%]+");
+
     private String portfolioLatex(String url) {
         if (url == null || url.isBlank()) return "";
-        return " \\hspace{1pt}\n    \\href{" + url + "}{\\underline{Portfolio}}";
+        // User-supplied and raw inside \href{}: anything but a plain http(s) URL could inject LaTeX.
+        String u = url.trim();
+        if (!SAFE_URL.matcher(u).matches()) return "";
+        u = u.replace("%", "\\%").replace("#", "\\#").replace("&", "\\&")
+                .replace("_", "\\_").replace("~", "\\~{}").replace("$", "\\$");
+        return " \\hspace{1pt}\n    \\href{" + u + "}{\\underline{Portfolio}}";
     }
 
     private String renderEducation(List<EducationEntry> entries, List<String> selectedCourses) {

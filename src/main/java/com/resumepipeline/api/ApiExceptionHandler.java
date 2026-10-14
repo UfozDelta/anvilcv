@@ -98,6 +98,17 @@ public class ApiExceptionHandler {
         ));
     }
 
+    /** Malformed JSON body or a path/query value of the wrong type is the client's mistake, not a 500. */
+    @ExceptionHandler({org.springframework.http.converter.HttpMessageNotReadableException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<Map<String, Object>> handleBadInput(RuntimeException e) {
+        return ResponseEntity.status(400).body(Map.of(
+                "source", "validation",
+                "status", 400,
+                "message", "Malformed request"
+        ));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException e) {
         // Unwrap LLM errors that escaped via parsing failures.

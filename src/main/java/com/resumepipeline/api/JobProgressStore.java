@@ -1,5 +1,6 @@
 package com.resumepipeline.api;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -58,7 +59,8 @@ public class JobProgressStore {
         return new Snapshot(List.copyOf(s.lines()), s.status(), s.appId(), s.error());
     }
 
-    /** Evict jobs older than 10 minutes. Call periodically or on demand. */
+    /** Evict jobs idle for 10 minutes. */
+    @Scheduled(fixedDelay = 60_000)
     public void cleanup() {
         Instant cutoff = Instant.now().minusSeconds(600);
         store.entrySet().removeIf(e -> e.getValue().updatedAt().isBefore(cutoff));

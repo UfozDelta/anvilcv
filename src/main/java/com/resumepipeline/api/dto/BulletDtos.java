@@ -2,6 +2,7 @@ package com.resumepipeline.api.dto;
 
 import com.resumepipeline.bullet.Bullet;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.util.List;
@@ -9,13 +10,13 @@ import java.util.UUID;
 
 public class BulletDtos {
 
-    public record CreateBulletRequest(@NotBlank String text, List<String> tags, String category) {}
+    public record CreateBulletRequest(@NotBlank @Size(max = 2000) String text, @Size(max = 50) List<String> tags, @Size(max = 50) String category) {}
 
-    public record UpdateBulletRequest(String text, List<String> tags) {}
+    public record UpdateBulletRequest(@Size(max = 2000) String text, @Size(max = 50) List<String> tags) {}
 
     public record UpdateStatusRequest(@NotBlank String status) {}
 
-    public record PreviewRequest(List<UUID> bulletIds) {}
+    public record PreviewRequest(@Size(max = 200) List<UUID> bulletIds) {}
 
     public record BulletResponse(
             UUID id,
