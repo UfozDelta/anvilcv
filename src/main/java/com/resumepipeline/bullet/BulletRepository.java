@@ -27,6 +27,11 @@ public interface BulletRepository extends JpaRepository<Bullet, UUID> {
                  + "WHERE p.user_id = :userId AND b.status <> 'REJECTED' ORDER BY b.created_at DESC", nativeQuery = true)
     List<Bullet> findSelectableByProjectUserId(@Param("userId") UUID userId);
 
+    /** Bullets the user has approved, across all their projects. */
+    @Query(value = "SELECT count(*) FROM bullet b JOIN project p ON p.id = b.project_id "
+                 + "WHERE p.user_id = :userId AND b.status = 'APPROVED'", nativeQuery = true)
+    long countApprovedByUserId(@Param("userId") UUID userId);
+
     /** Scoped bulk fetch — only returns bullets whose project belongs to the given user. */
     @Query(value = "SELECT b.* FROM bullet b JOIN project p ON p.id = b.project_id WHERE b.id = ANY(:ids) AND p.user_id = :userId", nativeQuery = true)
     List<Bullet> findByIdsAndProjectUserId(@Param("ids") UUID[] ids, @Param("userId") UUID userId);

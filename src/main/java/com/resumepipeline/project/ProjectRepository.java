@@ -10,6 +10,7 @@ import java.util.UUID;
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
     List<Project> findAllByUserIdOrderByCreatedAtDesc(UUID userId);
     List<Project> findAllByUserIdAndKindOrderByCreatedAtDesc(UUID userId, Project.Kind kind);
+    long countByUserId(UUID userId);
     Optional<Project> findByUserIdAndId(UUID userId, UUID id);
     // Targeted lookup used in ApplicationService — projectIds already scoped by user via bullet filter.
     List<Project> findByIdIn(Collection<UUID> ids);

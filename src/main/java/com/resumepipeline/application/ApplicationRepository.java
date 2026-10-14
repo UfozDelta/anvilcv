@@ -14,6 +14,7 @@ import java.util.UUID;
 public interface ApplicationRepository extends JpaRepository<Application, UUID> {
     List<Application> findAllByUserIdOrderByCreatedAtDesc(UUID userId);
     List<Application> findByUserIdAndOutcomeOrderByCreatedAtDesc(UUID userId, String outcome);
+    long countByUserId(UUID userId);
     Optional<Application> findByUserIdAndId(UUID userId, UUID id);
 
     @Query("SELECT a FROM Application a ORDER BY a.createdAt DESC")

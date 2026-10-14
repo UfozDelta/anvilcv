@@ -27,6 +27,12 @@ public class AppUser {
     @Column(name = "is_admin", nullable = false)
     private boolean admin = false;
 
+    @Column(name = "onboarded_at")
+    private OffsetDateTime onboardedAt;
+
+    @Column(name = "first_download_at")
+    private OffsetDateTime firstDownloadAt;
+
     protected AppUser() {}
 
     public AppUser(String username, String email, String passwordHash) {
@@ -41,9 +47,13 @@ public class AppUser {
     public String getPasswordHash() { return passwordHash; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public boolean isAdmin() { return admin; }
+    public OffsetDateTime getOnboardedAt() { return onboardedAt; }
+    public OffsetDateTime getFirstDownloadAt() { return firstDownloadAt; }
 
     public void setUsername(String username) { this.username = username; }
     public void setEmail(String email) { this.email = email; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public void setAdmin(boolean admin) { this.admin = admin; }
+    public void setOnboardedAt(OffsetDateTime onboardedAt) { this.onboardedAt = onboardedAt; }
+    public void setFirstDownloadAt(OffsetDateTime firstDownloadAt) { this.firstDownloadAt = firstDownloadAt; }
 }
