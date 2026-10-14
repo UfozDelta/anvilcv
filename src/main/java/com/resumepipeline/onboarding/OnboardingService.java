@@ -16,7 +16,7 @@ import java.util.UUID;
 public class OnboardingService {
 
     /** @param onboarded false until the user finishes or skips the guide */
-    public record Status(boolean onboarded, long entries, long approvedBullets, long applications, boolean downloaded) {}
+    public record Status(boolean onboarded, long entries, long bullets, long approvedBullets, long applications, boolean downloaded) {}
 
     private final AppUserRepository users;
     private final ProjectRepository projects;
@@ -35,7 +35,7 @@ public class OnboardingService {
     public Status status(UUID userId) {
         AppUser u = users.findById(userId).orElseThrow();
         return new Status(u.getOnboardedAt() != null, projects.countByUserId(userId),
-                bullets.countApprovedByUserId(userId), applications.countByUserId(userId),
+                bullets.countKeptByUserId(userId), bullets.countApprovedByUserId(userId), applications.countByUserId(userId),
                 u.getFirstDownloadAt() != null);
     }
 

@@ -28,12 +28,13 @@ class OnboardingControllerTest {
     @Test
     void getReturnsTheUsersProgress() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(onboarding.status(userId)).thenReturn(new OnboardingService.Status(false, 2, 5, 1, false));
+        when(onboarding.status(userId)).thenReturn(new OnboardingService.Status(false, 2, 9, 5, 1, false));
 
         mvc.perform(get("/api/onboarding").with(user(userId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.onboarded").value(false))
                 .andExpect(jsonPath("$.entries").value(2))
+                .andExpect(jsonPath("$.bullets").value(9))
                 .andExpect(jsonPath("$.approvedBullets").value(5))
                 .andExpect(jsonPath("$.applications").value(1))
                 .andExpect(jsonPath("$.downloaded").value(false));

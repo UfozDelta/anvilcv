@@ -41,10 +41,12 @@ class OnboardingServiceTest {
     @Test
     void statusCountsWhatTheUserHasCreated() {
         when(projects.countByUserId(id)).thenReturn(3L);
+        when(bullets.countKeptByUserId(id)).thenReturn(9L);
         when(bullets.countApprovedByUserId(id)).thenReturn(7L);
         when(applications.countByUserId(id)).thenReturn(2L);
         var s = service.status(id);
         assertEquals(3, s.entries());
+        assertEquals(9, s.bullets());
         assertEquals(7, s.approvedBullets());
         assertEquals(2, s.applications());
     }
