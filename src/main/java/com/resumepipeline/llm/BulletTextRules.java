@@ -34,6 +34,9 @@ public final class BulletTextRules {
     };
 
     private static final Pattern DIGITS = Pattern.compile("\\d+");
+    // A decimal is one number: "0.05" and "0.5" are different quantities, not the digit runs 0, 5 and 05.
+    private static final String NUMBER = "\\d+(?:\\.\\d+)?";
+    private static final Pattern DECIMAL_NUMBER = Pattern.compile(NUMBER);
     // What turns a digit run into a claimed quantity rather than a version or product
     // number: a currency/percent/plus marker, a time unit, a multiplier, or a magnitude
     // suffix. "s"/"ms"/"x" and the magnitudes need a word boundary, so "64K" and "3 x"
@@ -57,7 +60,7 @@ public final class BulletTextRules {
     // Same for "P95", "EC2", "ES2022". "$200K" is unaffected — the lookbehind sits before
     // the "$", and the character preceding that is whitespace.
     private static final Pattern QUANTITY =
-            Pattern.compile("(?<![A-Za-z])(\\$)?(\\d+)(?:(" + UNIT + ")|(?=\\s(" + UNIT + ")))?");
+            Pattern.compile("(?<![A-Za-z])(\\$)?(" + NUMBER + ")(?:(" + UNIT + ")|(?=\\s(" + UNIT + ")))?");
 
     /** True if the bullet opens with one of the weak/passive phrases the prompt forbids. */
     public static boolean hasForbiddenOpener(String text) {
@@ -253,7 +256,7 @@ public final class BulletTextRules {
             keys.add(key(magnitudeValue(digits, unit), unitClass(prefix, unit)));
         }
         // Digit runs QUANTITY does not match (glued to letters, like K8s) still count as bare numbers.
-        Matcher d = DIGITS.matcher(src);
+        Matcher d = DECIMAL_NUMBER.matcher(src);
         while (d.find()) keys.add(key(stripLeadingZeros(d.group()), BARE));
         // Spelled-out numbers ("forty", "two thousand") cannot say their unit, so they vouch for every class.
         for (String w : wordNumbersToDigits(sourceContext)) {
@@ -346,7 +349,7 @@ public final class BulletTextRules {
         return s.replaceAll("(?<=\\d),(?=\\d{3})", "");
     }
 
-    /** Multiply a digit string by its magnitude suffix, e.g. ("64","K") -> "64000". */
+    /** Multiply a number by its magnitude suffix, e.g. ("64","K") -> "64000", ("1.5","M") -> "1500000". */
     private static String scale(String digits, String suffix) {
         int zeros = switch (Character.toLowerCase(suffix.charAt(0))) {
             case 'k' -> 3;
@@ -354,12 +357,13 @@ public final class BulletTextRules {
             case 'b' -> 9;
             default  -> 0;
         };
-        return digits + "0".repeat(zeros);
+        return new java.math.BigDecimal(digits).movePointRight(zeros).stripTrailingZeros().toPlainString();
     }
 
-    /** "007" and "7" are the same quantity; normalise so they compare equal. */
+    /** "007" and "7" are the same quantity, and so are "0.50" and "0.5"; normalise so they compare equal. */
     private static String stripLeadingZeros(String digits) {
         String t = digits.replaceFirst("^0+(?=\\d)", "");
+        if (t.indexOf('.') >= 0) t = t.replaceFirst("0+$", "").replaceFirst("\\.$", "");
         return t.isEmpty() ? "0" : t;
     }
 

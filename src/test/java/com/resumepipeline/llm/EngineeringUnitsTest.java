@@ -61,6 +61,29 @@ class EngineeringUnitsTest {
         assertTrue(BulletTextRules.fabricatedNumbers("Led a team of 4 in the lab with N sensors.", "Led a team of 4.").isEmpty());
     }
 
+    // A decimal is one number. "0.05 mm" and "0.5 mm" are a tenfold difference in tolerance, not the same digit run.
+    @Test void aTenTimesLooserToleranceIsFabricated() {
+        assertEquals(List.of("0.5"), fab("Held **0.5 mm** across the housings."));
+    }
+
+    @Test void aTenTimesTighterToleranceIsFabricated() {
+        assertEquals(List.of("0.05"), BulletTextRules.fabricatedNumbers("Held **0.05 mm**.", "Held 0.5 mm on the housings."));
+    }
+
+    @Test void trailingZerosDoNotChangeTheQuantity() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Held **0.50 mm**.", "Held 0.5 mm on the housings.").isEmpty());
+    }
+
+    @Test void aDecimalPercentIsNotVouchedForByItsFractionalDigit() {
+        assertEquals(List.of("99.9%"),BulletTextRules.fabricatedNumbers("Reached **99.9%** uptime.", "Cut errors by 9% last quarter."));
+        assertTrue(BulletTextRules.fabricatedNumbers("Reached **99.9%** uptime.", "Held 99.9% uptime.").isEmpty());
+    }
+
+    @Test void aDecimalMagnitudeScalesExactly() {
+        assertTrue(BulletTextRules.fabricatedNumbers("Served **1.5M** users.", "Served 1.5 million users.").isEmpty());
+        assertEquals(List.of("15M"), BulletTextRules.fabricatedNumbers("Served **15M** users.", "Served 1.5 million users."));
+    }
+
     @Test void softwareQuantitiesStillWork() {
         assertEquals(List.of("500ms"), BulletTextRules.fabricatedNumbers("Cut latency to **500ms**.", "Served 5 regions."));
     }
