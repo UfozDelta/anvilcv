@@ -25,9 +25,9 @@ type Plan = {
 // Prices come from one internal base rate (~$0.17 per tailor, never shown) times volume,
 // except Pro: discounted to ~$0.09 so the middle plan is the obvious deal.
 const PLANS: Plan[] = [
-  { id: 'starter', name: 'STARTER', price: 10, per: '/ month', tailors: 60, kind: 'monthly', line: 'About 2 applications a day.', features: ['60 tailors a month', 'Unlimited projects and experiences', '10 repo imports a month', 'Cover letters'] },
-  { id: 'pro', name: 'PRO', price: 14, per: '/ month', tailors: 150, kind: 'monthly', featured: true, line: 'About 5 applications a day.', features: ['150 tailors a month', 'Unlimited projects and experiences', '25 repo imports a month', 'Tailor from the job feed', 'Priority queue'] },
-  { id: 'pack', name: 'PACK', price: 39, per: 'once', tailors: 200, kind: 'pack', line: 'Pay once, use whenever.', features: ['200 tailors', 'Unlimited projects and experiences', 'Never expire', '20 repo imports'] },
+  { id: 'starter', name: 'STARTER', price: 10, per: '/ month', tailors: 60, kind: 'monthly', line: 'About 2 applications a day.', features: ['60 tailors a month', '5 generations a month', '10 repo imports a month', 'Cover letters'] },
+  { id: 'pro', name: 'PRO', price: 14, per: '/ month', tailors: 150, kind: 'monthly', featured: true, line: 'About 5 applications a day.', features: ['150 tailors a month', '15 generations a month', '25 repo imports a month', 'Tailor from the job feed', 'Priority queue'] },
+  { id: 'pack', name: 'PACK', price: 39, per: 'once', tailors: 200, kind: 'pack', line: 'Pay once, use whenever.', features: ['200 tailors', '20 generations', 'Never expire', '20 repo imports'] },
 ];
 const FREE_TAILORS = 3;
 const MANUAL_MIN = 45; // rough minutes to hand-tailor one résumé
@@ -42,7 +42,8 @@ const compare = (sec: number): [string, string, string][] => [
 
 const FAQ = [
   ['What counts as a tailor?', 'One tailored application, résumé plus cover letter, for one job. Re-generating for the same job is free up to 3 times. Downloading the PDF or LaTeX never counts, however many times you do it.'],
-  ['What does the free plan include?', `${FREE_TAILORS} tailors a month, forever, with room to try the whole flow: up to 2 projects and 1 work experience. Paid plans remove that limit.`],
+  ['What does the free plan include?', `${FREE_TAILORS} tailors a month, forever, with room to try the whole flow: up to 2 projects and 1 work experience. Paid plans raise that to 5 generations a month (Starter) or 15 (Pro).`],
+  ['What is a generation?', 'One run that writes bullets for a project or work experience. Tailoring a résumé to a job is separate and counts as a tailor.'],
   ['Do unused tailors roll over?', 'Monthly plans roll unused tailors over one month, capped at the plan’s monthly amount. Pack tailors never expire. Free tailors reset each month.'],
   ['Can I use my own AI key?', 'Only if you host Anvil yourself. The hosted app runs on our AI, so every tailor uses one. Run it on your own server with your own OpenAI or Anthropic key and there is no limit.'],
   ['Refunds?', 'All sales are final. Subscriptions and Packs are non-refundable. Cancel a subscription any time and keep access until the period ends.'],
