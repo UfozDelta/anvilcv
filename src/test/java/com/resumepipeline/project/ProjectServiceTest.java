@@ -5,7 +5,6 @@ import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.Story;
 import com.resumepipeline.bullet.StoryRepository;
-import com.resumepipeline.llm.GithubContextFetcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -23,17 +22,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-/**
- * Caveat: under MockitoExtension there is no Spring proxy, so the {@code @Async}
- * {@code fetchAndCacheRepoContext} runs INLINE on the test thread — these tests
- * verify it is invoked, not that it is dispatched asynchronously.
- */
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {
 
     @Mock ProjectRepository repo;
     @Mock BulletRepository bulletRepo;
-    @Mock GithubContextFetcher githubFetcher;
+    @Mock RepoContextEnricher enricher;
     @Mock ApplicationRepository applicationRepo;
     @Mock StoryRepository storyRepo;
     @InjectMocks ProjectService service;
@@ -102,22 +96,18 @@ class ProjectServiceTest {
 
         service.create(user, Project.Kind.PROJECT, "P", "desc", null, null, null, null, null);
 
-        verifyNoInteractions(githubFetcher);
+        verifyNoInteractions(enricher);
     }
 
     @Test
     void createWithGithubUrlTriggersFetch() {
         UUID user = UUID.randomUUID();
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        // fetchAndCacheRepoContext re-reads the project by id; saved id is null here, so
-        // findById(null) is fine to stub as empty — we only assert the fetch happened.
-        when(repo.findById(any())).thenReturn(Optional.empty());
-        when(githubFetcher.fetch("https://github.com/x/y")).thenReturn("README");
 
         service.create(user, Project.Kind.PROJECT, "P", "desc", "https://github.com/x/y",
                 null, null, null, null);
 
-        verify(githubFetcher).fetch("https://github.com/x/y");
+        verify(enricher).fetchAndCacheRepoContext(any(), eq("https://github.com/x/y"));
     }
 
     @Test
@@ -131,7 +121,7 @@ class ProjectServiceTest {
         service.update(user, id, "P", "d", null, "https://github.com/x/y",
                 null, null, null, null, null, null, null, null, null, null, null, null);
 
-        verifyNoInteractions(githubFetcher);
+        verifyNoInteractions(enricher);
     }
 
     @Test
@@ -141,13 +131,11 @@ class ProjectServiceTest {
         existing.setGithubUrl("https://github.com/old/repo");
         when(repo.findByUserIdAndId(user, id)).thenReturn(Optional.of(existing));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(repo.findById(any())).thenReturn(Optional.empty());
-        when(githubFetcher.fetch("https://github.com/new/repo")).thenReturn("README");
 
         service.update(user, id, "P", "d", null, "https://github.com/new/repo",
                 null, null, null, null, null, null, null, null, null, null, null, null);
 
-        verify(githubFetcher).fetch("https://github.com/new/repo");
+        verify(enricher).fetchAndCacheRepoContext(any(), eq("https://github.com/new/repo"));
     }
 
     @Test
@@ -201,6 +189,33 @@ class ProjectServiceTest {
                 null, null, null, "SWE", "Acme", "NYC", "2024");
 
         verifyNoInteractions(applicationRepo);
+    }
+
+    @Test
+    void updateLeavesOmittedFieldsAlone() {
+        UUID user = UUID.randomUUID(), id = UUID.randomUUID();
+        Project existing = new Project(user, Project.Kind.EXPERIENCE, "x", "d", null, "SWE", "Acme", "NYC", "2024");
+        existing.setGithubUrl("https://github.com/x/y");
+        existing.setTechStack("Java");
+        existing.setContextDescription("ctx");
+        existing.setYourRole("lead");
+        when(repo.findByUserIdAndId(user, id)).thenReturn(Optional.of(existing));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // The description editor sends only {description}.
+        Project saved = service.update(user, id, null, "new desc", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null);
+
+        assertEquals("new desc", saved.getDescription());
+        assertEquals("https://github.com/x/y", saved.getGithubUrl());
+        assertEquals("Java", saved.getTechStack());
+        assertEquals("ctx", saved.getContextDescription());
+        assertEquals("lead", saved.getYourRole());
+        assertEquals("SWE", saved.getTitle());
+        assertEquals("Acme", saved.getCompany());
+        assertEquals("NYC", saved.getLocation());
+        assertEquals("2024", saved.getDates());
+        verifyNoInteractions(enricher);
     }
 
     @Test

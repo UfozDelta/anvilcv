@@ -22,7 +22,7 @@ public class GithubContextFetcher {
     private static final Pattern REPO_PATTERN = Pattern.compile(
             "(?:https?://)?github\\.com/([^/]+)/([^/]+?)(?:\\.git)?(?:/.*)?$");
 
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build();
     private final ObjectMapper mapper = new ObjectMapper();
 
     /** Returns README + file listing, or null if fetch fails or URL is blank. */
@@ -62,6 +62,7 @@ public class GithubContextFetcher {
                     .uri(URI.create("https://api.github.com/repos/" + owner + "/" + repo + "/readme"))
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "resume-pipeline/1.0")
+                    .timeout(java.time.Duration.ofSeconds(20))
                     .build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) return null;
@@ -81,6 +82,7 @@ public class GithubContextFetcher {
                     .uri(URI.create("https://api.github.com/repos/" + owner + "/" + repo + "/git/trees/HEAD"))
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "resume-pipeline/1.0")
+                    .timeout(java.time.Duration.ofSeconds(20))
                     .build();
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() != 200) return null;

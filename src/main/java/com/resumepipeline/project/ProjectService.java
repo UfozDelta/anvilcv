@@ -5,11 +5,9 @@ import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.Story;
 import com.resumepipeline.bullet.StoryRepository;
 import com.resumepipeline.llm.BulletTextRules;
-import com.resumepipeline.llm.GithubContextFetcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -28,16 +26,16 @@ public class ProjectService {
 
     private final ProjectRepository repo;
     private final BulletRepository bulletRepo;
-    private final GithubContextFetcher githubFetcher;
+    private final RepoContextEnricher repoEnricher;
     // A heading edit changes every PDF that prints this entry — see markPdfStale.
     private final ApplicationRepository applicationRepo;
     private final StoryRepository storyRepo;
 
-    public ProjectService(ProjectRepository repo, BulletRepository bulletRepo, GithubContextFetcher githubFetcher,
+    public ProjectService(ProjectRepository repo, BulletRepository bulletRepo, RepoContextEnricher repoEnricher,
                           ApplicationRepository applicationRepo, StoryRepository storyRepo) {
         this.repo = repo;
         this.bulletRepo = bulletRepo;
-        this.githubFetcher = githubFetcher;
+        this.repoEnricher = repoEnricher;
         this.applicationRepo = applicationRepo;
         this.storyRepo = storyRepo;
     }
@@ -102,7 +100,7 @@ public class ProjectService {
         p.setGithubUrl(githubUrl);
         Project saved = repo.save(p);
         if (githubUrl != null && !githubUrl.isBlank()) {
-            fetchAndCacheRepoContext(saved.getId(), githubUrl);
+            repoEnricher.fetchAndCacheRepoContext(saved.getId(), githubUrl);
         }
         return saved;
     }
@@ -127,46 +125,31 @@ public class ProjectService {
         List<Object> printedBefore = printed(p);
         if (name != null)        p.setName(name);
         if (description != null) p.setDescription(description);
-        p.setContextDescription(contextDescription);
+        // Null = field omitted from the PUT body, leave it alone; send "" to clear.
+        if (contextDescription != null) p.setContextDescription(contextDescription);
         String oldUrl = p.getGithubUrl();
-        p.setGithubUrl(githubUrl);
-        p.setTechStack(techStack);
-        p.setYourRole(yourRole);
-        p.setOwnership(ownership);
-        p.setScaleImpact(scaleImpact);
-        p.setHardestProblem(hardestProblem);
-        p.setTechnicalDecisions(technicalDecisions);
-        p.setUserImpact(userImpact);
-        p.setSecurityPosture(securityPosture);
-        p.setTitle(title);
-        p.setCompany(company);
-        p.setLocation(location);
-        p.setDates(dates);
+        if (githubUrl != null)           p.setGithubUrl(githubUrl);
+        if (techStack != null)           p.setTechStack(techStack);
+        if (yourRole != null)            p.setYourRole(yourRole);
+        if (ownership != null)           p.setOwnership(ownership);
+        if (scaleImpact != null)         p.setScaleImpact(scaleImpact);
+        if (hardestProblem != null)      p.setHardestProblem(hardestProblem);
+        if (technicalDecisions != null)  p.setTechnicalDecisions(technicalDecisions);
+        if (userImpact != null)          p.setUserImpact(userImpact);
+        if (securityPosture != null)     p.setSecurityPosture(securityPosture);
+        if (title != null)               p.setTitle(title);
+        if (company != null)             p.setCompany(company);
+        if (location != null)            p.setLocation(location);
+        if (dates != null)               p.setDates(dates);
         if (current != null) p.setCurrent(current);
         else if (looksCurrent(dates)) p.setCurrent(true);
         Project saved = repo.save(p);
         if (!printed(saved).equals(printedBefore)) markPdfStale(userId, saved.getId());
         boolean urlChanged = githubUrl != null && !githubUrl.equals(oldUrl);
         if (urlChanged) {
-            fetchAndCacheRepoContext(saved.getId(), githubUrl);
+            repoEnricher.fetchAndCacheRepoContext(saved.getId(), githubUrl);
         }
         return saved;
-    }
-
-    @Async
-    public void fetchAndCacheRepoContext(UUID projectId, String githubUrl) {
-        long start = System.currentTimeMillis();
-        try {
-            String context = githubFetcher.fetch(githubUrl);
-            repo.findById(projectId).ifPresent(p -> {
-                p.setRepoContext(context);
-                repo.save(p);
-            });
-            log.info("PROJECT_ENRICH project={} ok=true ms={}", projectId, System.currentTimeMillis() - start);
-        } catch (Exception e) {
-            log.warn("PROJECT_ENRICH project={} ok=false ms={} cause={}",
-                    projectId, System.currentTimeMillis() - start, e.getMessage());
-        }
     }
 
     /** The fields ApplicationRenderer prints in this entry's heading; the rest only feed prompts. */
