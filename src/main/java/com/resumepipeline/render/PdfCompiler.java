@@ -68,10 +68,14 @@ public class PdfCompiler {
                     binary, "--outdir", tmp.toString(), "--keep-logs", "--chatter", "minimal",
                     tex.toString()
             ).redirectErrorStream(true);
+            // To a file, not a pipe: reading a pipe to EOF would block until the process exits
+            // and make the waitFor timeout below unreachable.
+            Path stdout = tmp.resolve("stdout.txt");
+            pb.redirectOutput(stdout.toFile());
 
             Process p = pb.start();
-            String output = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             boolean finished = p.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            String output = readIfExists(stdout);
             if (!finished) {
                 p.destroyForcibly();
                 return Result.failure("tectonic timed out after " + timeoutSeconds + "s", output);
