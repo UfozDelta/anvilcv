@@ -51,7 +51,7 @@ export function Register() {
       await register(result.data.username, result.data.email, result.data.password);
       // A failed save leaves the software default; the field can be changed in Settings.
       if (field !== 'software') await saveField(field).catch(() => undefined);
-      nav('/projects', { replace: true });
+      nav('/welcome', { replace: true });
     } catch (ex: unknown) {
       const msg = ex instanceof Error ? ex.message : String(ex);
       if (msg.includes('409') || msg.toLowerCase().includes('conflict')) {

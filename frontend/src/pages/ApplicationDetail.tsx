@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { markDownloaded } from '../components/onboarding/store';
 import { api, type ApplicationResponse, type BulletVerdict } from '../lib/api';
 import { EventStream } from '../components/EventStream';
 import { RichText } from '../components/RichText';
@@ -376,7 +377,7 @@ function PagePane({ s, app }: { s: Detail; app: ApplicationResponse }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <a href={pdfUrl} className="minibtn" style={{ padding: '8px 10px', textDecoration: 'none' }} target="_blank" rel="noreferrer">
+        <a href={pdfUrl} className="minibtn" style={{ padding: '8px 10px', textDecoration: 'none' }} target="_blank" rel="noreferrer" onClick={() => void markDownloaded()}>
           ↓ Download PDF
         </a>
         <a href={texUrl} className="minibtn" style={{ padding: '8px 10px', textDecoration: 'none' }}>

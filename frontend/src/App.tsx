@@ -46,7 +46,8 @@ import { LabWorkspace } from './lab/workspace/LabWorkspace';
 import { LabWorkspaceTabs } from './lab/workspace-tabs/LabWorkspaceTabs';
 import { LabStoryFlow } from './lab/story-flow/LabStoryFlow';
 import { LabLists } from './lab/lists/LabLists';
-import { LabOnboarding } from './lab/onboarding/LabOnboarding';
+import { OnboardingGuide } from './components/onboarding/Guides';
+import { WelcomePage } from './components/onboarding/Welcome';
 
 /** The router keeps the old scroll position across navigation, so a link clicked at the bottom of a page opened the next one mid-way. */
 function ScrollToTop() {
@@ -60,6 +61,7 @@ function AuthedShell({ children }: { children: React.ReactNode }) {
     <RequireAuth>
       <div className="ap-root">
         <AppNav />
+        <OnboardingGuide />
         <main className="ap-main" style={{ paddingBottom: 80 }}>{children}</main>
       </div>
     </RequireAuth>
@@ -74,6 +76,7 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/welcome"              element={<RequireAuth><WelcomePage /></RequireAuth>} />
         <Route path="/projects"             element={<AuthedShell><Projects /></AuthedShell>} />
         <Route path="/experiences"          element={<AuthedShell><Experiences /></AuthedShell>} />
         <Route path="/projects/:id"         element={<AuthedShell><ProjectDetail /></AuthedShell>} />
@@ -121,7 +124,6 @@ export function App() {
         <Route path="/lab/workspace-tabs"   element={<LabWorkspaceTabs />} />
         <Route path="/lab/story-flow"       element={<LabStoryFlow />} />
         <Route path="/lab/lists"            element={<LabLists />} />
-        <Route path="/lab/onboarding"       element={<LabOnboarding />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

@@ -24,23 +24,6 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
-    iso: '2026-10-10',
-    title: 'Onboarding',
-    status: 'prototype',
-    summary: <>A welcome at sign-up (pick Software or Mechanical, then import, fill in by hand, or skip), then the real pages guided through the first résumé by a top next-step bar and a dimmed floating coachmark. It runs the real Projects, story bank, Profile, Upload, New application and Application pages on an in-memory fake backend.</>,
-    protos: [
-      { to: '/lab/onboarding', name: 'Onboarding', line: 'Welcome page, next-step bar and coachmarks (R replays, A autoplays the whole first run).' },
-    ],
-    fixes: [
-      'Welcome asks the field first (Software / Mechanical), then offers import, by hand, or skip',
-      'The tips follow the road: import (import, details, approve), by hand (details, add an entry, Generate, approve) or skip (entry first, details later); copy changes with the field',
-      'No invented screens: guidance sits on the real pages and finishes on real data, never on "viewed a tip"',
-      'Top bar says what is next and how far along you are; the floating box points at the real control with the page dimmed',
-      'The box keeps guiding across pages by pointing at the nav item when you are on another page',
-      'Fake backend lives in lab/onboarding/fakeApi.ts; fetch is patched only while the lab is mounted',
-    ],
-  },
-  {
     iso: '2026-10-08',
     title: 'Projects & experiences',
     status: 'prototype',

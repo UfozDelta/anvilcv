@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api, UnauthorizedError } from './api';
 import { resetField } from './field';
+import { resetProgress } from '../components/onboarding/store';
 
 interface Identity { username: string; isAdmin: boolean }
 
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await api.post('/api/logout'); } catch { /* ignore */ }
     clear();
     resetField();
+    resetProgress();
     setUnreachable(false);
   };
 
