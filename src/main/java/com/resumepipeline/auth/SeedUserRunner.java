@@ -42,11 +42,12 @@ public class SeedUserRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        String hash = passwordEncoder.encode(rawPassword);
         if (rawPassword == null || rawPassword.isBlank()) {
-            log.warn("auth.seed.password is blank — seed user password will be empty string. " +
-                     "Set SEED_PASSWORD env var or activate the 'local' Spring profile.");
+            log.warn("auth.seed.password is blank — seed user not created or updated. " +
+                     "Set SEED_PASSWORD to get the admin account.");
+            return;
         }
+        String hash = passwordEncoder.encode(rawPassword);
 
         userRepository.findById(SEED_USER_ID).ifPresentOrElse(
                 user -> {
