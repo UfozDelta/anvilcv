@@ -24,6 +24,21 @@ type Entry = {
 
 const ENTRIES: Entry[] = [
   {
+    iso: '2026-10-14',
+    title: 'Onboarding paywall',
+    status: 'prototype',
+    summary: <>Where first-run onboarding asks for money. Three placements, plans from /pricing, a free path on each.</>,
+    protos: [
+      { to: '/lab/paywall', name: 'Paywall', line: 'A lock the PDF / B free quota / C after 3 bullets; desktop and phone.' },
+    ],
+    fixes: [
+      'A: preview free, Download PDF needs a plan',
+      'B: 3 free tailors a month, meter from the first, ask at the 4th',
+      'C: dialog after the 3rd approved bullet; Continue free is a full button',
+      'No timers, no fake scarcity; every ask has a dismiss',
+    ],
+  },
+  {
     iso: '2026-10-08',
     title: 'Projects & experiences',
     status: 'prototype',

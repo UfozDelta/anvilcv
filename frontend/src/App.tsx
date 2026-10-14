@@ -46,6 +46,7 @@ import { LabWorkspace } from './lab/workspace/LabWorkspace';
 import { LabWorkspaceTabs } from './lab/workspace-tabs/LabWorkspaceTabs';
 import { LabStoryFlow } from './lab/story-flow/LabStoryFlow';
 import { LabLists } from './lab/lists/LabLists';
+import { LabPaywall } from './lab/paywall/LabPaywall';
 import { OnboardingGuide } from './components/onboarding/Guides';
 import { WelcomePage } from './components/onboarding/Welcome';
 
@@ -124,6 +125,7 @@ export function App() {
         <Route path="/lab/workspace-tabs"   element={<LabWorkspaceTabs />} />
         <Route path="/lab/story-flow"       element={<LabStoryFlow />} />
         <Route path="/lab/lists"            element={<LabLists />} />
+        <Route path="/lab/paywall"          element={<LabPaywall />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>
