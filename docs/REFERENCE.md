@@ -279,7 +279,7 @@ OpenAI defaults to `gpt-4o-mini` for all three.
 | Var | Default | Notes |
 |---|---|---|
 | `TECTONIC_BIN` | `tectonic` | PDF only |
-| `SEED_USERNAME` / `SEED_EMAIL` / `SEED_PASSWORD` | `f3l` / `admin@localhost` / — | seed admin; blank password only warns |
+| `SEED_USERNAME` / `SEED_EMAIL` / `SEED_PASSWORD` | `f3l` / `admin@localhost` / — | seed admin; blank password skips it |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | split-origin deploys only |
 | `COOKIE_SAME_SITE` / `COOKIE_SECURE` | `Lax` / `false` | set `None` / `true` behind a tunnel |
 | `TUNNEL_TOKEN` | — | secret; `compose.yml` cloudflared only |
@@ -590,7 +590,7 @@ cd frontend && npm run build       # dist/ and a copy into src/main/resources/st
 4. **`start.ps1` is PowerShell-only.** On macOS/Linux run the two manual steps.
 5. **The Vite build wipes `src/main/resources/static/`** and copies `dist/` into it. Skip
    `npm run build` and Spring silently serves the previous UI.
-6. **A blank `SEED_PASSWORD` creates an admin with an empty password** — it only logs a warning.
+6. **A blank `SEED_PASSWORD` skips the seed admin** — nothing is created or updated; set it to get the admin account.
 7. **Registrations are not admins** and there is no promotion UI. Log in as the seed user, or
    `UPDATE app_user SET is_admin = true WHERE username = '...'`.
 8. **CSRF is disabled** while auth is cookie-based. That is only safe while the frontend and API

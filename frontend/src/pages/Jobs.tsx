@@ -234,7 +234,9 @@ export function Jobs() {
                     aria-label={`${j.saved ? 'Unsave' : 'Save'} ${name}`}
                     onClick={() => toggleSave(j)}
                   >{j.saved ? '★' : '☆'}</button>
-                  <a href={j.url} target="_blank" rel="noopener noreferrer" className="ap-btn ap-btn--ghost jb-btn" aria-label={`View ${name} posting`}>View post ↗</a>
+                  {/^https?:\/\//i.test(j.url) && (
+                    <a href={j.url} target="_blank" rel="noopener noreferrer" className="ap-btn ap-btn--ghost jb-btn" aria-label={`View ${name} posting`}>View post ↗</a>
+                  )}
                   <button type="button" className="ap-btn ap-btn--acid jb-btn" aria-label={`Tailor a résumé for ${name}`} onClick={() => tailor(j)}>Tailor →</button>
                 </div>
               </li>

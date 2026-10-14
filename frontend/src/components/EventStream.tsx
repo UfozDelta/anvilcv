@@ -42,6 +42,9 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
   const bottomRef = useRef<HTMLDivElement>(null);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // doneLabel="" hides the action button, so a finished run reports back when it is closed;
+  // otherwise the caller's refresh (onDone) would never run.
+  const close = () => (done && doneLabel === '' ? onDoneRef.current(doneId ?? '') : onClose());
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -123,7 +126,7 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
         justifyContent: 'center',
         padding: 24,
       }}
-      onClick={e => { if (e.target === e.currentTarget && (done || !!error)) onClose(); }}
+      onClick={e => { if (e.target === e.currentTarget && (done || !!error)) close(); }}
     >
       <div
         style={{
@@ -152,7 +155,7 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
             {headerLabel}
           </span>
           <button
-            onClick={onClose}
+            onClick={close}
             style={{
               background: 'none',
               border: 'none',
@@ -207,7 +210,7 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
               gap: 8,
             }}
           >
-            <button className="ap-btn ap-btn--ghost" onClick={onClose}>
+            <button className="ap-btn ap-btn--ghost" onClick={close}>
               CLOSE
             </button>
             {done && doneId && doneLabel !== '' && (
