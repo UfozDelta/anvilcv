@@ -120,8 +120,8 @@ export function Landing({ How = HowItWorks }: { How?: React.ComponentType }) {
         <div className="lx-price">
           <span className="lp-display lx-price__big">$0</span>
           <div className="lx-price__copy">
-            <p><strong>Free to start.</strong> Pro is $14/mo for 150 tailored PDFs a month.</p>
-            <p className="lx-price__alt">Technical? Stay free forever with your own AI key.</p>
+            <p><strong>Free to start.</strong> Pro is $14/mo for 150 tailors a month.</p>
+            <p className="lx-price__alt">Technical? Host it yourself with your own AI key.</p>
           </div>
           <Link to="/pricing" className="lp-btn lp-btn--ink lx-btn">SEE PRICING →</Link>
         </div>

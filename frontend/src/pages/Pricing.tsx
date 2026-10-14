@@ -6,15 +6,15 @@ import '../styles/landing.css';
 import '../components/landing/landing-page.css';
 import '../styles/pricing.css';
 
-// Proposed pricing — no billing exists yet. Estimated LLM cost ~$0.02–0.05 per PDF;
+// Proposed pricing — no billing exists yet (checkout will be Stripe). Estimated LLM cost ~$0.02–0.05 per tailor;
 // verify against llm_usage_log before shipping.
 type Plan = {
   id: string;
   name: string;
   price: number;
   per: string;
-  /** Tailored PDFs included: per month for subscriptions, total for the pack. */
-  pdfs: number;
+  /** Tailors included: per month for subscriptions, total for the pack. One tailor = one job's page. */
+  tailors: number;
   kind: 'monthly' | 'pack';
   /** The plan we sell: always shown dark with the "most popular" badge. */
   featured?: boolean;
@@ -22,14 +22,14 @@ type Plan = {
   features: string[];
 };
 
-// Prices come from one internal base rate (~$0.17 per PDF, never shown) times volume,
+// Prices come from one internal base rate (~$0.17 per tailor, never shown) times volume,
 // except Pro: discounted to ~$0.09 so the middle plan is the obvious deal.
 const PLANS: Plan[] = [
-  { id: 'starter', name: 'STARTER', price: 10, per: '/ month', pdfs: 60, kind: 'monthly', line: 'About 2 applications a day.', features: ['60 tailored PDFs a month', '10 repo imports a month', 'Cover letters'] },
-  { id: 'pro', name: 'PRO', price: 14, per: '/ month', pdfs: 150, kind: 'monthly', featured: true, line: 'About 5 applications a day.', features: ['150 tailored PDFs a month', '25 repo imports a month', 'Tailor from the job feed', 'Priority queue'] },
-  { id: 'pack', name: 'PACK', price: 39, per: 'once', pdfs: 200, kind: 'pack', line: 'Pay once, use whenever.', features: ['200 tailored PDFs', 'Never expire', '20 repo imports'] },
+  { id: 'starter', name: 'STARTER', price: 10, per: '/ month', tailors: 60, kind: 'monthly', line: 'About 2 applications a day.', features: ['60 tailors a month', 'Unlimited projects and experiences', '10 repo imports a month', 'Cover letters'] },
+  { id: 'pro', name: 'PRO', price: 14, per: '/ month', tailors: 150, kind: 'monthly', featured: true, line: 'About 5 applications a day.', features: ['150 tailors a month', 'Unlimited projects and experiences', '25 repo imports a month', 'Tailor from the job feed', 'Priority queue'] },
+  { id: 'pack', name: 'PACK', price: 39, per: 'once', tailors: 200, kind: 'pack', line: 'Pay once, use whenever.', features: ['200 tailors', 'Unlimited projects and experiences', 'Never expire', '20 repo imports'] },
 ];
-const FREE_PDFS = 3;
+const FREE_TAILORS = 3;
 const MANUAL_MIN = 45; // rough minutes to hand-tailor one résumé
 const WEEKS_PER_MONTH = 30 / 7; // a 30-day month, so 5 a day = 150
 
@@ -41,15 +41,16 @@ const compare = (sec: number): [string, string, string][] => [
 ];
 
 const FAQ = [
-  ['What counts as a PDF?', 'One tailored application, résumé plus cover letter, for one job. Re-generating for the same job is free up to 3 times.'],
-  ['Do unused PDFs roll over?', 'Monthly plans roll unused PDFs over one month, capped at the plan’s monthly amount. Pack PDFs never expire.'],
-  ['Can I use my own AI key?', 'Yes, on any plan. PDFs made with your own OpenAI or Anthropic key are unlimited and don’t use credits. It doesn’t change your subscription price.'],
-  ['Refunds?', 'All sales are final. Subscriptions and Packs are non-refundable, including months you ran on your own key. Cancel a subscription any time and keep access until the period ends.'],
+  ['What counts as a tailor?', 'One tailored application, résumé plus cover letter, for one job. Re-generating for the same job is free up to 3 times. Downloading the PDF or LaTeX never counts, however many times you do it.'],
+  ['What does the free plan include?', `${FREE_TAILORS} tailors a month, forever, with room to try the whole flow: up to 2 projects and 1 work experience. Paid plans remove that limit.`],
+  ['Do unused tailors roll over?', 'Monthly plans roll unused tailors over one month, capped at the plan’s monthly amount. Pack tailors never expire. Free tailors reset each month.'],
+  ['Can I use my own AI key?', 'Only if you host Anvil yourself. The hosted app runs on our AI, so every tailor uses one. Run it on your own server with your own OpenAI or Anthropic key and there is no limit.'],
+  ['Refunds?', 'All sales are final. Subscriptions and Packs are non-refundable. Cancel a subscription any time and keep access until the period ends.'],
 ]
 
 /** Smallest monthly plan that covers this pace; past every monthly cap, the pack. */
 function fitFor(perMonth: number): Plan {
-  return PLANS.filter((p) => p.kind === 'monthly').find((p) => perMonth <= p.pdfs) ?? PLANS.find((p) => p.kind === 'pack')!;
+  return PLANS.filter((p) => p.kind === 'monthly').find((p) => perMonth <= p.tailors) ?? PLANS.find((p) => p.kind === 'pack')!;
 }
 
 /** Public pricing. No billing is wired yet: every plan's button goes to sign-up. */
@@ -57,7 +58,7 @@ export function Pricing() {
   const avgSec = useAvgSec();
   const [perWeek, setPerWeek] = useState(25);
   const perMonth = Math.max(1, Math.round(perWeek * WEEKS_PER_MONTH));
-  const freeFits = perMonth <= FREE_PDFS;
+  const freeFits = perMonth <= FREE_TAILORS;
   // The calculator marks a fit; it never greys the other plans out.
   const fit = freeFits ? null : fitFor(perMonth);
   const hours = (perMonth * MANUAL_MIN) / 60;
@@ -86,12 +87,12 @@ export function Pricing() {
               />
             </div>
             <dl className="pr-calc__out">
-              <div><dt>PDFs a month</dt><dd>~{perMonth}</dd></div>
+              <div><dt>Tailors a month</dt><dd>~{perMonth}</dd></div>
               <div><dt>Hours saved a month</dt><dd>{Math.round(hours)}</dd></div>
               <div>
                 <dt>Best fit</dt>
                 <dd className="pr-calc__fit">
-                  {!fit ? 'FREE' : fit.kind === 'pack' ? `PACK · lasts ~${Math.max(1, Math.round(fit.pdfs / perMonth))} mo` : `${fit.name} · $${fit.price}/mo`}
+                  {!fit ? 'FREE' : fit.kind === 'pack' ? `PACK · lasts ~${Math.max(1, Math.round(fit.tailors / perMonth))} mo` : `${fit.name} · $${fit.price}/mo`}
                 </dd>
               </div>
             </dl>
@@ -127,8 +128,8 @@ export function Pricing() {
             <span className="lp-display pr-free__num">$0</span>
           </div>
           <p className="pr-free__copy">
-            <strong>{FREE_PDFS} PDFs a month, forever.</strong>{' '}
-            Unlimited with your own OpenAI or Anthropic key.
+            <strong>{FREE_TAILORS} tailors a month, forever.</strong>{' '}
+            Up to 2 projects and 1 work experience. Downloads are always free.
           </p>
           {freeFits && <span className="pr-free__fit">✓ Fits your ~{perMonth} a month</span>}
           <Link to="/register" className="lp-btn lp-btn--ink pr-btn pr-free__btn">START FREE →</Link>
