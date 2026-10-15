@@ -201,6 +201,33 @@ public class BulletService {
         return repo.save(new Bullet(projectId, text, tags, category));
     }
 
+    /** Most characters of a story title taken from the line it was made from. */
+    private static final int IMPORT_TITLE_CHARS = 120;
+
+    /**
+     * Resume lines the user confirmed on import. They wrote them, so each lands approved, in a story of
+     * its own whose evidence is the line itself: the generator and the number check then treat it as ground truth.
+     * The caller has verified {@code projectId} belongs to the user. Blank lines and repeats are skipped.
+     */
+    public List<Bullet> importApproved(UUID projectId, List<String> lines) {
+        List<Bullet> saved = new ArrayList<>();
+        if (lines == null) return saved;
+        Set<String> seen = new java.util.HashSet<>();
+        for (String raw : lines) {
+            String text = raw == null ? "" : raw.strip();
+            if (text.isEmpty() || !seen.add(text.toLowerCase(Locale.ROOT))) continue;
+            UUID storyId = UUID.randomUUID();
+            String title = text.replace("**", "");
+            if (title.length() > IMPORT_TITLE_CHARS) title = title.substring(0, IMPORT_TITLE_CHARS).strip();
+            storyRepo.save(new Story(storyId, projectId, title, new String[] { text }, new String[] { "general" }));
+            Bullet b = new Bullet(projectId, text, new String[0], "general");
+            b.setStatus("APPROVED");
+            b.setStoryId(storyId);
+            saved.add(repo.save(b));
+        }
+        return saved;
+    }
+
     public Bullet update(UUID userId, UUID bulletId, String text, String[] tags) {
         Bullet b = repo.findById(bulletId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bullet not found: " + bulletId));

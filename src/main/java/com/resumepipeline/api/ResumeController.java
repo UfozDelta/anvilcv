@@ -5,6 +5,7 @@ import com.resumepipeline.api.dto.ResumeDtos.BulkCreateProjectsRequest;
 import com.resumepipeline.api.dto.ResumeDtos.ParseResumeRequest;
 import com.resumepipeline.api.dto.ResumeDtos.ParseResumeResponse;
 import com.resumepipeline.auth.AuthUtils;
+import com.resumepipeline.bullet.BulletService;
 import com.resumepipeline.project.Project;
 import com.resumepipeline.project.ProjectService;
 import com.resumepipeline.project.ResumeParserService;
@@ -22,10 +23,12 @@ public class ResumeController {
 
     private final ResumeParserService parser;
     private final ProjectService projects;
+    private final BulletService bullets;
 
-    public ResumeController(ResumeParserService parser, ProjectService projects) {
+    public ResumeController(ResumeParserService parser, ProjectService projects, BulletService bullets) {
         this.parser = parser;
         this.projects = projects;
+        this.bullets = bullets;
     }
 
     @PostMapping("/parse")
@@ -42,6 +45,7 @@ public class ResumeController {
             Project.Kind kind = item.kind() == null ? Project.Kind.PROJECT : item.kind();
             Project p = projects.create(userId, kind, item.name(), item.description(), null,
                     item.title(), item.company(), item.location(), item.dates());
+            bullets.importApproved(p.getId(), item.bullets());
             return ProjectResponse.from(p);
         }).toList();
     }

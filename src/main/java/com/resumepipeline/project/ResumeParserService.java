@@ -90,7 +90,7 @@ public class ResumeParserService {
                 if (currentHeader != null) {
                     // Merge, not put: a second "Experience" block must not erase the first.
                     sections.computeIfAbsent(currentHeader, k -> new ArrayList<>())
-                            .addAll(joinWrappedLines(currentBody));
+                            .addAll(joinWrappedLines(markGlyphlessBullets(currentBody)));
                 }
                 currentHeader = trimmed.replaceFirst(":$", "").toUpperCase();
                 currentBody.clear();
@@ -100,9 +100,41 @@ public class ResumeParserService {
         }
         if (currentHeader != null && !currentBody.isEmpty()) {
             sections.computeIfAbsent(currentHeader, k -> new ArrayList<>())
-                    .addAll(joinWrappedLines(currentBody));
+                    .addAll(joinWrappedLines(markGlyphlessBullets(currentBody)));
         }
         return sections;
+    }
+
+    /** A line this long, with no header cue, reads as a bullet when its section has no bullet glyphs at all. */
+    private static final int BULLET_MIN_WORDS = 7;
+
+    /**
+     * Text pasted from Google Docs, LinkedIn or some PDFs arrives without bullet glyphs, so every line
+     * would read as a header and the section as one entry with no bullets. When a section has no glyph
+     * line at all, long header-free lines are marked as bullets so the rest of the parser works unchanged.
+     * A lowercase line right after an unfinished bullet is its wrapped tail, not a bullet of its own.
+     */
+    private List<String> markGlyphlessBullets(List<String> lines) {
+        if (lines.stream().anyMatch(l -> BULLET_LINE.matcher(l).find())) return lines;
+        List<String> out = new ArrayList<>();
+        boolean prevOpen = false;   // the previous line was marked as a bullet and stops mid-sentence
+        for (String line : lines) {
+            boolean looksLikeBullet = !line.isBlank()
+                    && line.trim().split("\\s+").length >= BULLET_MIN_WORDS
+                    && !HEADER_DATE.matcher(line).find()
+                    && !PROJECT_SEPARATOR.matcher(line).find()
+                    && !line.contains(" | ");
+            boolean tail = prevOpen && !line.isBlank() && Character.isLowerCase(line.trim().charAt(0));
+            if (looksLikeBullet && !tail) {
+                out.add("• " + line);
+                char end = line.trim().charAt(line.trim().length() - 1);
+                prevOpen = end != '.' && end != '!' && end != '?';
+            } else {
+                out.add(line);
+                if (!tail) prevOpen = false;
+            }
+        }
+        return out;
     }
 
     /**
@@ -248,7 +280,8 @@ public class ResumeParserService {
 
             String name = slugify((company != null ? company + "-" : "") + title);
             String description = String.join("\n", bulletLines).strip();
-            result.add(new ParsedExperience(name, title, company, location, dates.isBlank() ? null : dates, description));
+            result.add(new ParsedExperience(name, title, company, location, dates.isBlank() ? null : dates, description,
+                    bulletLines.stream().filter(b -> !b.isBlank()).toList()));
         }
 
         return result;
@@ -286,13 +319,14 @@ public class ResumeParserService {
             if (name.isBlank()) continue;
 
             String description = String.join("\n", bulletLines).strip();
+            List<String> bullets = bulletLines.stream().filter(b -> !b.isBlank()).toList();
             // Kept as a trailing line: the description is the generation source, and this is
             // the one place the resume names the project's technologies.
             if (techStack != null && !techStack.isBlank()) {
                 description = (description + "\nTech stack: " + techStack).strip();
             }
 
-            result.add(new ParsedProject(name, description, dates.isBlank() ? null : dates));
+            result.add(new ParsedProject(name, description, dates.isBlank() ? null : dates, bullets));
         }
 
         return result;

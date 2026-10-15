@@ -1,5 +1,6 @@
 package com.resumepipeline.api.dto;
 
+import com.resumepipeline.project.Project;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -15,13 +16,16 @@ public class ResumeDtos {
             String company,
             String location,
             String dates,
-            String description
+            String description,
+            /** The entry's bullet lines, one per bullet, glyphs stripped: what the confirm screen lists. */
+            List<String> bullets
     ) {}
 
     public record ParsedProject(
             String name,
             String description,
-            String dates
+            String dates,
+            List<String> bullets
     ) {}
 
     public record ParseResumeResponse(
@@ -29,7 +33,16 @@ public class ResumeDtos {
             List<ParsedProject> projects
     ) {}
 
+    /** One entry to import. {@code bullets} are the user's own resume lines, confirmed by them; null or empty adds none. */
+    public record ImportItem(
+            Project.Kind kind,
+            @NotBlank String name,
+            @NotBlank @Size(max = 20_000) String description,
+            String title, String company, String location, String dates,
+            @Size(max = 30) List<@NotBlank @Size(max = 600) String> bullets
+    ) {}
+
     public record BulkCreateProjectsRequest(
-            @Size(max = 100) @jakarta.validation.Valid List<ProjectDtos.CreateProjectRequest> items
+            @Size(max = 100) @jakarta.validation.Valid List<ImportItem> items
     ) {}
 }

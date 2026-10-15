@@ -846,4 +846,35 @@ class BulletServiceTest {
                 List.of(a), ProgressLog.noOp());
         assertTrue(out.isEmpty());
     }
+
+    // ---- import ----
+
+    @Test
+    void importApprovedSavesEachLineApprovedInAStoryOfItsOwnWithTheLineAsEvidence() {
+        UUID proj = UUID.randomUUID();
+        when(repo.save(any(Bullet.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Bullet> saved = service.importApproved(proj,
+                java.util.Arrays.asList("  Cut p95 latency from 1.8s to 240ms.  ", "", null, "cut p95 latency from 1.8s to 240ms.", "Shipped billing."));
+
+        assertEquals(2, saved.size());
+        assertTrue(saved.stream().allMatch(b -> "APPROVED".equals(b.getStatus())));
+        assertEquals("Cut p95 latency from 1.8s to 240ms.", saved.get(0).getText());
+        assertNotNull(saved.get(0).getStoryId());
+        assertNotEquals(saved.get(0).getStoryId(), saved.get(1).getStoryId());
+
+        ArgumentCaptor<Story> stories = ArgumentCaptor.forClass(Story.class);
+        verify(storyRepo, times(2)).save(stories.capture());
+        Story first = stories.getAllValues().get(0);
+        assertEquals(saved.get(0).getStoryId(), first.getId());
+        assertArrayEquals(new String[] { "Cut p95 latency from 1.8s to 240ms." }, first.getEvidence());
+        assertEquals(proj, first.getProjectId());
+    }
+
+    @Test
+    void importApprovedWithNoLinesSavesNothing() {
+        assertTrue(service.importApproved(UUID.randomUUID(), null).isEmpty());
+        assertTrue(service.importApproved(UUID.randomUUID(), List.of()).isEmpty());
+        verifyNoInteractions(repo, storyRepo);
+    }
 }
