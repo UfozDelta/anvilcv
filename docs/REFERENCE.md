@@ -356,11 +356,11 @@ stored key undecryptable — they have to be re-entered.
 | Path | Contents |
 |---|---|
 | `src/main/java/com/resumepipeline/` | Spring Boot backend |
-| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V43` |
+| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V47` |
 | `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
 | `src/main/resources/repo-explorer-instructions.md` | System prompt for the server-side repo explorer |
-| `src/test/java/` | about 585 backend tests |
+| `src/test/java/` | about 680 backend tests |
 | `frontend/` | React + Vite SPA |
 | `.github/workflows/ci.yml` | Maven job + Vite job |
 | `start.ps1`, `Dockerfile`, `compose.yml`, `pom.xml` | Build and run |
@@ -417,6 +417,10 @@ apps     GET /api/applications           GET /api/applications/outcome-history
 jobs     GET /api/public/jobs  /api/public/jobs/tags     PUT|DELETE /api/jobs/{id}/save
          POST /api/public/jobs/webhook   (public, HMAC-signed)
 import   POST /api/resume/parse          POST /api/resume/import
+         parse  -> { experiences[], projects[] }, each with `bullets` (one line per bullet)
+         import <- { items[{ kind, name, description, title?, company?, location?, dates?, bullets? }] }
+                   `bullets` (max 30 per item, 600 chars each) are saved approved, one story per line
+onboard  GET /api/onboarding             POST /api/onboarding/complete  /downloaded
 admin    GET /api/admin/stats  /logs  /bullet-measure-diagnostics
          GET|PUT /api/admin/llm          POST /api/admin/llm/test
          GET /api/admin/eval/sets  /compare   POST /api/admin/eval/snapshot  /generate
@@ -432,7 +436,8 @@ Session-cookie auth (`JSESSIONID`, httpOnly), BCrypt passwords, `/api/admin/**` 
 ### Frontend routes
 
 `/` landing, `/login`, `/register`, `/docs`, `/pricing`, and `/jobs` are public, as are the
-`/lab/*` UI prototypes (placeholder data, no API calls). `/projects`, `/experiences`,
+`/lab/*` UI prototypes (placeholder data; `/lab/walkthrough` runs the real app against an in-memory
+API, see First-run onboarding). `/welcome`, `/projects`, `/experiences`,
 `/projects/:id`, `/experiences/:id`, `/new`, `/applications`, `/applications/:id`, `/flow`,
 `/profile`, `/settings`, `/admin`, `/upload` sit behind `RequireAuth`. The production pages never
 import from `frontend/src/lab/`; the lab prototypes are kept for reference and can be removed without
@@ -516,6 +521,42 @@ UPDATE app_user SET plan = 'pro', plan_started_at = now() WHERE username = 'some
 
 Admins (`is_admin`) are never capped either. V47 set `quota_exempt` for every account that existed then, so only later sign-ups are metered.
 
+### First-run onboarding
+
+A new account lands on `/welcome` (`components/onboarding/WelcomeFast.tsx`) and gets to a tailored
+page without generating or approving anything:
+
+1. **Paste the résumé** and pick a field. `POST /api/resume/parse` returns each entry with its
+   `bullets`. Text with no bullet glyphs (Google Docs, LinkedIn) still works: in a section with no
+   glyph at all, lines of seven or more words with no date, ` -- ` or ` | ` are marked as bullets
+   (`ResumeParserService.markGlyphlessBullets`), and a lowercase line after an unfinished bullet joins it.
+2. **Confirm the bullets.** Every line is checked and editable. An entry with fewer than two kept
+   bullets shows a note: `BulletSelector` will not print an entry under two bullets.
+3. **Import.** `POST /api/resume/import` creates the entries and, for each confirmed line,
+   `BulletService.importApproved`: an `APPROVED` bullet in a story of its own (`lenses = [general]`,
+   `evidence = [the line]`). The user wrote it, so it is ground truth for the generator and the
+   number check. No migration; imported bullets are ordinary bullets.
+4. **Pick a job** on `/jobs` (the guide rings the first Tailor button; the posting's link arrives
+   pre-filled on `/new`), run the tailor, then add contact details. The guide ends after the profile
+   step.
+
+Download is always free, so it is no milestone: the `fast` road (`guide.ts`) is
+`import -> tailor -> profile`. The older roads (`import`, `manual`, `skip`) stay in `guide.ts` for browsers
+that stored one; `store.ts` keeps the road in localStorage.
+
+**Guide behaviour** (`Guides.tsx`). A bar under the nav always names the next step. A ring plus a tip
+points at the real control; the tip goes away when that control is touched (click, focus, key) or on
+"Got it", and returns with the next step or a new target. The tip sits where it covers the fewest
+buttons, fields and text and never the target (`placeTip`). `textFor` words a step for the screen
+it is on. Progress comes from `GET /api/onboarding` counts, so a step is done when the data exists.
+
+**Walkthrough lab** (`/lab/walkthrough`). Plays sign-up to the end of onboarding with a scripted
+cursor. It runs the real app in an iframe opened with `?__demo=1`, which makes `main.tsx` install
+`src/demo/mockApi.ts` (an in-memory API) before the app mounts; nothing is saved and nothing leaves
+the browser. The cursor reads each tip and follows it (`readTip`, `takeMeThere`), and a scene fails
+loudly if the guide misses one. Scenes live in `lab/walkthrough/scenes.ts`; keep the mock's
+responses shaped like the real API.
+
 ### Async model
 
 No scheduler and no queue. Long work runs on `newVirtualThreadPerTaskExecutor()`; submit endpoints
@@ -564,7 +605,7 @@ cd frontend && npm test     # vitest run
 Backend tests are all fast units — Mockito service tests plus `@WebMvcTest` slices. No
 Testcontainers, no `@SpringBootTest`, **no database needed**. Heaviest coverage sits on
 `BulletTextRules`, `KeywordScorer`, `LatexEscaper`, `BulletSelector`, and `ApplicationService`.
-Frontend: 8 files, 108 tests (`vitest run`). Backend: about 585 test cases.
+Frontend: 13 files, 114 tests (`vitest run`). Backend: about 680 test cases.
 
 CI runs on push to `main` and on every PR — Temurin 21 + `mvn -B verify`, and Node 20 +
 `npm ci && npm test && npm run build`.
