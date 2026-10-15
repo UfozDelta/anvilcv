@@ -204,7 +204,7 @@ export function Jobs() {
             <button type="button" onClick={() => { setQ(''); setLocation(''); setRemote(false); setDays(''); setStack([]); setMine(false); setSource(''); }}>Clear</button>
           </div>
         )
-        : <EmptyState title="No postings yet." sub="New roles arrive here as they are posted." />)}
+        : <EmptyState title="No active jobs right now." sub="New roles arrive here as they are posted." />)}
 
       {jobs.length > 0 && (
         <ul className="ld-table jb-list" aria-label="Jobs">
