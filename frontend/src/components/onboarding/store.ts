@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, type ApplicationSummary, type Project } from '../../lib/api';
 
 /** How the user chose to fill their account at the welcome. */
-export type Road = 'import' | 'manual' | 'skip';
+/** `fast`: paste a résumé, confirm its bullets, tailor. The other three are the original welcome's roads. */
+export type Road = 'import' | 'manual' | 'skip' | 'fast';
 
 export interface Status {
   onboarded: boolean;
@@ -30,7 +31,7 @@ const ROAD_KEY = 'anvil.onboarding.road';
 export function getRoad(): Road {
   try {
     const v = localStorage.getItem(ROAD_KEY);
-    if (v === 'import' || v === 'manual' || v === 'skip') return v;
+    if (v === 'import' || v === 'manual' || v === 'skip' || v === 'fast') return v;
   } catch { /* storage blocked */ }
   return 'skip';
 }

@@ -285,12 +285,15 @@ export interface ParsedExperience {
   location: string | null;
   dates: string | null;
   description: string;
+  /** One line per bullet, glyphs stripped. */
+  bullets: string[];
 }
 
 export interface ParsedProject {
   name: string;
   description: string;
   dates: string | null;
+  bullets: string[];
 }
 
 export interface ParseResumeResponse {

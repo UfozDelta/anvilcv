@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageTitle } from '../components/ledger/shared';
 import { EventStream } from '../components/EventStream';
 import { CATEGORIES } from '../lib/api';
+import { refreshProgress } from '../components/onboarding/store';
 
 // Auto ('') sends no roleEmphasis, so the lens is inferred from the JD. The rest are manual
 // overrides, derived from CATEGORIES so the slugs match the lenses the bank was generated under;
@@ -98,7 +99,7 @@ export function NewApplication() {
             includeCoverLetter,
           }}
           pollUrl={jobId => `/api/applications/jobs/${jobId}/progress`}
-          onDone={appId => nav(`/applications/${appId}`)}
+          onDone={async appId => { await refreshProgress(); nav(`/applications/${appId}`); }}
           onClose={() => setStreaming(false)}
           title="TAILORING RESUME..."
         />

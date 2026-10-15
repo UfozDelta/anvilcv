@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, RequireAuth } from './lib/auth';
+import { AuthProvider, RequireAuth, useAuth } from './lib/auth';
 import { AppNav } from './components/ledger/AppNav';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
@@ -47,8 +47,10 @@ import { LabWorkspaceTabs } from './lab/workspace-tabs/LabWorkspaceTabs';
 import { LabStoryFlow } from './lab/story-flow/LabStoryFlow';
 import { LabLists } from './lab/lists/LabLists';
 import { LabPaywall } from './lab/paywall/LabPaywall';
+import { LabWalkthrough } from './lab/walkthrough/LabWalkthrough';
 import { OnboardingGuide } from './components/onboarding/Guides';
-import { WelcomePage } from './components/onboarding/Welcome';
+import { WelcomeFast } from './components/onboarding/WelcomeFast';
+
 
 /** The router keeps the old scroll position across navigation, so a link clicked at the bottom of a page opened the next one mid-way. */
 function ScrollToTop() {
@@ -69,6 +71,18 @@ function AuthedShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Public, but a signed-in newcomer still gets the first-run guide here: picking a posting is a step. */
+function JobsShell() {
+  const { username } = useAuth();
+  return (
+    <div className="ap-root">
+      <AppNav />
+      {username && <OnboardingGuide />}
+      <main className="ap-main" style={{ paddingBottom: 80 }}><Jobs /></main>
+    </div>
+  );
+}
+
 export function App() {
   return (
     <AuthProvider>
@@ -77,7 +91,7 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/welcome"              element={<RequireAuth><WelcomePage /></RequireAuth>} />
+        <Route path="/welcome"              element={<RequireAuth><OnboardingGuide /><WelcomeFast /></RequireAuth>} />
         <Route path="/projects"             element={<AuthedShell><Projects /></AuthedShell>} />
         <Route path="/experiences"          element={<AuthedShell><Experiences /></AuthedShell>} />
         <Route path="/projects/:id"         element={<AuthedShell><ProjectDetail /></AuthedShell>} />
@@ -93,7 +107,7 @@ export function App() {
         <Route path="/docs"                 element={<DocsPage />} />
         <Route path="/pricing"              element={<Pricing />} />
         {/* Public on purpose: guests browse the feed; Tailor sends them to log in. */}
-        <Route path="/jobs"                 element={<div className="ap-root"><AppNav /><main className="ap-main" style={{ paddingBottom: 80 }}><Jobs /></main></div>} />
+        <Route path="/jobs"                 element={<JobsShell />} />
 
         {/* UI prototypes on placeholder data. Unauthenticated on purpose: they touch
             no API and exist to review the Applications redesign without a login. */}
@@ -126,6 +140,7 @@ export function App() {
         <Route path="/lab/story-flow"       element={<LabStoryFlow />} />
         <Route path="/lab/lists"            element={<LabLists />} />
         <Route path="/lab/paywall"          element={<LabPaywall />} />
+        <Route path="/lab/walkthrough"      element={<LabWalkthrough />} />
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>

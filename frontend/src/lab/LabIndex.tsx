@@ -25,6 +25,19 @@ type Entry = {
 const ENTRIES: Entry[] = [
   {
     iso: '2026-10-14',
+    title: 'Walkthrough',
+    status: 'prototype',
+    summary: <>The shipped app played end to end by a scripted cursor: sign up, onboarding, tailor, download. Real components, in-memory API.</>,
+    protos: [
+      { to: '/lab/walkthrough', name: 'Walkthrough', line: 'Autoplay; pause, restart, 1-2x speed, desktop or phone.' },
+    ],
+    fixes: [
+      'The app runs in an iframe with ?__demo=1, which swaps fetch for src/demo/mockApi.ts',
+      'Steps live in lab/walkthrough/scenes.ts; add or reorder them there',
+    ],
+  },
+  {
+    iso: '2026-10-14',
     title: 'Onboarding paywall',
     status: 'prototype',
     summary: <>Where first-run onboarding asks for money. Three placements, plans from /pricing, a free path on each.</>,

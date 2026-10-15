@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
 import { useField } from '../lib/field';
+import { refreshProgress } from '../components/onboarding/store';
 import { PageTitle, useUnsavedGuard } from '../components/ledger/shared';
 
 interface EducationEntry {
@@ -146,6 +147,7 @@ export function ProfilePage() {
       setP(updated);
       setSaved(JSON.stringify(updated));
       setJustSaved(true);
+      void refreshProgress();
     } catch (e: any) {
       setErr(e?.message || 'Failed to save');
     } finally {

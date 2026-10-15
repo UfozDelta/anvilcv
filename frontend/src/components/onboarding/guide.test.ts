@@ -18,8 +18,8 @@ describe('deriveSteps', () => {
 
   it('is driven by what exists, not by tips seen', () => {
     const p = fresh({ entries: 2, bullets: 6, approvedBullets: 2 });
-    expect(next(p, 'import')).toBe('profile');
-    expect(next({ ...p, profileDone: true }, 'import')).toBe('approve');
+    expect(next(p, 'import')).toBe('approve');
+    expect(next({ ...p, status: { ...p.status, approvedBullets: 3, applications: 1 } }, 'import')).toBe('profile');
     expect(next(fresh({ entries: 1, bullets: 4 }), 'skip')).toBe('approve');
   });
 
@@ -28,6 +28,15 @@ describe('deriveSteps', () => {
     expect(next(fresh(base, { profileDone: true }), 'manual')).toBe('tailor');
     expect(next(fresh({ ...base, applications: 1 }, { profileDone: true }), 'manual')).toBe('page');
     expect(next(fresh({ ...base, applications: 1, downloaded: true }, { profileDone: true }), 'manual')).toBeUndefined();
+  });
+
+  it('guides the fast road from the paste box to the contact details, and never counts a download', () => {
+    expect(next(fresh(), 'fast')).toBe('import');
+    expect(next(fresh({ entries: 2, bullets: 5, approvedBullets: 5 }), 'fast')).toBe('tailor');
+    const one = { entries: 2, bullets: 5, approvedBullets: 5, applications: 1 };
+    expect(next(fresh(one), 'fast')).toBe('profile');
+    expect(next(fresh({ ...one, downloaded: true }), 'fast')).toBe('profile');
+    expect(next(fresh(one, { profileDone: true }), 'fast')).toBeUndefined();
   });
 
   it('words the entry step for the field', () => {

@@ -7,20 +7,22 @@ export type Step = { id: StepId; label: string; title: string; body: string; don
 const LIST = /^\/(experiences|projects)$/;
 const DETAIL = /^\/(experiences|projects)\/[^/]+$/;
 const HERE: Record<StepId, RegExp> = {
-  import: /^\/upload$/,
+  import: /^\/(upload|welcome)$/,
   profile: /^\/profile$/,
   entry: LIST,
   generate: DETAIL,
   approve: DETAIL,
-  tailor: /^\/new$/,
+  tailor: /^\/(new|jobs)$/,
   page: /^\/applications\/[^/]+$/,
 };
 
-/** Who follows which road: import fills the bank for you; the other two build it by hand. */
+/** Who follows which road: import fills the bank for you (contact details wait until the page needs them); the other two build it by hand. */
 const ORDER = {
-  import: ['import', 'profile', 'approve', 'tailor', 'page'],
+  import: ['import', 'approve', 'tailor', 'profile', 'page'],
   manual: ['profile', 'entry', 'generate', 'approve', 'tailor', 'page'],
   skip: ['entry', 'generate', 'approve', 'profile', 'tailor', 'page'],
+  /** Résumé bullets arrive approved, so the first goal is a tailored page; contact details finish it. Download is always free, so it is no milestone. */
+  fast: ['import', 'tailor', 'profile'],
 } satisfies Record<string, StepId[]>;
 
 const APPROVE_GOAL = 3;
@@ -28,13 +30,15 @@ const APPROVE_GOAL = 3;
 /** The road's steps with their wording, each done when the data exists. Pure, so it is tested without a browser. */
 export function deriveSteps(p: Progress, field: string, road: Road): Step[] {
   const mech = field === 'mechanical';
+  const fast = road === 'fast';
   const s = p.status;
   const detail = p.firstEntryPath ?? '/experiences';
   const approved = Math.min(s.approvedBullets, APPROVE_GOAL);
 
   const all: Record<StepId, Step> = {
-    import: { id: 'import', label: 'Import your résumé', done: s.entries > 0, path: '/upload',
-      title: 'Import your résumé', body: 'Paste it and we’ll fill in your experiences and projects.' },
+    import: { id: 'import', label: 'Import your résumé', done: s.entries > 0, path: road === 'fast' ? '/welcome' : '/upload',
+      title: 'Import your résumé',
+      body: fast ? 'Paste it, then check the bullets we found. They stay in your words.' : 'Paste it and we’ll fill in your experiences and projects.' },
     profile: { id: 'profile', label: 'Add your details', done: p.profileDone, path: '/profile',
       title: 'Add your contact details', body: 'Name, email and links head every page you send.' },
     entry: { id: 'entry', label: 'Add your first entry', done: s.entries > 0, path: '/experiences',
@@ -52,8 +56,9 @@ export function deriveSteps(p: Progress, field: string, road: Road): Step[] {
       body: road === 'import' && s.entries > 0
         ? `We drafted bullets from your ${p.experiences} experience${p.experiences === 1 ? '' : 's'} and ${p.projects} project${p.projects === 1 ? '' : 's'}. ${approved} of ${APPROVE_GOAL} approved.`
         : `${approved} of ${APPROVE_GOAL} approved. Only approved bullets can reach a page.` },
-    tailor: { id: 'tailor', label: 'Tailor to a job', done: s.applications > 0, path: '/new',
-      title: 'Tailor to a job', body: 'Paste a posting. We rank your approved bullets and fit one page.' },
+    tailor: { id: 'tailor', label: fast ? 'Pick a job' : 'Tailor to a job', done: s.applications > 0, path: fast ? '/jobs' : '/new',
+      title: fast ? 'Pick a job to tailor to' : 'Tailor to a job',
+      body: fast ? 'Choose a posting and press Tailor. We fit your bullets to it on one page.' : 'Paste a posting. We rank your approved bullets and fit one page.' },
     page: { id: 'page', label: 'Download your page', done: s.downloaded, path: p.firstApplicationPath ?? '/applications',
       title: 'Download your page', body: 'Check the PDF, then download it. This is the page you’d send.' },
   };
@@ -78,13 +83,17 @@ function navTarget(id: StepId): HTMLElement | null {
   if (id === 'import') return q('.an-acct__btn');
   if (id === 'profile') return q('.an-links a[href="/profile"]');
   if (id === 'entry' || id === 'generate' || id === 'approve') return q('.an-links a[href="/experiences"]');
-  if (id === 'tailor') return q('.an-new');
+  if (id === 'tailor') return getRoad() === 'fast' ? q('.an-links a[href="/jobs"]') : q('.an-new');
   return q('.an-links a[href="/applications"]');
 }
 
 /** The real control a coachmark points at: on the step's page the control itself, elsewhere the nav item that leads there. */
 export function findTarget(id: StepId, pathname: string): { el: HTMLElement | null; onPage: boolean } {
   const onPage = (() => {
+    if (id === 'import' && pathname === '/welcome') {
+      const ta = q<HTMLTextAreaElement>('textarea.fr-paste');
+      return q('.fr-go') ?? (ta && !ta.value ? ta : q('.fr-parse'));
+    }
     if (id === 'import' && pathname === '/upload') {
       const ta = q<HTMLTextAreaElement>('textarea.field__textarea');
       return ta && !ta.value ? ta : byText('button.btn--acid', /parse|import/i) ?? ta;
@@ -99,9 +108,11 @@ export function findTarget(id: StepId, pathname: string): { el: HTMLElement | nu
       if (DETAIL.test(pathname)) return q('.sf-b__ok[aria-pressed="false"]');
       if (LIST.test(pathname)) return q('.ld-link');
     }
+    if (id === 'tailor' && pathname === '/jobs') return q('.ap-btn--acid.jb-btn');
     if (id === 'tailor' && pathname === '/new') {
       const ta = q<HTMLTextAreaElement>('textarea.na-text');
-      return ta && !ta.value ? ta : q('button[type="submit"]');
+      const url = q<HTMLInputElement>('input.na-url');
+      return ta && !ta.value && !url?.value ? ta : q('button[type="submit"]');
     }
     if (id === 'page') {
       if (/^\/applications\/./.test(pathname)) return byText('a.minibtn', /Download PDF/);
@@ -110,4 +121,11 @@ export function findTarget(id: StepId, pathname: string): { el: HTMLElement | nu
     return null;
   })();
   return { el: onPage ?? navTarget(id), onPage: !!onPage };
+}
+
+/** The step's wording for the screen the user is on: the same step reads differently on Jobs, on New application and while confirming bullets. */
+export function textFor(step: Step, pathname: string): { title: string; body: string } {
+  if (step.id === 'tailor' && pathname === '/new') return { title: 'Run it', body: 'Check the posting, then press Run. We fit your bullets to one page.' };
+  if (step.id === 'import' && pathname === '/welcome' && q('.fr-go')) return { title: 'Check your bullets', body: 'Fix a line or uncheck one, then press “Looks right”.' };
+  return { title: step.title, body: step.body };
 }
