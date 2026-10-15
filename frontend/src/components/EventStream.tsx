@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/api';
+import { reportQuota } from '../lib/quota';
 
 interface Props {
   submitUrl: string;
@@ -60,7 +61,9 @@ export function EventStream({ submitUrl, submitBody, pollUrl, onDone, onClose, t
         });
         if (!res.ok) {
           const text = await res.text();
-          if (!cancelled) setError(text || `HTTP ${res.status}`);
+          let quota = null;
+          try { quota = reportQuota(res.status, JSON.parse(text)); } catch { /* not JSON */ }
+          if (!cancelled) setError(quota?.message || text || `HTTP ${res.status}`);
           return;
         }
         const { jobId } = await res.json();

@@ -238,6 +238,7 @@ export function installMockApi() {
     if (path === '/api/public/jobs') return reply({ jobs: JOBS, total: JOBS.length, counts: { linkedin: JOBS.length, indeed: 0, saved: 0 } });
     if (path === '/api/public/jobs/tags') return reply([]);
     if (path === '/api/applications/selection-check') return reply([]);
+    if (path === '/api/quota') return reply({ plan: 'free', exempt: true, tailors: { used: 0, limit: 3 }, generations: { used: 0, limit: null }, projects: null, experiences: null, resetsAt: null });
     if ((r = m(/^\/api\/applications\/([^/]+)\/pdf$/))) return new Response(pdf(), { status: 200, headers: { 'Content-Type': 'application/pdf' } });
     if ((r = m(/^\/api\/applications\/([^/]+)$/)) && apps.some(a => a.id === r![1])) return reply(application(r[1]));
 

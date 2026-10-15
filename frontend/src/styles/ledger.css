@@ -234,6 +234,10 @@
 .na-submit { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 3px solid var(--ink); padding-top: 20px; }
 .na-check { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font: 700 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
 .na-check input { width: 20px; height: 20px; accent-color: var(--ink); cursor: pointer; margin: 0; }
+.qm { margin: 0 0 12px; font: 12px/1.5 var(--mono); color: var(--muted); }
+.qm strong { color: var(--ink); }
+.qm[data-out] strong { color: var(--rust-ink); }
+.qm a { color: var(--ink); font-weight: 700; }
 .na-submit .ap-btn { min-width: 170px; }
 .na-submit .ap-btn:disabled { opacity: 0.5; cursor: default; }
 .na-run { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -655,3 +659,19 @@ a.ap-path { text-decoration: none; }
   .nf__actions .ap-btn { flex: 1; }
   .nf input, .nf textarea { font-size: 16px; }
 }
+
+/* ── Paywall modal: opens on any quota 402 (components/PaywallModal.tsx) ── */
+.pwm-scrim { position: fixed; inset: 0; z-index: 200; display: grid; place-items: start center; padding: 48px 16px; overflow-y: auto; background: rgba(10, 10, 10, 0.5); }
+.pwm { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: min(480px, 100%); padding: 24px; background: var(--paper); border: 3px solid var(--ink); box-shadow: 6px 6px 0 var(--acid); animation: ap-up 200ms var(--ease-out) both; }
+.pwm p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.pwm-h { margin: 0; font: 900 italic 28px/1.05 var(--serif); }
+.pwm-x { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border: 0; background: none; font-size: 16px; cursor: pointer; }
+.pwm-plans { display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 6px 0; }
+.pwm-plan { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px; border: 2px solid var(--ink); color: var(--ink); text-decoration: none; font-size: 13px; }
+.pwm-plan[data-featured] { background: var(--ink); color: var(--paper); }
+.pwm-plan__name { font: 700 11px var(--mono); letter-spacing: 0.14em; }
+.pwm-plan__name em { font-style: normal; color: var(--acid); }
+.pwm-plan b { font: 900 italic 22px var(--serif); }
+.pwm-plan__line { grid-column: 1 / -1; color: var(--muted); }
+.pwm-plan[data-featured] .pwm-plan__line { color: var(--soft); }
+@media (prefers-reduced-motion: reduce) { .pwm { animation: none; } }

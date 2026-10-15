@@ -1,3 +1,5 @@
+import { reportQuota } from './quota';
+
 const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
 // Exported so SSE callers (useEventLog) can prepend the same base URL.
@@ -28,6 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let body: any = undefined;
     try { body = await res.json(); } catch { /* ignore */ }
+    reportQuota(res.status, body);
     const msg = body?.message
       ? `${body.message}${body.hint ? ` — ${body.hint}` : ''}`
       : `${res.status} ${res.statusText}`;

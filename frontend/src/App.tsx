@@ -49,6 +49,7 @@ import { LabLists } from './lab/lists/LabLists';
 import { LabPaywall } from './lab/paywall/LabPaywall';
 import { LabWalkthrough } from './lab/walkthrough/LabWalkthrough';
 import { OnboardingGuide } from './components/onboarding/Guides';
+import { PaywallModal } from './components/PaywallModal';
 import { WelcomeFast } from './components/onboarding/WelcomeFast';
 
 
@@ -87,6 +88,7 @@ export function App() {
   return (
     <AuthProvider>
       <ScrollToTop />
+      <PaywallModal />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />

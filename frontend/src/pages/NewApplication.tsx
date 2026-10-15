@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PageTitle } from '../components/ledger/shared';
 import { EventStream } from '../components/EventStream';
+import { QuotaMeter } from '../components/QuotaMeter';
 import { CATEGORIES } from '../lib/api';
 import { refreshProgress } from '../components/onboarding/store';
 
@@ -79,6 +80,8 @@ export function NewApplication() {
             ))}
           </div>
         </fieldset>
+
+        <QuotaMeter />
 
         <div className="na-submit">
           <label className="na-check">
