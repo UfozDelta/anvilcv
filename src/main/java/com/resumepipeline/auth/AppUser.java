@@ -42,6 +42,12 @@ public class AppUser {
     @Column(name = "quota_exempt", nullable = false)
     private boolean quotaExempt = false;
 
+    @Column(name = "stripe_customer_id", length = 64)
+    private String stripeCustomerId;
+
+    @Column(name = "stripe_subscription_id", length = 64)
+    private String stripeSubscriptionId;
+
     protected AppUser() {}
 
     public AppUser(String username, String email, String passwordHash) {
@@ -61,6 +67,8 @@ public class AppUser {
     public String getPlan() { return plan; }
     public java.time.Instant getPlanStartedAt() { return planStartedAt; }
     public boolean isQuotaExempt() { return quotaExempt; }
+    public String getStripeCustomerId() { return stripeCustomerId; }
+    public String getStripeSubscriptionId() { return stripeSubscriptionId; }
 
     public void setUsername(String username) { this.username = username; }
     public void setEmail(String email) { this.email = email; }
@@ -71,4 +79,6 @@ public class AppUser {
     public void setPlan(String plan) { this.plan = plan; }
     public void setPlanStartedAt(java.time.Instant planStartedAt) { this.planStartedAt = planStartedAt; }
     public void setQuotaExempt(boolean quotaExempt) { this.quotaExempt = quotaExempt; }
+    public void setStripeCustomerId(String stripeCustomerId) { this.stripeCustomerId = stripeCustomerId; }
+    public void setStripeSubscriptionId(String stripeSubscriptionId) { this.stripeSubscriptionId = stripeSubscriptionId; }
 }

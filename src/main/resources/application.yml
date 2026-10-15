@@ -137,4 +137,15 @@ auth:
 cors:
   allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
 
+# Stripe billing. Blank secret-key means checkout answers 503 and the webhook is refused, so an
+# unconfigured deploy runs free-only. Price ids are the ones created in the Stripe dashboard.
+stripe:
+  secret-key:     ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  return-origin:  ${FRONTEND_ORIGIN:http://localhost:5173}
+  price:
+    starter: ${STRIPE_PRICE_STARTER:}
+    pro:     ${STRIPE_PRICE_PRO:}
+    pack:    ${STRIPE_PRICE_PACK:}
+
 # Profile now lives in DB (Flyway V2). Edit at /profile in the UI.

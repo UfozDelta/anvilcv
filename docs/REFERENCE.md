@@ -521,6 +521,26 @@ Admins (`is_admin`) are never capped either. V47 set `quota_exempt` for every ac
 - Own account stays `quota_exempt`. Test metering with a throwaway account set to a plan by SQL.
 - Pricing margin: measured cost is far below the $0.17 base rate in `Pricing.tsx`. Keep a 3-4x buffer for long postings.
 
+### Billing (Stripe)
+
+`billing/` + `api/BillingController`. Hosted Checkout and customer portal; no card data touches the app. Only the webhook changes `app_user.plan`.
+
+| Route | Does |
+|---|---|
+| `POST /api/billing/checkout` `{plan}` | Returns `{url}` to Stripe Checkout. Free accounts only (else `409`); `503` if the price id is unset. Starter/pro are `subscription`, pack is `payment`. |
+| `POST /api/billing/portal` | Returns `{url}` to the portal. `409` until the user has a Stripe customer. |
+| `POST /api/billing/webhook` | Public; the `Stripe-Signature` header (HMAC-SHA256, 5 min tolerance) is the credential. `503` if no secret, `401` if bad. |
+
+Events handled: `checkout.session.completed` and `checkout.session.async_payment_succeeded` (grant the plan only when `payment_status` is paid; sets `plan_started_at`, customer and subscription ids), `customer.subscription.updated` (`active`/`trialing`/`past_due` keep the plan and follow a portal change by price id; any other status drops to free), `customer.subscription.deleted` (drops to free), `charge.refunded` (a fully refunded pack goes back to free), `charge.dispute.created` (logged `STRIPE_DISPUTE`, handle by hand). Each event id is claimed first with `INSERT ... ON CONFLICT DO NOTHING` in the handler transaction (`stripe_event`, V48), so a redelivery or a race is skipped and a failure rolls the claim back.
+
+Checkout is open to free and used-up pack accounts; a subscriber changes plan in the portal. If a second checkout is paid while a subscription is live (two tabs), the new subscription is cancelled through the API and `STRIPE_DUPLICATE` is logged; a duplicate pack is left to refund by hand. Stripe errors are logged (`STRIPE_API`) and the user sees a fixed 502; a blank secret key is 503; calls time out at 5s connect, 15s read.
+
+Known gaps: an old `completed` retried after `subscription.deleted` can grant the plan back (Stripe does not order events); disputes and partial refunds are not automatic. In the Stripe dashboard set the final failed-payment retry to cancel the subscription.
+
+Config (blank = billing off, app runs free-only): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PACK`; return URLs use `FRONTEND_ORIGIN`. Register the webhook for the three event types above. Local test: `stripe listen --forward-to localhost:8080/api/billing/webhook`.
+
+Not verified against live Stripe: built from the API docs and tested with fakes only (`BillingServiceTest`, `StripeSignatureTest`).
+
 ### First-run onboarding
 
 A new account lands on `/welcome` (`components/onboarding/WelcomeFast.tsx`) and gets to a tailored
