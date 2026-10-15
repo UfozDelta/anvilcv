@@ -6,8 +6,8 @@ import '../styles/landing.css';
 import '../components/landing/landing-page.css';
 import '../styles/pricing.css';
 
-// Proposed pricing — no billing exists yet (checkout will be Stripe). Estimated LLM cost ~$0.02–0.05 per tailor;
-// verify against llm_usage_log before shipping.
+// Proposed pricing — no billing exists yet (checkout will be Stripe). Measured LLM cost from llm_usage_log
+// (small sample): ~$0.005 per tailor, ~$0.016 per generation. Keep a 3-4x buffer for long postings.
 type Plan = {
   id: string;
   name: string;
@@ -23,7 +23,8 @@ type Plan = {
 };
 
 // Prices come from one internal base rate (~$0.17 per tailor, never shown) times volume,
-// except Pro: discounted to ~$0.09 so the middle plan is the obvious deal.
+// except Pro: discounted to ~$0.09 so the middle plan is the obvious deal. The base rate is far above
+// measured cost (see above), so margins are wide; it can come down.
 const PLANS: Plan[] = [
   { id: 'starter', name: 'STARTER', price: 10, per: '/ month', tailors: 60, kind: 'monthly', line: 'About 2 applications a day.', features: ['60 tailors a month', '5 generations a month', '10 repo imports a month', 'Cover letters'] },
   { id: 'pro', name: 'PRO', price: 14, per: '/ month', tailors: 150, kind: 'monthly', featured: true, line: 'About 5 applications a day.', features: ['150 tailors a month', '15 generations a month', '25 repo imports a month', 'Tailor from the job feed', 'Priority queue'] },

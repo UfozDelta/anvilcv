@@ -512,6 +512,15 @@ Reading the logs (`BULLET_JUDGE`, `BULLET_PAIR`, `BULLET_SLOT` in the applicatio
 Months are calendar months (UTC). A tailor is one finished application; a generation is a finished bullets run, new stories or more wordings. Downloads are never counted. Limits live in `quota/Plan.java` and must match `frontend/src/pages/Pricing.tsx`.
 
 **Bypassing the cap by hand (Neon SQL editor or MCP):**
+**Decisions (2026-10-15):**
+
+- Caps stay Starter 5, Pro 15, Pack 20 generations. A generation costs about $0.016 and a tailor about $0.005 (`llm_usage_log`, small sample), so the cap gates upgrades, not margin.
+- Re-generating the same job counts as a tailor: each finished application is recorded. Not run to confirm.
+- A cancelled subscriber keeps the plan until the period ends, then drops to free. Bullets, applications and downloads stay; free limits only block new generations and tailors.
+- Allowances reset on the calendar month (UTC). Revisit when Stripe adds a billing anchor.
+- Own account stays `quota_exempt`. Test metering with a throwaway account set to a plan by SQL.
+- Pricing margin: measured cost is far below the $0.17 base rate in `Pricing.tsx`. Keep a 3-4x buffer for long postings.
+
 
 ```sql
 UPDATE app_user SET quota_exempt = true  WHERE username = 'someone';   -- lift every cap
