@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
+import { guardedCheckout } from '../lib/billing';
 import { SiteFooter, TopNav } from '../components/landing/SiteNav';
 import { useAvgSec } from '../components/landing/useAvgSec';
 import '../styles/landing.css';
@@ -58,6 +60,9 @@ function fitFor(perMonth: number): Plan {
 /** Public pricing. No billing is wired yet: every plan's button goes to sign-up. */
 export function Pricing() {
   const avgSec = useAvgSec();
+  const { username } = useAuth();
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [perWeek, setPerWeek] = useState(25);
   const perMonth = Math.max(1, Math.round(perWeek * WEEKS_PER_MONTH));
   const freeFits = perMonth <= FREE_TAILORS;
@@ -116,12 +121,23 @@ export function Pricing() {
                 {p.features.map((f) => <li key={f}>{f}</li>)}
               </ul>
               {p === fit && <p className="pr-tier__fit">✓ Fits your ~{perMonth} a month</p>}
-              <Link to="/register" className={`lp-btn pr-btn ${p.featured ? 'lp-btn--acid' : 'lp-btn--ink'}`}>
-                CHOOSE {p.name} &nbsp;→
-              </Link>
+              {username
+                ? (
+                  <button type="button" className={`lp-btn pr-btn ${p.featured ? 'lp-btn--acid' : 'lp-btn--ink'}`} disabled={busy}
+                    onClick={() => guardedCheckout(p.id, busy, setBusy, setErr)}>
+                    CHOOSE {p.name} &nbsp;→
+                  </button>
+                )
+                : (
+                  <Link to="/register" className={`lp-btn pr-btn ${p.featured ? 'lp-btn--acid' : 'lp-btn--ink'}`}>
+                    CHOOSE {p.name} &nbsp;→
+                  </Link>
+                )}
             </article>
           ))}
         </div>
+
+        {err && <div className="err" role="alert">{err}</div>}
 
         {/* Free sits flat under the paid plans: always there, never competing with them. */}
         <div className="pr-free" data-fit={freeFits || undefined}>

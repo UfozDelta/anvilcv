@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { guardedCheckout } from '../lib/billing';
 import { QUOTA_EVENT, type QuotaBody } from '../lib/quota';
 
 const PLANS = [
@@ -13,10 +13,12 @@ const FOCUSABLE = 'button:not([disabled]), a[href]';
 /** Opens when any request is refused for quota (402). Mounted once; see lib/quota.ts. */
 export function PaywallModal() {
   const [q, setQ] = useState<QuotaBody | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const on = (e: Event) => setQ((e as CustomEvent<QuotaBody>).detail);
+    const on = (e: Event) => { setErr(null); setBusy(false); setQ((e as CustomEvent<QuotaBody>).detail); };
     window.addEventListener(QUOTA_EVENT, on);
     return () => window.removeEventListener(QUOTA_EVENT, on);
   }, []);
@@ -59,13 +61,15 @@ export function PaywallModal() {
         <p>{q.message}{resets ? ` More on ${resets}.` : ''} Your saved work, preview and downloads stay free.</p>
         <div className="pwm-plans">
           {PLANS.map((p) => (
-            <Link key={p.id} to="/pricing" className="pwm-plan" data-featured={p.featured || undefined} onClick={close}>
+            <button key={p.id} type="button" className="pwm-plan" data-featured={p.featured || undefined} disabled={busy}
+              onClick={() => guardedCheckout(p.id, busy, setBusy, setErr)}>
               <span className="pwm-plan__name">{p.name}{p.featured && <em> · most popular</em>}</span>
               <span><b>${p.price}</b> {p.per}</span>
               <span className="pwm-plan__line">{p.line}</span>
-            </Link>
+            </button>
           ))}
         </div>
+        {err && <div className="err" role="alert">{err}</div>}
         <button type="button" className="ap-btn ap-btn--ghost" data-autofocus onClick={close}>Not now</button>
       </div>
     </div>

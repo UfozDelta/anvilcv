@@ -1,19 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { QUOTA_EVENT } from '../lib/quota';
-
-interface Meter { used: number; limit: number | null }
-interface Entries { used: number; cap: number }
-interface Usage {
-  plan: string;
-  exempt: boolean;
-  tailors: Meter;
-  generations: Meter;
-  projects: Entries | null;
-  experiences: Entries | null;
-  resetsAt: string | null;
-}
+import { QUOTA_EVENT, type Usage } from '../lib/quota';
 
 /** What is left on the user's plan. Renders nothing when exempt or when the meter cannot load. */
 export function QuotaMeter() {

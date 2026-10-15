@@ -675,3 +675,11 @@ a.ap-path { text-decoration: none; }
 .pwm-plan__line { grid-column: 1 / -1; color: var(--muted); }
 .pwm-plan[data-featured] .pwm-plan__line { color: var(--soft); }
 @media (prefers-reduced-motion: reduce) { .pwm { animation: none; } }
+
+/* ── Settings > Plan and billing (components/BillingSection.tsx) ── */
+.bl-line { margin: 8px 0 0; font: 14px/1.5 var(--mono); }
+.bl-use { margin: 8px 0 0; padding-left: 18px; font: 13px/1.6 var(--mono); color: var(--muted); }
+.bl-ok { margin: 8px 0 0; padding: 10px 12px; background: var(--acid); border: 2px solid var(--ink); font-size: 14px; }
+.bl-act { display: flex; gap: 8px; margin-top: 12px; }
+button.pwm-plan { font-family: inherit; text-align: left; background: var(--paper); cursor: pointer; }
+button.pwm-plan[data-featured] { background: var(--ink); }

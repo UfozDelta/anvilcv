@@ -5,6 +5,7 @@ import { PageTitle, useUnsavedGuard } from '../components/ledger/shared';
 import type { GenerationConfig } from '../lib/api';
 import { useField } from '../lib/field';
 import { FieldPicker } from '../components/FieldPicker';
+import { BillingSection } from '../components/BillingSection';
 
 type RangeKey = 'singleLine' | 'doubleLine' | 'deadZone';
 const RANGES: { key: RangeKey; label: string; min: number; max: number }[] = [
@@ -77,6 +78,8 @@ export function SettingsPage() {
   return (
     <div className="shell ap-page pf-page">
       <PageTitle title="Settings" />
+
+      <BillingSection />
 
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <section className="pf-sec">

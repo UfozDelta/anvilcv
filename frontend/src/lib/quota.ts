@@ -17,3 +17,13 @@ export function reportQuota(status: number, body: unknown): QuotaBody | null {
   window.dispatchEvent(new CustomEvent(QUOTA_EVENT, { detail: body }));
   return body as QuotaBody;
 }
+
+export interface Usage {
+  plan: string;
+  exempt: boolean;
+  tailors: { used: number; limit: number | null };
+  generations: { used: number; limit: number | null };
+  projects: { used: number; cap: number } | null;
+  experiences: { used: number; cap: number } | null;
+  resetsAt: string | null;
+}
