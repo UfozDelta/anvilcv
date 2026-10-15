@@ -29,7 +29,7 @@ Turn your code into resume bullets, then tailor a one-page PDF to each job.
 - **Bullet style:** Google XYZ format, mostly one line, one bold, and a measured result only
   when the source states one.
 
-More: [repo explorer flow](docs/github-repo-explorer.html) · [adding a project](NEW_PROJECT.md) ·
+More: [repo explorer flow](docs/github-repo-explorer.html) · [adding a project](docs/NEW_PROJECT.md) ·
 [full reference](docs/REFERENCE.md) (config, API, data model, gotchas).
 
 ## Stack
@@ -52,7 +52,6 @@ Needs Java 21, Maven, Node 18+, PostgreSQL (with `pgcrypto`), `tectonic`, and an
 2. Run it:
 
    ```bash
-   ./start.ps1                                                   # Windows
    (cd frontend && npm i && npm run build) && SPRING_PROFILES_ACTIVE=local mvn spring-boot:run
    ```
 

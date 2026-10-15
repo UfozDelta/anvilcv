@@ -67,3 +67,6 @@ logging-plan.md
 src/test/resources/bullets/local/
 MULTI_FIELD_PLAN.md
 CODE_REVIEW_PLAN.md
+
+NEXT_STEPS.md
+frontend/tsconfig.tsbuildinfo

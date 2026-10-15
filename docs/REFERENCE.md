@@ -219,16 +219,7 @@ The database needs the `pgcrypto` extension — Flyway's `V1__init.sql` calls `g
 
 ### 2. Run
 
-Windows:
-
-```powershell
-./start.ps1            # -Frontend forces a UI rebuild, -NoBrowser skips opening the browser
-```
-
-Preflights the config file, tectonic, and port 8080; rebuilds the frontend if `frontend/src` is
-newer than the built output; then starts the backend.
-
-macOS / Linux (no script — two steps):
+Two steps, the same on every OS:
 
 ```bash
 (cd frontend && npm install && npm run build)
@@ -363,7 +354,7 @@ stored key undecryptable — they have to be re-entered.
 | `src/test/java/` | about 680 backend tests |
 | `frontend/` | React + Vite SPA |
 | `.github/workflows/ci.yml` | Maven job + Vite job |
-| `start.ps1`, `Dockerfile`, `compose.yml`, `pom.xml` | Build and run |
+| `Dockerfile`, `compose.yml`, `pom.xml` | Build and run |
 
 ---
 
@@ -512,15 +503,6 @@ Reading the logs (`BULLET_JUDGE`, `BULLET_PAIR`, `BULLET_SLOT` in the applicatio
 Months are calendar months (UTC). A tailor is one finished application; a generation is a finished bullets run, new stories or more wordings. Downloads are never counted. Limits live in `quota/Plan.java` and must match `frontend/src/pages/Pricing.tsx`.
 
 **Bypassing the cap by hand (Neon SQL editor or MCP):**
-**Decisions (2026-10-15):**
-
-- Caps stay Starter 5, Pro 15, Pack 20 generations. A generation costs about $0.016 and a tailor about $0.005 (`llm_usage_log`, small sample), so the cap gates upgrades, not margin.
-- Re-generating the same job counts as a tailor: each finished application is recorded. Not run to confirm.
-- A cancelled subscriber keeps the plan until the period ends, then drops to free. Bullets, applications and downloads stay; free limits only block new generations and tailors.
-- Allowances reset on the calendar month (UTC). Revisit when Stripe adds a billing anchor.
-- Own account stays `quota_exempt`. Test metering with a throwaway account set to a plan by SQL.
-- Pricing margin: measured cost is far below the $0.17 base rate in `Pricing.tsx`. Keep a 3-4x buffer for long postings.
-
 
 ```sql
 UPDATE app_user SET quota_exempt = true  WHERE username = 'someone';   -- lift every cap
@@ -529,6 +511,15 @@ UPDATE app_user SET plan = 'pro', plan_started_at = now() WHERE username = 'some
 ```
 
 Admins (`is_admin`) are never capped either. V47 set `quota_exempt` for every account that existed then, so only later sign-ups are metered.
+
+**Decisions (2026-10-15):**
+
+- Caps stay Starter 5, Pro 15, Pack 20 generations. A generation costs about $0.016 and a tailor about $0.005 (`llm_usage_log`, small sample), so the cap gates upgrades, not margin.
+- Re-generating the same job counts as a tailor: each finished application is recorded. Not run to confirm.
+- A cancelled subscriber keeps the plan until the period ends, then drops to free. Bullets, applications and downloads stay; free limits only block new generations and tailors.
+- Allowances reset on the calendar month (UTC). Revisit when Stripe adds a billing anchor.
+- Own account stays `quota_exempt`. Test metering with a throwaway account set to a plan by SQL.
+- Pricing margin: measured cost is far below the $0.17 base rate in `Pricing.tsx`. Keep a 3-4x buffer for long postings.
 
 ### First-run onboarding
 
@@ -656,12 +647,12 @@ cd frontend && npm run build       # dist/ and a copy into src/main/resources/st
 
 ## Gotchas
 
-1. **`application-local.yml` must be created by hand** — `start.ps1` hard-fails without it.
+1. **`application-local.yml` must be created by hand** — without it (or the `DB_URL`, `DB_USER`, `DB_PASSWORD` env vars) the backend has no database and fails to start.
 2. **Never commit real credentials to it.** It is git-ignored and `.dockerignore`d, but treat any
    database password or API key that has ever been written there as needing rotation before the
    repo or an image is shared.
 3. **No Maven wrapper.** `mvn` must be on PATH; there is no `mvnw`.
-4. **`start.ps1` is PowerShell-only.** On macOS/Linux run the two manual steps.
+4. **`application-local.yml` only loads under the `local` profile** — set `SPRING_PROFILES_ACTIVE=local`.
 5. **The Vite build wipes `src/main/resources/static/`** and copies `dist/` into it. Skip
    `npm run build` and Spring silently serves the previous UI.
 6. **A blank `SEED_PASSWORD` skips the seed admin** — nothing is created or updated; set it to get the admin account.
@@ -672,7 +663,7 @@ cd frontend && npm run build       # dist/ and a copy into src/main/resources/st
    leaves the API reachable cross-site — fix CSRF before deploying that way.
 9. **On Neon, use the direct endpoint, not `-pooler`.** PgBouncer transaction pooling breaks pgjdbc
    prepared statements and Flyway's session advisory lock.
-10. **Tectonic degrades silently.** Without it, every PDF compile fails and `start.ps1` only warns.
+10. **Tectonic degrades silently.** Without it, every PDF compile fails but the app still boots.
     A cold first compile downloads LaTeX packages and may exceed the 30s timeout.
 11. **`LLM_SECRET_KEY` is unrecoverable** — see [LLM providers and keys](#llm-providers-and-keys).
 12. **Cost accounting only prices Gemini Flash and Flash-Lite.** OpenCode free-tier models are
