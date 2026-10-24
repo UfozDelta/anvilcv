@@ -1,20 +1,16 @@
+# Hosted by portal (Desktop/portal): `python -m portal deploy <this dir> --host <hostname>` builds this
+# service, publishes no ports, and runs the Cloudflare Tunnel sidecar itself. Updates after that go
+# through deploy.bat, which reuses portal's project name and override file.
 services:
   app:
     build: .
     restart: unless-stopped
     env_file: .env
-    # No ports: — nothing is published to the host. cloudflared reaches the JVM
-    # over the compose network, so the machine has no open inbound port at all.
+    # No ports: — nothing is published to the host. portal's cloudflared reaches the JVM over a
+    # per-project Docker network, so the machine has no open inbound port at all.
     mem_limit: 3g   # JVM 21 is container-aware; heap caps at ~25% of this
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN}

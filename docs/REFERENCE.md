@@ -273,7 +273,6 @@ OpenAI defaults to `gpt-4o-mini` for all three.
 | `SEED_USERNAME` / `SEED_EMAIL` / `SEED_PASSWORD` | `f3l` / `admin@localhost` / — | seed admin; blank password skips it |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | split-origin deploys only |
 | `COOKIE_SAME_SITE` / `COOKIE_SECURE` | `Lax` / `false` | set `None` / `true` behind a tunnel |
-| `TUNNEL_TOKEN` | — | secret; `compose.yml` cloudflared only |
 | `JOBS_WEBHOOK_SECRET` | — | secret; blank disables the jobs webhook |
 
 Hikari is tuned for Neon's scale-to-zero (pool 5, min idle 0, 4-minute max lifetime).
@@ -650,11 +649,18 @@ Multi-stage build (`maven:3.9-eclipse-temurin-21` -> `eclipse-temurin:21-jre-jam
 tectonic 0.15.0 from GitHub releases, switching on `TARGETARCH` for amd64/arm64, and pre-warms it
 with a dummy `.tex` so the first real compile does not stall downloading LaTeX packages.
 
-### Compose + Cloudflare Tunnel
+### Compose + portal
 
-`compose.yml` runs `app` (from `.env`, 3 GB memory limit, **no published ports**) alongside
-`cloudflared`. Nothing inbound is open on the host — cloudflared reaches the JVM over the compose
-network. Behind a tunnel set `COOKIE_SECURE=true`.
+`compose.yml` runs only `app` (from `.env`, 3 GB memory limit, **no published ports**). Hosting is
+[portal](../../portal)'s job: `python -m portal deploy <repo dir> --host <hostname>` builds the
+service, creates the Cloudflare tunnel and DNS, and runs a per-project `cloudflared` sidecar, so
+nothing inbound is open on the host. Behind the tunnel set `COOKIE_SECURE=true`.
+
+After new commits, run `deploy.bat` on the server (ssh is fine). It pulls, then rebuilds and replaces
+the app container using portal's project name (`portal-<repo folder>`) and its compose override, so it
+updates portal's stack in place and leaves the tunnel alone. It refuses to run until portal has
+deployed the project once. The client IP for rate limiting comes from `X-Forwarded-For`
+(`server.forward-headers-strategy: native`), trusted only from private Docker addresses.
 
 ### Build artifacts
 
