@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, RequireAuth, useAuth } from './lib/auth';
 import { AppNav } from './components/ledger/AppNav';
@@ -19,39 +19,14 @@ import { DocsPage } from './pages/DocsPage';
 import { UploadPage } from './pages/UploadPage';
 import { Jobs } from './pages/Jobs';
 import { Pricing } from './pages/Pricing';
-import { LabIndex } from './lab/LabIndex';
-import { LabList } from './lab/LabList';
-import { LabDetail } from './lab/LabDetail';
-import { LabRows } from './lab/LabRows';
-import { LabProjectsList } from './lab/LabProjectsList';
-import { LabProjectDetail } from './lab/LabProjectDetail';
-import { LabMasthead } from './lab/LabMasthead';
-import { LabHero } from './lab/hero/LabHero';
-import { LabLanding } from './lab/landing/LabLanding';
-import { LabLandingV3 } from './lab/landing/LabLandingV3';
-import { LabHow } from './lab/how/LabHow';
-import { LabApp, LabNav } from './lab/app/LabApp';
-import { LabApplications } from './lab/app/LabApplications';
-import { LabExperiences } from './lab/app/LabExperiences';
-import { LabNewApplication } from './lab/app/LabNewApplication';
-import { LabJobs } from './lab/app/LabJobs';
-import { LabProfile } from './lab/app/LabProfile';
-import { LabSettings } from './lab/app/LabSettings';
-import { LabFlow } from './lab/app/LabFlow';
-import { LabLandingV2 } from './lab/landing-v2/LabLandingV2';
-import { LabStories } from './lab/stories/LabStories';
-import { LabStoriesLean } from './lab/stories-lean/LabStoriesLean';
-import { LabProjectSplit } from './lab/project-split/LabProjectSplit';
-import { LabWorkspace } from './lab/workspace/LabWorkspace';
-import { LabWorkspaceTabs } from './lab/workspace-tabs/LabWorkspaceTabs';
-import { LabStoryFlow } from './lab/story-flow/LabStoryFlow';
-import { LabLists } from './lab/lists/LabLists';
-import { LabPaywall } from './lab/paywall/LabPaywall';
-import { LabWalkthrough } from './lab/walkthrough/LabWalkthrough';
 import { OnboardingGuide } from './components/onboarding/Guides';
 import { PaywallModal } from './components/PaywallModal';
 import { WelcomeFast } from './components/onboarding/WelcomeFast';
 
+
+// UI prototypes on placeholder data. Dev only: DEV is a build-time constant, so the dynamic import
+// and the whole lab/ tree are dropped from the production bundle.
+const LabRoutes = import.meta.env.DEV ? lazy(() => import('./lab/LabRoutes')) : null;
 
 /** The router keeps the old scroll position across navigation, so a link clicked at the bottom of a page opened the next one mid-way. */
 function ScrollToTop() {
@@ -110,39 +85,7 @@ export function App() {
         <Route path="/pricing"              element={<Pricing />} />
         {/* Public on purpose: guests browse the feed; Tailor sends them to log in. */}
         <Route path="/jobs"                 element={<JobsShell />} />
-
-        {/* UI prototypes on placeholder data. Unauthenticated on purpose: they touch
-            no API and exist to review the Applications redesign without a login. */}
-        <Route path="/lab"                  element={<LabIndex />} />
-        <Route path="/lab/list"             element={<LabList />} />
-        <Route path="/lab/detail"           element={<LabDetail />} />
-        <Route path="/lab/rows"             element={<LabRows />} />
-        <Route path="/lab/projects"         element={<LabProjectsList />} />
-        <Route path="/lab/project-detail"   element={<LabProjectDetail />} />
-        <Route path="/lab/masthead"         element={<LabMasthead />} />
-        <Route path="/lab/hero"             element={<LabHero />} />
-        <Route path="/lab/landing"          element={<LabLanding />} />
-        <Route path="/lab/landing-v3"       element={<LabLandingV3 />} />
-        <Route path="/lab/how"              element={<LabHow />} />
-        <Route path="/lab/app"              element={<LabApp />} />
-        <Route path="/lab/nav"              element={<LabNav />} />
-        <Route path="/lab/applications"     element={<LabApplications />} />
-        <Route path="/lab/experiences"      element={<LabExperiences />} />
-        <Route path="/lab/new-application"  element={<LabNewApplication />} />
-        <Route path="/lab/jobs"             element={<LabJobs />} />
-        <Route path="/lab/profile"          element={<LabProfile />} />
-        <Route path="/lab/settings"         element={<LabSettings />} />
-        <Route path="/lab/flow"             element={<LabFlow />} />
-        <Route path="/lab/landing-v2"       element={<LabLandingV2 />} />
-        <Route path="/lab/stories"          element={<LabStories />} />
-        <Route path="/lab/stories-lean"     element={<LabStoriesLean />} />
-        <Route path="/lab/project-split"    element={<LabProjectSplit />} />
-        <Route path="/lab/workspace"        element={<LabWorkspace />} />
-        <Route path="/lab/workspace-tabs"   element={<LabWorkspaceTabs />} />
-        <Route path="/lab/story-flow"       element={<LabStoryFlow />} />
-        <Route path="/lab/lists"            element={<LabLists />} />
-        <Route path="/lab/paywall"          element={<LabPaywall />} />
-        <Route path="/lab/walkthrough"      element={<LabWalkthrough />} />
+        {LabRoutes && <Route path="/lab/*" element={<Suspense fallback={null}><LabRoutes /></Suspense>} />}
         <Route path="*"                     element={<Navigate to="/projects" replace />} />
       </Routes>
     </AuthProvider>
