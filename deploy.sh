@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Redeploys ResuForge: stop stack, pull latest, rebuild image, start stack.
-# Run manually on the server via SSH from the repo root.
+# Redeploys ResuForge: build the new image, then swap the stack onto it.
+# Run manually on the server from the repo root, or via the Deploy workflow (which fast-forwards to the commit first, making the pull a no-op).
 set -euo pipefail
 
-echo "==> Stopping stack"
-docker compose down
-
 echo "==> Pulling latest code"
-git pull
+git pull --ff-only
 
+# Building before stopping keeps the old stack serving during the multi-minute build;
+# `up -d` then recreates only the services whose image changed.
 echo "==> Building app image"
 docker compose build
 

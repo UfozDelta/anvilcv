@@ -1,0 +1,40 @@
+name: Deploy
+
+# Manual on purpose: this ships to the live server. Run it from the Actions tab once CI is green.
+# Needs repo secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY and (optional) DEPLOY_PATH, and an
+# "production" environment (add required reviewers there if you want a second pair of eyes).
+# The frontend deploys itself from main via Vercel; this only redeploys the backend stack.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Require green CI on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" \
+            --jq '[.check_runs[] | select(.name | test("Backend|Frontend|Docker"))] | if length == 3 and all(.conclusion == "success") then "ok" else "no" end')
+          [ "$state" = "ok" ] || { echo "CI is not green on ${{ github.sha }}"; exit 1; }
+      - name: Redeploy over SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          install -m 600 /dev/null key
+          printf '%s\n' "$KEY" > key
+          ssh -i key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$HOST" \
+            "cd '${DEPLOY_PATH:-~/anvilcv}' && git fetch origin main && git checkout -q main && git merge --ff-only ${{ github.sha }} && bash deploy.sh"
