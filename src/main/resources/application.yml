@@ -13,6 +13,10 @@ logging:
 
 server:
   port: 8080
+  # Behind cloudflared the TCP peer is the proxy, so getRemoteAddr() is the same for every caller
+  # and the login/register rate limiters share one bucket. native lets Tomcat resolve the real
+  # client from X-Forwarded-For, trusting it only when the peer is a private (Docker) address.
+  forward-headers-strategy: native
   servlet:
     session:
       # Tomcat's default is 30 minutes of idle, which logged people out whenever they

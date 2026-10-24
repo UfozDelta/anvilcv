@@ -22,9 +22,8 @@ public class RegisterRateLimiter {
 
     public boolean tryConsume(String ip) {
         boolean allowed = buckets.computeIfAbsent(ip, k -> newBucket()).tryConsume(1);
-        // ip is httpReq.getRemoteAddr() (AuthController) — behind a reverse proxy or the Docker
-        // bridge that's the proxy's address, identical for every caller, until
-        // server.forward-headers-strategy is set. Same caveat applies to what this limiter keys on.
+        // ip is httpReq.getRemoteAddr(); server.forward-headers-strategy=native makes that the real
+        // client behind the proxy rather than the proxy's own address.
         if (!allowed) {
             log.warn("AUTH_RATELIMIT ip={}", ip);
         }

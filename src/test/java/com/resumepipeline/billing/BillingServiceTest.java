@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.auth.AppUser;
 import com.resumepipeline.auth.AppUserRepository;
 import com.resumepipeline.quota.Plan;
+import com.resumepipeline.quota.QuotaService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,7 +30,8 @@ class BillingServiceTest {
     AppUserRepository users = mock(AppUserRepository.class);
     StripeEventRepository events = mock(StripeEventRepository.class);
     StripeApi stripe = mock(StripeApi.class);
-    BillingService billing = new BillingService(users, events, stripe, Clock.fixed(NOW, ZoneOffset.UTC), "https://app.test",
+    QuotaService quota = mock(QuotaService.class);
+    BillingService billing = new BillingService(users, events, stripe, quota, Clock.fixed(NOW, ZoneOffset.UTC), "https://app.test",
             Map.of(Plan.STARTER, "price_s", Plan.PRO, "price_p", Plan.PACK, "price_k"));
     AppUser user = new AppUser("u", "u@example.com", "x");
 
@@ -76,17 +78,35 @@ class BillingServiceTest {
         verifyNoInteractions(stripe);
     }
 
+    private void packUsage(long tailorsUsed, long generationsUsed) {
+        when(quota.usage(uid)).thenReturn(new QuotaService.Usage("pack", false,
+                new QuotaService.Meter(tailorsUsed, 200), new QuotaService.Meter(generationsUsed, 20),
+                null, null, null));
+    }
+
     @Test
     void aUsedUpPackBuyerCanBuyAgain() {
         user.setPlan("pack");
         when(stripe.checkoutUrl(any())).thenReturn("https://stripe.test/c");
+
+        packUsage(200, 3);   // tailors spent
         assertEquals("https://stripe.test/c", billing.checkout(uid, "pack"));
+        packUsage(10, 20);   // generations spent
         assertEquals("https://stripe.test/c", billing.checkout(uid, "pro"));
     }
 
     @Test
+    void aPackBuyerWithCreditsLeftCannotBuyAgain() {
+        user.setPlan("pack");
+        packUsage(199, 19);
+        var e = assertThrows(ResponseStatusException.class, () -> billing.checkout(uid, "pack"));
+        assertEquals(409, e.getStatusCode().value());
+        verifyNoInteractions(stripe);
+    }
+
+    @Test
     void checkoutIs503WhenThePriceIsNotConfigured() {
-        BillingService unset = new BillingService(users, events, stripe, Clock.systemUTC(), "https://app.test",
+        BillingService unset = new BillingService(users, events, stripe, quota, Clock.systemUTC(), "https://app.test",
                 Map.of(Plan.STARTER, "", Plan.PRO, "", Plan.PACK, ""));
         var e = assertThrows(ResponseStatusException.class, () -> unset.checkout(uid, "pro"));
         assertEquals(503, e.getStatusCode().value());

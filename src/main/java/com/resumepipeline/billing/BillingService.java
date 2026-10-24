@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.resumepipeline.auth.AppUser;
 import com.resumepipeline.auth.AppUserRepository;
 import com.resumepipeline.quota.Plan;
+import com.resumepipeline.quota.QuotaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,25 +35,28 @@ public class BillingService {
     private final AppUserRepository users;
     private final StripeEventRepository events;
     private final StripeApi stripe;
+    private final QuotaService quota;
     private final Clock clock;
     private final String returnOrigin;
     private final Map<Plan, String> prices;
 
     @Autowired
     public BillingService(AppUserRepository users, StripeEventRepository events, StripeApi stripe,
+                          QuotaService quota,
                           @Value("${stripe.return-origin:}") String returnOrigin,
                           @Value("${stripe.price.starter:}") String starter,
                           @Value("${stripe.price.pro:}") String pro,
                           @Value("${stripe.price.pack:}") String pack) {
-        this(users, events, stripe, Clock.systemUTC(), returnOrigin,
+        this(users, events, stripe, quota, Clock.systemUTC(), returnOrigin,
                 Map.of(Plan.STARTER, starter, Plan.PRO, pro, Plan.PACK, pack));
     }
 
-    BillingService(AppUserRepository users, StripeEventRepository events, StripeApi stripe, Clock clock,
+    BillingService(AppUserRepository users, StripeEventRepository events, StripeApi stripe, QuotaService quota, Clock clock,
                    String returnOrigin, Map<Plan, String> prices) {
         this.users = users;
         this.events = events;
         this.stripe = stripe;
+        this.quota = quota;
         this.clock = clock;
         this.returnOrigin = returnOrigin;
         this.prices = prices;
@@ -70,10 +74,21 @@ public class BillingService {
         if (!Plan.FREE.slug().equals(u.getPlan()) && !Plan.PACK.slug().equals(u.getPlan())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "You already have a plan. Manage it from billing.");
         }
+        if (Plan.PACK.slug().equals(u.getPlan()) && !packUsedUp(userId)) {
+            // A second purchase restarts the pack's clock, which would throw away what is left of this one.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "You still have pack credits left.");
+        }
         return stripe.checkoutUrl(new StripeApi.CheckoutRequest(
                 plan == Plan.PACK ? "payment" : "subscription", price, plan.slug(), u.getId(),
                 u.getStripeCustomerId(), u.getEmail(),
                 returnOrigin + "/settings?billing=success", returnOrigin + "/pricing"));
+    }
+
+    /** A pack is used up once either of its meters is spent: that is when the user is blocked and needs more. */
+    private boolean packUsedUp(UUID userId) {
+        QuotaService.Usage use = quota.usage(userId);
+        return use.tailors().used() >= use.tailors().limit()
+                || use.generations().used() >= use.generations().limit();
     }
 
     /** The customer portal. Needs a Stripe customer, so only someone who has paid. */

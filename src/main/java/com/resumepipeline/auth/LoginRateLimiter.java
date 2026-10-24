@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Per-IP brake on password guessing: 10 failed logins per 15 minutes. Only failures consume
- * a token, so normal use never hits it. Same proxy-address caveat as {@link RegisterRateLimiter}.
+ * a token, so normal use never hits it. 
  */
 @Component
 public class LoginRateLimiter {
