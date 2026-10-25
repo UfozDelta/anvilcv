@@ -1,6 +1,9 @@
-# Hosted by portal (Desktop/portal): `python -m portal deploy <this dir> --host <hostname>` builds this
-# service, publishes no ports, and runs the Cloudflare Tunnel sidecar itself. Updates after that go
-# through deploy.bat, which reuses portal's project name and override file.
+# Two ways to host this, same file:
+#  - portal (Desktop/portal): `python -m portal deploy <this dir> --host <hostname>` builds `app`, publishes
+#    no ports and runs its own Cloudflare Tunnel sidecar. `cloudflared` below stays off (profile not active).
+#  - standalone: put TUNNEL_TOKEN and COMPOSE_PROFILES=tunnel in .env and run deploy.bat (or
+#    `docker compose up -d --build`); compose then starts `cloudflared` next to `app`.
+# deploy.bat detects which one is in use. Never set COMPOSE_PROFILES=tunnel under portal: two tunnels.
 services:
   app:
     build: .
@@ -14,3 +17,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # Standalone hosting only; inert unless the `tunnel` profile is on (see header).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
