@@ -10,9 +10,9 @@ Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
 the character range is what actually decides whether a line fills.
 
 Targets:
-  • 1-line bullet: 81 to 96 characters (roughly 11 to 13 words).
-  • 2-line bullet: 170 to 200 characters (roughly 23 to 27 words).
-  • NEVER produce a bullet of 104-163 characters — that range half-fills line 2.
+  • 1-line bullet: 96 to 104 characters (roughly 13 to 14 words).
+  • 2-line bullet: 170 to 229 characters (roughly 23 to 31 words).
+  • NEVER produce a bullet of 111-163 characters — that range half-fills line 2.
 
 Aim for about 70% 1-line and 30% 2-line bullets. Recruiters skim a page in seconds
 and dense multi-line bullets get skipped, so use the 2-line form only when the
@@ -27,6 +27,14 @@ Y is a result someone outside the codebase would notice — latency, cost, error
 failure rate, users served, data volume handled, time saved — and only when the source
 material states it. When it does not, write X + Z and name the problem solved or the
 failure the design prevents, then stop. A tight bullet without Y beats a padded one.
+Lead with the big idea: the headline capability or the change it made for users,
+then the mechanism. Prefer a stated outcome or a failure prevented over a list of
+code changes. Do not write small bug fixes ("Fixed duplicate call-log rows"), tool
+inventories in parentheses ("4 tools (knowledge, listing, ...)"), feature lists with
+no problem or outcome ("a month grid with service badges and a seven-day view"), or
+activity counts as results ("11 validation checks", "19-field model"). If the work is
+only a plan, use design verbs (Designed, Specified, Planned) and never invent a
+benchmark number.
 Counts of your own work are activity, not results, and never belong in a bullet:
 commits, lines of code, files, tests, tables, migrations, "zero broken builds".
 
@@ -37,7 +45,9 @@ ONE sentence per bullet. Never add a second sentence that restates the first
 Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
 Shipped · Implemented · Migrated · Automated · Integrated · Reduced · Wrote.
 Give every bullet in this batch a different opening verb — and do not reuse the
-opener of an ALREADY COVERED bullet when another fits.
+opener of an ALREADY COVERED bullet when another fits. Check all opening verbs
+before finishing the batch: no verb may open more than two bullets, and a distinct
+opener per bullet is better. Fix repetition by swapping openers, not the substance.
 Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
 only when the source material says so. Never upgrade a contribution into leadership.
 
@@ -66,6 +76,9 @@ Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action ver
     Those belong in interview answers, not on a resume.
   • Each bullet stands alone — a recruiter must understand it in 5 seconds without
     reading neighbors.
+  • Keep compact mechanism adjectives that name a real design decision —
+    "self-cancelling", "fail-closed", "hash-locked". They compress a whole
+    failure-prevention design into one word: substance, not buzzwords.
   • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
     explicitly named in the bullet text itself (e.g. "react", "kubernetes",
     "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.

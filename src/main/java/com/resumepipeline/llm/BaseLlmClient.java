@@ -2,6 +2,7 @@ package com.resumepipeline.llm;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.resumepipeline.application.JdCoverage;
 import com.resumepipeline.config.GenerationConfig;
 import com.resumepipeline.config.GenerationConfigService;
 import com.resumepipeline.obs.LogText;
@@ -141,7 +142,7 @@ public abstract class BaseLlmClient implements LlmClient {
 
     // -------- provider-agnostic schema model --------
 
-    public enum SpecType { OBJECT, ARRAY, STRING, INTEGER }
+    public enum SpecType { OBJECT, ARRAY, STRING, INTEGER, BOOLEAN }
 
     public record SchemaSpec(SpecType type, Map<String, SchemaSpec> properties,
                              SchemaSpec items, List<String> required) {
@@ -150,6 +151,9 @@ public abstract class BaseLlmClient implements LlmClient {
         }
         public static SchemaSpec integer() {
             return new SchemaSpec(SpecType.INTEGER, null, null, null);
+        }
+        public static SchemaSpec bool() {
+            return new SchemaSpec(SpecType.BOOLEAN, null, null, null);
         }
         public static SchemaSpec array(SchemaSpec items) {
             return new SchemaSpec(SpecType.ARRAY, null, items, null);
@@ -382,9 +386,14 @@ public abstract class BaseLlmClient implements LlmClient {
                   - lenses: 1 to 3 of these lens slugs, and only these, best fit first: %s. Tag a lens only when a
                     reviewer for that role would genuinely care about this work. A requested lens that
                     no story fits should stay untagged — never stretch a story to cover it.
+                  - keywordOnly: true only when the story rests on JD/skill keywords with no supporting
+                    quote in the source material. Such stories are discarded, so prefer omitting them.
 
                 Rules:
                   - Up to %d new stories. Never repeat or split work listed as already in the bank.
+                  - Prefer platform-changing work — a system, capability or design decision that
+                    changed what the product could do — over isolated small fixes. A fix is a story
+                    only when the source shows unusual scope or a real tradeoff.
                   - %s
                   - Fewer, stronger stories beat more. Two stories about the same work are one story.
                   - Skip routine work every project has (%s) unless the source shows something unusual about it.
@@ -410,7 +419,8 @@ public abstract class BaseLlmClient implements LlmClient {
                         "id", SchemaSpec.string(),
                         "title", SchemaSpec.string(),
                         "evidence", SchemaSpec.array(SchemaSpec.string()),
-                        "lenses", SchemaSpec.array(SchemaSpec.string())
+                        "lenses", SchemaSpec.array(SchemaSpec.string()),
+                        "keywordOnly", SchemaSpec.bool()
                 )), List.of("id", "title", "evidence", "lenses")))
         )), List.of("stories"));
 
@@ -470,9 +480,10 @@ public abstract class BaseLlmClient implements LlmClient {
 
     /**
      * The deterministic half of {@link #findStories}: keeps only evidence quotes found in the
-     * source, only requested lenses (at most 3), and only stories left with both. Unsupported
-     * lenses are computed here, not trusted from the model: requested minus every lens a kept
-     * story carries.
+     * source, only requested lenses (at most 3), and only stories left with both. A story the
+     * model flagged keyword-only (no supporting source quote) is dropped here, so it can never
+     * reach a candidate-writing slot. Unsupported lenses are computed here, not trusted from
+     * the model: requested minus every lens a kept story carries.
      */
     static StoryResult validateStories(List<StoryJson> raw, List<String> requested, String source) {
         List<Story> kept = new ArrayList<>();
@@ -481,7 +492,7 @@ public abstract class BaseLlmClient implements LlmClient {
         int n = 0;
         for (StoryJson s : raw == null ? List.<StoryJson>of() : raw) {
             n++;
-            if (s == null || s.title == null || s.title.isBlank()) continue;
+            if (s == null || s.title == null || s.title.isBlank() || s.keywordOnly) continue;
             List<String> evidence = (s.evidence == null ? List.<String>of() : s.evidence).stream()
                     .filter(q -> q != null && BulletTextRules.isQuotedIn(q, source))
                     .distinct().toList();
@@ -534,7 +545,8 @@ public abstract class BaseLlmClient implements LlmClient {
                 %s%s
                 Write %d different wordings of this story, each a complete bullet aimed at a reviewer for
                 the lens below. Write only what the evidence supports; every number must come from the
-                story's evidence or the source material.
+                story's evidence or the source material. A technology named only in the lens or a JD
+                keyword list is not supported — leave it out; keyword-only wordings are discarded.
 
                 Spread the wordings across these angles, so they do not all say the same thing:
                   - outcome first: lead with the measured result the evidence states;
@@ -641,6 +653,7 @@ public abstract class BaseLlmClient implements LlmClient {
                   - a concrete outcome, or a failure prevented, is stated;
                   - the specific technology is named;
                   - it is one plain sentence;
+                  - it stands alone: a recruiter understands it in 5 seconds without its neighbours;
                   - the ownership is not inflated.
                 First, for every candidate write a short "good" and "bad" note. Then give the scores in
                 the same order as the candidates, one integer each.
@@ -1173,19 +1186,30 @@ public abstract class BaseLlmClient implements LlmClient {
             }
         }
 
+        JdCoverage.Matrix coverage = JdCoverage.items(req.cleanJd(), req.keywords());
+        String coverageBlock = "  Hard gates: " + coverage.byKind(JdCoverage.Kind.HARD_GATE) + "\n"
+                + "  Minimum quals: " + coverage.byKind(JdCoverage.Kind.MINIMUM) + "\n"
+                + "  Preferred quals: " + coverage.byKind(JdCoverage.Kind.PREFERRED) + "\n"
+                + "  Responsibility verbs: " + coverage.byKind(JdCoverage.Kind.RESPONSIBILITY);
+
         String prompt = """
                 You are an expert resume writer. Rank EVERY bullet below against the job description.
 
                 Rank ALL %d bullets from rank 1 (best fit) to %d (worst). Use integers, no ties.
-                For each bullet give a "why" of at most 20 words: why it fits (the specific JD
-                requirement it meets) and why not (the gap that kept it from ranking higher).
+                For each bullet give a "why" of at most 20 words: which JD item it covers
+                (Covered, Thin or Missing) and why it is not higher.
 
                 Rank by, in order:
-                  1. Match to a requirement the JD actually states — a responsibility or must-have,
-                     not merely a keyword the bullet happens to share.
+                  1. Which JD item the bullet covers — a hard gate, minimum qual or stated
+                     responsibility, not merely a keyword the bullet happens to share.
                   2. Evidence — concrete scope, a number or an outcome beats a bullet that only
                      names the technology.
-                  3. Framing that fits the role emphasis below.
+                  3. Framing that fits the role emphasis below. Label each bullet's angle:
+                     what (what the system is), mechanism (how it works), or outcome (a result
+                     or failure prevented). An entry needs all three angles across its bullets.
+
+                Coverage matrix extracted from the JD:
+                %s
 
                 Produce atsMatched (keywords from the JD that appear in the top 8 bullets)
                 and atsMissing (JD keywords NOT covered).
@@ -1213,6 +1237,7 @@ public abstract class BaseLlmClient implements LlmClient {
                 %s%s
                 """.formatted(
                         req.bullets().size(), req.bullets().size(),
+                        coverageBlock,
                         req.roleEmphasis(),
                         req.company(),
                         req.cleanJd(),
@@ -1880,6 +1905,14 @@ public abstract class BaseLlmClient implements LlmClient {
                 Y is a result someone %s — and only when the source
                 material states it. When it does not, write X + Z and name the problem solved or the
                 failure the design prevents, then stop. A tight bullet without Y beats a padded one.
+                Lead with the big idea: the headline capability or the change it made for users,
+                then the mechanism. Prefer a stated outcome or a failure prevented over a list of
+                code changes. Do not write small bug fixes ("Fixed duplicate call-log rows"), tool
+                inventories in parentheses ("4 tools (knowledge, listing, ...)"), feature lists with
+                no problem or outcome ("a month grid with service badges and a seven-day view"), or
+                activity counts as results ("11 validation checks", "19-field model"). If the work is
+                only a plan, use design verbs (Designed, Specified, Planned) and never invent a
+                benchmark number.
                 Counts of your own work are activity, not results, and never belong in a bullet:
                 %s.
 
@@ -1889,7 +1922,9 @@ public abstract class BaseLlmClient implements LlmClient {
 
                 Open each bullet with a strong, specific action verb, e.g. %s.
                 Give every bullet in this batch a different opening verb — and do not reuse the
-                opener of an ALREADY COVERED bullet when another fits.
+                opener of an ALREADY COVERED bullet when another fits. Check all opening verbs
+                before finishing the batch: no verb may open more than two bullets, and a distinct
+                opener per bullet is better. Fix repetition by swapping openers, not the substance.
                 Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
                 only when the source material says so. Never upgrade a contribution into leadership.
 
@@ -1918,6 +1953,9 @@ public abstract class BaseLlmClient implements LlmClient {
                     Those belong in interview answers, not on a resume.
                   • Each bullet stands alone — a recruiter must understand it in 5 seconds without
                     reading neighbors.
+                  • Keep compact mechanism adjectives that name a real design decision —
+                    "self-cancelling", "fail-closed", "hash-locked". They compress a whole
+                    failure-prevention design into one word: substance, not buzzwords.
                   • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
                     explicitly named in the bullet text itself (e.g. %s). Lowercase, no fixed list — pull from what you wrote.
                     Do not invent tags for things not mentioned in the bullet.
@@ -2004,7 +2042,14 @@ public abstract class BaseLlmClient implements LlmClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class JudgeNoteJson { public Integer i; public String good; public String bad; }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    protected static class StoryJson { public String id; public String title; public List<String> evidence; public List<String> lenses; }
+    protected static class StoryJson {
+        public String id;
+        public String title;
+        public List<String> evidence;
+        public List<String> lenses;
+        /** True when the story is supported only by JD/skill keywords, with no quote in the source. */
+        public boolean keywordOnly;
+    }
     @JsonIgnoreProperties(ignoreUnknown = true)
     protected static class RefitEnvelope { public List<RefitJson> bullets; }
     @JsonIgnoreProperties(ignoreUnknown = true)

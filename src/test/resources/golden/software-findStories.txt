@@ -48,9 +48,14 @@ For each story return:
   - lenses: 1 to 3 of these lens slugs, and only these, best fit first: backend, data. Tag a lens only when a
     reviewer for that role would genuinely care about this work. A requested lens that
     no story fits should stay untagged — never stretch a story to cover it.
+  - keywordOnly: true only when the story rests on JD/skill keywords with no supporting
+    quote in the source material. Such stories are discarded, so prefer omitting them.
 
 Rules:
   - Up to 8 new stories. Never repeat or split work listed as already in the bank.
+  - Prefer platform-changing work — a system, capability or design decision that
+    changed what the product could do — over isolated small fixes. A fix is a story
+    only when the source shows unusual scope or a real tradeoff.
   - Aim for 3 or more stories in total, the bank's included, only if the source supports them; a small project may have fewer. Fewer or none is valid.
   - Fewer, stronger stories beat more. Two stories about the same work are one story.
   - Skip routine work every project has (CRUD screens, login, config, setup, a plain

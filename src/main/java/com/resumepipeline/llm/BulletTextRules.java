@@ -499,10 +499,11 @@ public final class BulletTextRules {
      * <p>This ratio and the {@link GenerationConfig} word bands are one calibration and
      * move together: the bands exist to hit character targets that fit {@link
      * #CHARS_PER_LINE}, so changing this without re-deriving them (see
-     * {@code V24__recalibrate_bands_for_measured_ratio.sql}) silently retargets every
-     * bullet. At 7.4 the shipped bands give ~81-96 chars for one line and ~170-200 for
-     * two — the two-line ceiling stays under 2 x CHARS_PER_LINE, so a kept bullet never
-     * renders a third line.
+     * {@code V24__recalibrate_bands_for_measured_ratio.sql} and
+     * {@code V49__recalibrate_bands_for_122_char_line.sql}) silently retargets every
+     * bullet. Re-derived for the 10.5pt template: the ratio is text density measured
+     * from the corpus, not a font metric, so it stays at 7.4; the word bands move to
+     * hit the new character targets (~98-105 one line, ~170-230 two lines).
      *
      * <p>ponytail: one global constant rather than six new config columns. If per-user
      * tuning drifts (very terse or very verbose writing), promote the character bands to
@@ -513,15 +514,26 @@ public final class BulletTextRules {
 
     /**
      * Rendered characters per LaTeX bullet line, measured against a real compiled PDF
-     * from {@code resume.tex}: 11pt body text in the template's widened text block
+     * from {@code resume.tex}: 10.5pt body text in the template's widened text block
      * ({@code \addtolength{\textwidth}{1.2in}} — see that file). A bullet longer than
      * this wraps to a second line.
      *
      * <p>This is a physical measurement, not a tuning knob: if the template's text
      * width or font size ever changes, this must be re-measured against a freshly
      * compiled PDF, and the {@link GenerationConfig} word bands re-derived from it.
+     * The SOP's calibrated template measures ~122 characters per line (it was ~105 at
+     * the old 11pt layout), which is why this moved with the template swap.
      */
-    public static final int CHARS_PER_LINE = 105;
+    public static final int CHARS_PER_LINE = 122;
+
+    /**
+     * Absolute maximum characters for a kept bullet. Two physical lines hold
+     * {@code 2 * CHARS_PER_LINE} = 244 characters, but the SOP calibration stops at 240:
+     * the last few characters are where a bold span's wider glyphs push a bullet onto a
+     * third line. The configured two-line band is the intent (230 chars); this is the
+     * hard clamp that keeps a raised config from silently shipping three-line bullets.
+     */
+    static final int TWO_LINE_HARD_CEILING_CHARS = 240;
 
     /**
      * Estimated rendered line count for a bullet, using the same bold-stripped
@@ -534,13 +546,13 @@ public final class BulletTextRules {
 
     /**
      * Upper bound on a kept bullet, in characters. The configured two-line band is the
-     * intent, but a bullet may never render a third line, so this hard-clamps to what two
-     * rendered lines physically hold. Without the clamp an admin raising the word band --
-     * or a future ratio change -- would silently start admitting three-line bullets, which
-     * blow the one-page budget a resume is built around.
+     * intent, but a bullet may never render a third line, so this hard-clamps to
+     * {@link #TWO_LINE_HARD_CEILING_CHARS}. Without the clamp an admin raising the word
+     * band -- or a future ratio change -- would silently start admitting three-line
+     * bullets, which blow the one-page budget a resume is built around.
      */
     static int twoLineCeilingChars(GenerationConfig cfg) {
-        return Math.min(chars(cfg.getDoubleLineHigh()), 2 * CHARS_PER_LINE);
+        return Math.min(chars(cfg.getDoubleLineHigh()), TWO_LINE_HARD_CEILING_CHARS);
     }
 
     /** The configured word band expressed in characters. */

@@ -21,29 +21,29 @@ public class GenerationConfig {
     @Column(name = "word_filter_enabled", nullable = false)
     private boolean wordFilterEnabled = true;
 
-    // Word bands, converted to characters at BulletTextRules.CHARS_PER_WORD (5.4) and
-    // checked against BulletTextRules.CHARS_PER_LINE (105, measured off a compiled
-    // resume.tex PDF). One rendered line holds ~19 words at that ratio, so these bands
-    // are sized so "single line" really is one line and "double line" really is two,
-    // instead of spilling to a second/third line as the old 22-26/42-50 defaults did.
+    // Word bands, converted to characters at BulletTextRules.CHARS_PER_WORD (7.4,
+    // re-measured from the corpus) and checked against BulletTextRules.CHARS_PER_LINE
+    // (122, measured off a compiled 10.5pt resume.tex PDF). The word bands are integers,
+    // so the derived character targets land within ~6 chars of the SOP's calibrated
+    // 98-105 / 106-169 / 170-230 bands; the hard ceiling is a separate 240-char clamp.
 
-    /** 81-97 chars: fits on one rendered line. */
+    /** ~96-104 chars: fits on one rendered line. */
     @Column(name = "single_line_low", nullable = false)
-    private int singleLineLow = 11;
+    private int singleLineLow = 13;
 
     @Column(name = "single_line_high", nullable = false)
-    private int singleLineHigh = 13;
+    private int singleLineHigh = 14;
 
-    /** 173-200 chars: fills two rendered lines without spilling to a third. */
+    /** ~170-229 chars: fills two rendered lines without spilling to a third. */
     @Column(name = "double_line_low", nullable = false)
     private int doubleLineLow = 23;
 
     @Column(name = "double_line_high", nullable = false)
-    private int doubleLineHigh = 27;
+    private int doubleLineHigh = 31;
 
-    /** 103-167 chars: the awkward gap between a full first line and a full second one. */
+    /** ~111-163 chars: the awkward gap between a full first line and a full second one. */
     @Column(name = "dead_zone_low", nullable = false)
-    private int deadZoneLow = 14;
+    private int deadZoneLow = 15;
 
     @Column(name = "dead_zone_high", nullable = false)
     private int deadZoneHigh = 22;

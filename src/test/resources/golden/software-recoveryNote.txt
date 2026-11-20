@@ -2,9 +2,9 @@
 ─────────────────────────────────────────────────────────────
 ## RECOVERY PASS
 
-Bullets must be EITHER 81-96 characters (fills 1 line) OR 170-200 characters (fills
-2 lines). The 104-163 character range is forbidden — it half-fills line 2. NEVER exceed
-200 characters — that spills onto a third line.
+Bullets must be EITHER 96-104 characters (fills 1 line) OR 170-229 characters (fills
+2 lines). The 111-163 character range is forbidden — it half-fills line 2. NEVER exceed
+229 characters — that spills onto a third line.
 
 Rewrite each bullet below so it lands in a valid band. Keep the same facts, metrics
 and technologies — change only the phrasing and the level of detail. Never invent a

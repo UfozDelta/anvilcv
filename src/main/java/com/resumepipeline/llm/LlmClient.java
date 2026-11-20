@@ -187,8 +187,16 @@ public interface LlmClient {
     record BankCoverage(List<KnownStory> live, List<String> coveredWork, List<String> dismissed) {
         public static final BankCoverage EMPTY = new BankCoverage(List.of(), List.of(), List.of());
     }
-    /** id: the model's own key ("s1"), only meaningful within one generation run. */
-    record Story(String id, String title, List<String> evidence, List<String> lenses) {}
+    /**
+     * id: the model's own key ("s1"), only meaningful within one generation run.
+     * {@code keywordOnly} marks a story resting on JD/skill keywords with no supporting
+     * quote in the source; the LLM layer drops those before any wording is written.
+     */
+    record Story(String id, String title, List<String> evidence, List<String> lenses, boolean keywordOnly) {
+        public Story(String id, String title, List<String> evidence, List<String> lenses) {
+            this(id, title, evidence, lenses, false);
+        }
+    }
     record StoryResult(List<Story> stories, List<String> unsupportedLenses) {}
     /**
      * A wording that passed the code filter. Tags are the ones the bullet actually mentions.

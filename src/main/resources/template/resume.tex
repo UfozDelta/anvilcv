@@ -3,9 +3,12 @@
 % Placeholders use {{NAME}}-style tokens, filled by LatexRenderer.
 % Section bodies (education, experience, projects) are inserted as raw LaTeX
 % via renderRaw — caller is responsible for escaping bullet text.
+%
+% Layout constants are calibrated for one page at 10.5pt. Do not change them
+% casually: see RESUME_SOP/template.tex for the measurements behind each value.
 %-------------------------
 
-\documentclass[letterpaper,11pt]{article}
+\documentclass[letterpaper,10.5pt]{article}
 
 \usepackage{latexsym}
 \usepackage[empty]{fullpage}
@@ -38,14 +41,14 @@
 \setlength{\tabcolsep}{0in}
 
 \titleformat{\section}{
-  \vspace{-6pt}\scshape\raggedright\large
+  \vspace{-4pt}\scshape\raggedright\large
 }{}{0em}{}[\color{black}\titlerule \vspace{-6pt}]
 
 %-------------------------
 % Custom commands
 
 \newcommand{\resumeItem}[1]{
-  \item\small{#1}
+  \item\normalsize{#1}
 }
 
 \newcommand{\resumeSubheading}[4]{
@@ -71,14 +74,14 @@
     \item
     \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
       \small#1 & #2 \\
-    \end{tabular*}\vspace{-4pt}
+    \end{tabular*}\vspace{2pt}
 }
 
 \renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
 
-\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=4pt]}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=7pt]}
 \newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
-\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, itemsep=2pt, parsep=0pt, topsep=4pt, partopsep=0pt]}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, itemsep=1.4pt, parsep=0pt, topsep=0pt, partopsep=0pt]}
 \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 
 % Self-measuring skills row: guarantees a category line never wraps, instead of trusting a
@@ -106,7 +109,7 @@
 %-------------------------------------------
 \begin{document}
 
-%----------HEADING----------
+%----------HEADER----------
 %%SECTION:HEADER%%
 \begin{center}
     \textbf{\Huge \scshape {{NAME}}} \\ \vspace{2pt}
@@ -135,7 +138,7 @@
 
 %-----------PROJECTS-----------
 %%SECTION:PROJECT_ITEMS%%
-\vspace{-10pt}
+\vspace{-6pt}
 \section{Projects}
     \resumeSubHeadingListStart
 {{PROJECT_ITEMS}}
@@ -144,7 +147,7 @@
 
 %-----------TECHNICAL SKILLS-----------
 %%SECTION:SKILLS_BLOCK%%
-\vspace{-8pt}
+\vspace{-7pt}
 \section{Technical Skills}
  \begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=0pt]
     \item{

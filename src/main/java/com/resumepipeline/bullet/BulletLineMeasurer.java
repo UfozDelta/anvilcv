@@ -16,7 +16,9 @@ import java.util.regex.Pattern;
  * Ground-truth line-fit check for bullets: typesets every candidate through the SAME
  * {@code \resumeItem} / nested-itemize macros and margins resume.tex actually renders bullets
  * with, the preamble sliced live from the real template ({@link LatexRenderer#preambleOf}) so
- * this can never hand-drift from production geometry.
+ * this can never hand-drift from production geometry. The hard-coded bullet font below must
+ * stay in sync with {@code \resumeItem}'s font in the template (currently {@code \normalsize});
+ * a drift here silently measures the wrong line width even though the preamble is live.
  *
  * <p>Reads back two real TeX registers instead of guessing from character count:
  * <ul>
@@ -100,7 +102,7 @@ public class BulletLineMeasurer {
         // \resumeSubHeadingListStart (leftmargin 0.15in) containing an item whose
         // \resumeItemListStart (another leftmargin 0.15in) holds the bullet itself.
         sb.append("\\begin{itemize}[leftmargin=0.15in, label={}]\n\\item\n");
-        sb.append("\\begin{itemize}[leftmargin=0.15in, itemsep=0pt, parsep=0pt, topsep=4pt, partopsep=0pt]\n");
+        sb.append("\\begin{itemize}[leftmargin=0.15in, itemsep=1.4pt, parsep=0pt, topsep=0pt, partopsep=0pt]\n");
         sb.append("\\global\\setlength{\\bulletlw}{\\linewidth}\n");
         sb.append("\\end{itemize}\n\\end{itemize}\n");
 
@@ -115,7 +117,7 @@ public class BulletLineMeasurer {
             // this box's construction is local to that group and is rolled back the moment the
             // box closes. \xdef (a GLOBAL edef), not \edef, is what lets the frozen value
             // survive the group closing even though the \prevgraf register itself reverts.
-            sb.append("\\setbox0=\\vbox{\\hsize=\\bulletlw \\raggedright\\small\\noindent ")
+            sb.append("\\setbox0=\\vbox{\\hsize=\\bulletlw \\raggedright\\normalsize\\noindent ")
               .append(escaped).append("\\par\n\\xdef\\rplines{\\the\\prevgraf}}\n");
             // Extract the last line, then repack it at natural width: a line box built by
             // the paragraph breaker is always set to exactly \hsize (raggedright pads the

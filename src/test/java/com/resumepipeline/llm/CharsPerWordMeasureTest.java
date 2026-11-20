@@ -16,6 +16,11 @@ import java.util.List;
  * bands the filter actually enforces, so if it is wrong the "roughly N words" hint in the
  * generation prompt asks for a length the filter then rejects.
  *
+ * <p>The ratio is text density (7.4 chars/word mean), independent of the template's font
+ * size; the 10.5pt template's line width ({@link BulletTextRules#CHARS_PER_LINE} = 122)
+ * changes the character targets, and therefore the word bands, not this ratio. Re-run
+ * this before either number moves.
+ *
  * <p>Off by default -- needs the live database. Run with:
  * <pre>MEASURE_CPW=1 DB_URL=... DB_USER=... DB_PASSWORD=... mvn test -Dtest=CharsPerWordMeasureTest</pre>
  */
@@ -56,8 +61,13 @@ class CharsPerWordMeasureTest {
         System.out.printf("configured CHARS_PER_WORD=%.1f%n", BulletTextRules.CHARS_PER_WORD);
         System.out.printf("rendered lines: 1-line=%d  2-line=%d  3+line=%d  longest=%d chars%n",
                 oneLine, twoLine, threePlus, maxChars);
-        System.out.printf("chars-per-line=%d, so a 2-line ceiling is %d chars%n",
-                BulletTextRules.CHARS_PER_LINE, 2 * BulletTextRules.CHARS_PER_LINE);
+        System.out.printf("chars-per-line=%d, hard 2-line ceiling=%d chars%n",
+                BulletTextRules.CHARS_PER_LINE, BulletTextRules.TWO_LINE_HARD_CEILING_CHARS);
+        com.resumepipeline.config.GenerationConfig cfg = new com.resumepipeline.config.GenerationConfig();
+        System.out.printf("derived bands: single=%d-%d dead=%d-%d double=%d-%d%n",
+                BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
+                BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
+                BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg));
     }
 
     private static double pct(List<Double> sorted, int p) {

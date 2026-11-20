@@ -68,7 +68,14 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
     warning and an acknowledgement (see [What is stored and sent](#what-is-stored-and-sent)).
   - Experiences edit title, company, location and dates inline (one *I currently work here* box
     sets the end date to Present).
-- XYZ format, with the Y (a measured result) only when the source states it.
+- XYZ format, with the Y (a measured result) only when the source states it. The SOP rules add:
+  lead with the big idea (headline capability or change for users), prefer an outcome or a failure
+  prevented, and carry three angles per entry — what the system is, its mechanism, and the failure
+  it prevents or result it produced. Small bug fixes, tool-inventory parentheticals, feature lists
+  with no outcome, and activity counts are rejected as results; compact mechanism adjectives such
+  as `self-cancelling`, `fail-closed` and `hash-locked` are kept. Openers are checked across the
+  whole batch (no verb more than twice), and the judge also scores whether a bullet stands alone
+  in 5 seconds.
 - Deterministic filters: activity counts (commits, lines, tests...), filler sentences, numbers
   absent from the source (unit-aware: `40%` needs a percentage in the source; spelled-out units such
   as "3 million" or "5 seconds" count), banned openers, and lengths outside the one-line / two-line
@@ -89,6 +96,13 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
   only breaks ties; keywords decide.
 - Keyword pre-filter (plural- and alias-aware, e.g. `c++`, `c#`): top 4 per project, one
   wording per story, 25 total, then the LLM ranks them.
+- Coverage matrix (`JdCoverage`): the JD is split into hard gates, minimum quals, preferred quals
+  and responsibility verbs, and each JD item is scored against the text that will actually render
+  as Covered / Thin / Missing. The LLM ranking prompt sees the same extracted items; after
+  selection an entry whose three bullets repeat an angle can swap in a ranked wording with the
+  missing angle, and entries are ordered by how many JD items their bullets cover (ties keep rank
+  order). `KeywordScorer`'s alias table remains the fallback for literal keyword matching, so
+  `K8s` still covers `Kubernetes` and `Postgres` covers `PostgreSQL`.
 - Selection is code: up to 6 entries at 3 bullets each under a one-page line budget, minimum 2
   experience and 3 project entries, no near-duplicates, one wording per story, no repeated
   opening verb within an entry, and unreviewed bullets with vanity counts skipped. An entry left
@@ -103,7 +117,10 @@ Typical run: 1-3 minutes, dominated by LLM latency. Cover letter is generated in
 - LLM also picks the relevant skill categories and coursework per JD. Skills come only from your
   profile; skills rows and each project's tech line list JD keywords first. The ATS report counts
   keywords in bullets, every printed skills row (AI & Integrations included; an empty saved row
-  falls back to the profile row, as the renderer does), and heading tech lines.
+  falls back to the profile row, as the renderer does), and heading tech lines. It also reports
+  coverage gaps (minimum/preferred quals and responsibilities left Thin or Missing) and hard-gate
+  misses, which are emitted to the progress stream on create, rerender and refit; the stored
+  `atsMatched`/`atsMissing` arrays still carry the keyword chips shown in the UI.
 - A recruiter-style review scores the page in the background after the PDF is ready.
 - PDF downloads as `Last_Company_resume.pdf`.
 - Application page: add any bank bullet, reorder, see duplicate and awkward-wrap warnings, and a
@@ -346,8 +363,8 @@ stored key undecryptable — they have to be re-entered.
 | Path | Contents |
 |---|---|
 | `src/main/java/com/resumepipeline/` | Spring Boot backend |
-| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V47` |
-| `src/main/resources/template/resume.tex` | LaTeX resume template with `{{TOKEN}}` placeholders |
+| `src/main/resources/db/migration/` | Flyway migrations, `V1`-`V49` |
+| `src/main/resources/template/resume.tex` | Calibrated LaTeX resume template with `{{TOKEN}}` placeholders |
 | `src/main/resources/static/` | Vite build output (git-ignored) — Spring serves the SPA from here |
 | `src/main/resources/repo-explorer-instructions.md` | System prompt for the server-side repo explorer |
 | `src/test/java/` | about 680 backend tests |
@@ -368,7 +385,7 @@ stored key undecryptable — they have to be re-entered.
 | `profile` | One profile row per user — contact, education (JSONB), skill categories |
 | `project` | Projects and EXPERIENCE entries, plus the regex resume importer |
 | `bullet` | Bullet CRUD, the story bank (`BulletService`: the per-slot pipeline, judge pairing and saving) |
-| `application` | `ApplicationService` (the pipeline), `BulletSelector`, `ApplicationRenderer` |
+| `application` | `ApplicationService` (the pipeline), `BulletSelector`, `ApplicationRenderer`, `JdCoverage` (JD coverage matrix) |
 | `llm` | `LlmClient` interface, `RoutingLlmClient`, provider clients, `KeywordScorer`, `BulletTextRules`, `CategoryLenses`, GitHub context fetch, token accounting |
 | `llm.settings` | `LlmSettings` entity + `SecretCipher` (AES-256-GCM) |
 | `render` | `LatexEscaper`, `LatexRenderer`, `PdfCompiler` |
@@ -376,6 +393,23 @@ stored key undecryptable — they have to be re-entered.
 | `github` | GitHub App auth (JWT, installation tokens), `GithubClient`, `RepoSnapshot` (tarball), `RepoMapBuilder` / `RepoMapService` / `RepoMapRenderer` (repo map), `RepoExplorer` tool loop, `SourceTracer` |
 | `progress` | `ProgressLog`, `PipelineTimer` |
 | `config` | Per-user `GenerationConfig`, SPA deep-link fallback |
+
+### Calibrated template and length bands
+
+`src/main/resources/template/resume.tex` is the calibrated one-page template from `RESUME_SOP`:
+10.5pt class, `\normalsize` bullets, 1.4pt bullet itemsep, 7pt entry itemsep, project-heading
+`\vspace{2pt}`, and `\vspace{-7pt}` before Skills. It keeps every `{{TOKEN}}` gate consumed by
+`LatexRenderer`/`ApplicationRenderer` (`HEADER`, `EDUCATION_ITEMS`, `EXPERIENCE_ITEMS`,
+`PROJECT_ITEMS`, `SKILLS_BLOCK`) and every macro the renderer and the line/skill measurers rely on
+(`\resumeItem`, `\resumeSubheading`, `\resumeSubheadingUni`, `\resumeProjectHeading`, the list
+macros, `\skillrow`, `\skillrowtext`). Do not hardcode resume content into it.
+
+A rendered line holds ~122 characters (105 at the old 11pt layout), so `BulletTextRules`
+uses `CHARS_PER_LINE = 122` and a 240-char hard ceiling. `CHARS_PER_WORD` stays at the measured
+7.4 (text density does not change with the font); the word bands in `GenerationConfig` are
+re-derived at that ratio: single 13–14 (~96–104 chars), dead zone 15–22 (~111–163), double
+23–31 (~170–229), floor 9. V49 updates rows still holding the V24 defaults; the goldens in
+`src/test/resources/golden` pin the resulting prompt text (regenerate with `GOLDEN_WRITE=1`).
 
 ### API surface
 
@@ -437,7 +471,11 @@ touching production.
 
 Entry point: `BulletService.generateBank` (used by `POST /stories/submit`, and by the eval dry run).
 `generateStories` runs `findStories` once, drops repeats, then runs one slot per new story on its
-best lens. Each slot is saved as soon as it finishes.
+best lens. Each slot is saved as soon as it finishes. `findStories` prefers platform-changing work
+(systems, capabilities, design decisions) over isolated fixes. A story the model flags
+`keywordOnly` — resting on JD/skill keywords with no supporting quote — is dropped by
+`validateStories` before any candidate wording is written; the slot prompt likewise discards
+wordings that name technology only present in the lens or keyword list. No DB change was needed.
 
 Per slot (`runSlot`):
 

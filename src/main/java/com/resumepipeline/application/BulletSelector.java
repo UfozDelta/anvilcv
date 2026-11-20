@@ -445,6 +445,65 @@ public final class BulletSelector {
         return selected;
     }
 
+    /**
+     * Coverage-aware variant: runs the same four passes, then (1) swaps in a ranked candidate
+     * when an entry's three bullets repeat an angle instead of covering what / mechanism /
+     * outcome, and (2) orders entries by how many JD matrix items their bullets cover. The
+     * plain {@link #select} overloads keep rank order — callers without a JD matrix, and the
+     * tests pinning that order, are untouched.
+     */
+    public static List<Bullet> select(List<LlmClient.RankedBullet> rankedSorted,
+                                      Map<UUID, Bullet> bulletById,
+                                      Map<UUID, Project> projectById,
+                                      List<Bullet> allBullets,
+                                      Set<String> keywordsLower,
+                                      JdCoverage.Matrix coverage) {
+        List<Bullet> selected = select(rankedSorted, bulletById, projectById, allBullets, keywordsLower);
+        if (coverage == null || coverage.items().isEmpty()) return selected;
+        return enforceAngles(selected, rankedSorted, bulletById, projectById, coverage);
+    }
+
+    /** One replacement per entry at most: the missing angle beats a repeated one. */
+    private static List<Bullet> enforceAngles(List<Bullet> selected, List<LlmClient.RankedBullet> rankedSorted,
+                                              Map<UUID, Bullet> bulletById, Map<UUID, Project> projectById,
+                                              JdCoverage.Matrix coverage) {
+        List<Bullet> out = new ArrayList<>(selected);
+        for (UUID pid : selected.stream().map(Bullet::getProjectId).distinct().toList()) {
+            List<Bullet> entry = out.stream().filter(b -> b.getProjectId().equals(pid)).toList();
+            if (entry.size() < MAX_PER_PROJECT || JdCoverage.hasThreeAngles(entry)) continue;
+            Set<JdCoverage.Angle> present = entry.stream()
+                    .map(b -> JdCoverage.angleOf(b.getText())).collect(Collectors.toSet());
+            JdCoverage.Angle missing = Arrays.stream(JdCoverage.Angle.values())
+                    .filter(a -> !present.contains(a)).findFirst().orElse(null);
+            if (missing == null) continue;
+            Bullet replacement = null;
+            for (LlmClient.RankedBullet rb : rankedSorted) {
+                UUID bid = parseUuid(rb.bulletId());
+                Bullet b = bid == null ? null : bulletById.get(bid);
+                if (b == null || !pid.equals(b.getProjectId())
+                        || out.stream().anyMatch(s -> s.getId().equals(bid))) continue;
+                if (JdCoverage.angleOf(b.getText()) != missing) continue;
+                if (BulletTextRules.isNearDuplicate(b.getText(), out.stream().map(Bullet::getText).toList())
+                        || verbClash(b, out)) continue;
+                replacement = b;
+                break;
+            }
+            if (replacement == null) continue;
+            Map<JdCoverage.Angle, Long> counts = entry.stream()
+                    .collect(Collectors.groupingBy(b -> JdCoverage.angleOf(b.getText()), Collectors.counting()));
+            JdCoverage.Angle dup = counts.entrySet().stream()
+                    .filter(e -> e.getValue() > 1).map(Map.Entry::getKey).findFirst().orElse(null);
+            if (dup == null) continue;
+            for (int i = out.size() - 1; i >= 0; i--) {
+                if (out.get(i).getProjectId().equals(pid) && JdCoverage.angleOf(out.get(i).getText()) == dup) {
+                    out.set(i, replacement);
+                    break;
+                }
+            }
+        }
+        return JdCoverage.orderByDensityAndAngle(out, coverage, projectById);
+    }
+
     private static long kindFloor(Project.Kind kind) {
         return kind == Project.Kind.EXPERIENCE ? MIN_EXPERIENCE_PROJECTS : MIN_PROJECT_ENTRIES;
     }

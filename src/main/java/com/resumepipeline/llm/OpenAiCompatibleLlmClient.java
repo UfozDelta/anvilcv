@@ -149,6 +149,7 @@ public abstract class OpenAiCompatibleLlmClient extends BaseLlmClient {
         return switch (spec.type()) {
             case STRING  -> "\"string\"";
             case INTEGER -> "1";
+            case BOOLEAN -> "true";
             case ARRAY   -> "[" + toJsonShape(spec.items()) + "]";
             case OBJECT  -> {
                 StringBuilder sb = new StringBuilder("{");

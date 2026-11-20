@@ -258,7 +258,11 @@ public class ApplicationService {
 
         progress.emit("Selecting up to " + BulletSelector.MAX_ENTRIES + " entries at "
                 + BulletSelector.MAX_PER_PROJECT + " bullets each...");
-        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById, allBullets, kwLower);
+        // Coverage matrix for selection: JD items are extracted once; the final status of each
+        // item is scored again below against the text that actually renders.
+        JdCoverage.Matrix selectionCoverage = JdCoverage.items(clean.cleanJd(), clean.keywords());
+        List<Bullet> selected = BulletSelector.select(rankedSorted, bulletById, projectById,
+                allBullets, kwLower, selectionCoverage);
 
         // Rebuild the per-project / per-kind summary for the progress stream.
         LinkedHashMap<String, Integer> perProjectName = new LinkedHashMap<>();
@@ -319,10 +323,19 @@ public class ApplicationService {
         // (which only looks at bullets) never claims it.
         Set<String> llmMatched = rank.atsMatched().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
-        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, printedSkills(filledSkills, profile),
+        Map<String, List<String>> printedSkills = printedSkills(filledSkills, profile);
+        JdCoverage.Matrix coverage = coverage(clean.cleanJd(), clean.keywords(), selected, printedSkills,
                 selectedCourses, projectById, clean.keywords());
+        AtsReport ats = atsReport(clean.keywords(), llmMatched, selected, printedSkills,
+                selectedCourses, projectById, clean.keywords(), coverage);
         progress.emit("ATS on rendered page: " + ats.matched().size() + "/" + clean.keywords().size()
                 + " matched (LLM claimed " + rank.atsMatched().size() + ")");
+        if (!ats.hardGateMisses().isEmpty()) {
+            progress.emit("Hard-gate misses: " + String.join("; ", ats.hardGateMisses()));
+        }
+        if (!ats.coverageGaps().isEmpty()) {
+            progress.emit("Coverage gaps: " + String.join("; ", ats.coverageGaps()));
+        }
 
         // Stage: render LaTeX
         progress.emit("Rendering LaTeX...");
@@ -637,8 +650,13 @@ public class ApplicationService {
         priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
+        Map<String, List<String>> printed = printedSkills(selectedSkills, profileService.get(userId));
+        JdCoverage.Matrix coverage = coverage(nz(a.getJdText()), List.copyOf(priorKeywords), selected,
+                printed, selectedCourses, projectById, keywords);
         AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
-                printedSkills(selectedSkills, profileService.get(userId)), selectedCourses, projectById, keywords);
+                printed, selectedCourses, projectById, keywords, coverage);
+        if (!ats.hardGateMisses().isEmpty()) progress.emit("Hard-gate misses: " + String.join("; ", ats.hardGateMisses()));
+        if (!ats.coverageGaps().isEmpty()) progress.emit("Coverage gaps: " + String.join("; ", ats.coverageGaps()));
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -852,8 +870,13 @@ public class ApplicationService {
         priorKeywords.addAll(Arrays.asList(a.getAtsMissing()));
         Set<String> priorLlmMatched = Arrays.stream(a.getAtsMatched())
                 .map(String::toLowerCase).collect(Collectors.toSet());
+        Map<String, List<String>> printed = printedSkills(selectedSkills, profileService.get(userId));
+        JdCoverage.Matrix coverage = coverage(nz(a.getJdText()), List.copyOf(priorKeywords), selected,
+                printed, selectedCourses, projectById, keywordsLower);
         AtsReport ats = atsReport(List.copyOf(priorKeywords), priorLlmMatched, selected,
-                printedSkills(selectedSkills, profileService.get(userId)), selectedCourses, projectById, keywordsLower);
+                printed, selectedCourses, projectById, keywordsLower, coverage);
+        if (!ats.hardGateMisses().isEmpty()) progress.emit("Hard-gate misses: " + String.join("; ", ats.hardGateMisses()));
+        if (!ats.coverageGaps().isEmpty()) progress.emit("Coverage gaps: " + String.join("; ", ats.coverageGaps()));
         a.setAtsMatched(ats.matched().toArray(new String[0]));
         a.setAtsMissing(ats.missing().toArray(new String[0]));
 
@@ -892,7 +915,32 @@ public class ApplicationService {
         }
     }
 
-    record AtsReport(List<String> matched, List<String> missing) {}
+    record AtsReport(List<String> matched, List<String> missing,
+                     List<String> coverageGaps, List<String> hardGateMisses) {
+        AtsReport(List<String> matched, List<String> missing) {
+            this(matched, missing, List.of(), List.of());
+        }
+    }
+
+    /** The text the template actually emits, in one string — shared by ATS and coverage scoring. */
+    private static String renderedText(List<Bullet> selected, Map<String, List<String>> skills,
+                                       List<String> courses, Map<UUID, Project> projectById,
+                                       Collection<String> renderKeywords) {
+        List<String> listedTerms = new ArrayList<>(
+                ApplicationRenderer.projectHeadingTechLines(selected, projectById, renderKeywords));
+        if (skills != null) skills.values().forEach(listedTerms::addAll);
+        List<String> parts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
+        parts.addAll(listedTerms);
+        parts.addAll(courses);
+        return String.join("\n", parts);
+    }
+
+    /** Coverage matrix for the JD against what the rendered page will carry. */
+    static JdCoverage.Matrix coverage(String jdText, List<String> keywords, List<Bullet> selected,
+                                      Map<String, List<String>> skills, List<String> courses,
+                                      Map<UUID, Project> projectById, Collection<String> renderKeywords) {
+        return JdCoverage.of(jdText, renderedText(selected, skills, courses, projectById, renderKeywords), keywords);
+    }
 
     /**
      * ATS report narrowed to what actually lands on the page: a keyword counts as matched if a
@@ -908,15 +956,21 @@ public class ApplicationService {
                                List<Bullet> selected, Map<String, List<String>> skills,
                                List<String> courses, Map<UUID, Project> projectById,
                                Collection<String> renderKeywords) {
+        return atsReport(keywords, llmMatchedLower, selected, skills, courses, projectById,
+                renderKeywords, null);
+    }
+
+    /** Same keyword counts, plus the JD coverage gaps and hard-gate misses of {@code coverage}. */
+    static AtsReport atsReport(List<String> keywords, Set<String> llmMatchedLower,
+                               List<Bullet> selected, Map<String, List<String>> skills,
+                               List<String> courses, Map<UUID, Project> projectById,
+                               Collection<String> renderKeywords, JdCoverage.Matrix coverage) {
         // Listed terms: skills rows and project heading tech lines. The LLM only claims keywords
         // it saw in bullets, so these count on their own, matched per item via names()
         // (alias/plural-aware, no implications), or a skills-only keyword reads as missing.
         List<String> listedTerms = new ArrayList<>(ApplicationRenderer.projectHeadingTechLines(selected, projectById, renderKeywords));
         if (skills != null) skills.values().forEach(listedTerms::addAll);
-        List<String> renderedParts = new ArrayList<>(selected.stream().map(Bullet::getText).toList());
-        renderedParts.addAll(listedTerms);
-        renderedParts.addAll(courses);
-        String renderedText = String.join("\n", renderedParts);
+        String renderedText = renderedText(selected, skills, courses, projectById, renderKeywords);
 
         // Iterate the caller's keywords, not a lowercased copy — these strings render as chips
         // in the UI and should keep the JD's own casing ("PostgreSQL", not "postgresql").
@@ -930,7 +984,9 @@ public class ApplicationService {
                 missing.add(k);
             }
         }
-        return new AtsReport(matched, missing);
+        return new AtsReport(matched, missing,
+                coverage == null ? List.of() : coverage.coverageGaps(),
+                coverage == null ? List.of() : coverage.hardGateMisses());
     }
 
     /** The four selectable skill rows, straight from the profile. */

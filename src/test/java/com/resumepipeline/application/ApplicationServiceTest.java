@@ -25,6 +25,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -969,6 +970,23 @@ class ApplicationServiceTest {
             // Docker/K8s from skills (alias-aware); Go only in unclaimed prose; SQL only implied.
             assertEquals(List.of("Docker", "K8s"), ats.matched());
             assertEquals(List.of("Go", "SQL"), ats.missing());
+        }
+
+        @Test
+        void surfacesCoverageGapsAndHardGateMisses() {
+            Bullet b = TestFixtures.bullet(UUID.randomUUID(), UUID.randomUUID(), new String[0]);
+            b.setText("Built React views with Node.js.");
+            String jd = "Must be grad 2027 or later. Required: React. Preferred: Docker.";
+            JdCoverage.Matrix coverage = ApplicationService.coverage(jd, List.of("React"), List.of(b),
+                    Map.of(), List.of(), Map.of(), List.of());
+
+            ApplicationService.AtsReport ats = ApplicationService.atsReport(List.of("React"), Set.of("react"),
+                    List.of(b), Map.of(), List.of(), Map.of(), List.of(), coverage);
+
+            assertEquals(List.of("React"), ats.matched());
+            assertFalse(ats.hardGateMisses().isEmpty(), "grad 2027 is not on the page");
+            assertTrue(ats.coverageGaps().stream().anyMatch(s -> s.contains("Docker")),
+                    "preferred Docker is a coverage gap: " + ats.coverageGaps());
         }
 
         @Test

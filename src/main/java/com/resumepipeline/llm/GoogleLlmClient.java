@@ -118,6 +118,7 @@ public class GoogleLlmClient extends BaseLlmClient {
         return switch (spec.type()) {
             case STRING  -> Schema.builder().type(Type.Known.STRING).build();
             case INTEGER -> Schema.builder().type(Type.Known.INTEGER).build();
+            case BOOLEAN -> Schema.builder().type(Type.Known.BOOLEAN).build();
             case ARRAY   -> Schema.builder().type(Type.Known.ARRAY).items(toGoogleSchema(spec.items())).build();
             case OBJECT  -> {
                 Map<String, Schema> props = new LinkedHashMap<>();

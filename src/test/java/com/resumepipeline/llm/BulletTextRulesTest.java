@@ -66,18 +66,18 @@ class BulletTextRulesTest {
     // ---- estimatedLines ----
 
     @Test void estimatedLinesOneLine() {
-        // ~90 chars fits in one 105-char line.
+        // ~90 chars fits in one 122-char line.
         assertEquals(1, BulletTextRules.estimatedLines("x".repeat(90)));
     }
 
     @Test void estimatedLinesTwoLines() {
-        // ~200 chars needs two 105-char lines.
+        // ~200 chars needs two 122-char lines.
         assertEquals(2, BulletTextRules.estimatedLines("x".repeat(200)));
     }
 
     @Test void estimatedLinesFourLines() {
-        // The real over-long bullet class from the shipped PDF: ~320 chars -> 4 lines.
-        assertEquals(4, BulletTextRules.estimatedLines("x".repeat(320)));
+        // Past three 122-char lines (~366 chars) a bullet costs a fourth line.
+        assertEquals(4, BulletTextRules.estimatedLines("x".repeat(400)));
     }
 
     @Test void estimatedLinesStripsBoldMarkers() {
@@ -91,10 +91,10 @@ class BulletTextRulesTest {
 
     // ---- decide ----
 
-    // Bands are configured in words and converted at CHARS_PER_WORD = 5.4, so the
-    // defaults below land at: dead zone 103-167c, floor 65c, single 81-97c,
-    // double 173-200c. Calibrated so single/double really mean one/two rendered
-    // lines at CHARS_PER_LINE = 105 (see BulletTextRules).
+    // Bands are configured in words and converted at CHARS_PER_WORD = 7.4, so the
+    // defaults below land at: single 96-104c, dead zone 111-163c, double 170-229c,
+    // floor 67c. Calibrated so single/double really mean one/two rendered lines at
+    // CHARS_PER_LINE = 122 (see BulletTextRules).
     private static GenerationConfig cfg() {
         return new GenerationConfig();
     }
@@ -121,8 +121,8 @@ class BulletTextRulesTest {
     @Test void decideJustAboveDeadKept() { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.deadZoneHighChars(cfg()) + 1, cfg())); }
     @Test void decideDoubleLineKept()    { assertEquals(Decision.KEPT, BulletTextRules.decide(BulletTextRules.doubleHighChars(cfg()), cfg())); }
 
-    @Test void decideCeilingBoundaryKept()  { assertEquals(Decision.KEPT, BulletTextRules.decide(200, cfg())); }
-    @Test void decideJustOverCeiling()      { assertEquals(Decision.TOO_LONG, BulletTextRules.decide(201, cfg())); }
+    @Test void decideCeilingBoundaryKept()  { assertEquals(Decision.KEPT, BulletTextRules.decide(229, cfg())); }
+    @Test void decideJustOverCeiling()      { assertEquals(Decision.TOO_LONG, BulletTextRules.decide(230, cfg())); }
     @Test void decideWayOverCeiling()       { assertEquals(Decision.TOO_LONG, BulletTextRules.decide(400, cfg())); }
 
     // ---- decide with the new defaults, against realistic bullet lengths ----
@@ -147,7 +147,7 @@ class BulletTextRulesTest {
 
     @Test void decideDeadZoneTakesPrecedenceOverFloor() {
         // A weird config where dead zone overlaps below the floor: dead-zone check runs first.
-        // 5-20 words is 27-108 chars, floor 15 words is 81 chars; 54 chars sits in both.
+        // 5-20 words is 37-148 chars, floor 15 words is 111 chars; 54 chars sits in both.
         GenerationConfig c = cfg();
         c.setDeadZoneLow(5);
         c.setDeadZoneHigh(20);

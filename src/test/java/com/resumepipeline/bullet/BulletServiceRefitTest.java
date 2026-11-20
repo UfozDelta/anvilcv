@@ -44,14 +44,14 @@ class BulletServiceRefitTest {
     private final UUID user = UUID.randomUUID();
     private final UUID proj = UUID.randomUUID();
 
-    /** Default bands: 1 line = 81-97 chars, dead zone = 103-167, 2 lines = 173-200. */
+    /** Default bands: 1 line = 96-104 chars, dead zone = 111-163, 2 lines = 170-229. */
     private static final GenerationConfig CFG = new GenerationConfig();
 
     /** In band (90 chars, one line). */
     private static final String IN_BAND =
             "Built a distributed ingestion service that cut nightly batch turnaround for the data team.";
 
-    /** In the dead zone at 120 chars — the filter's "half-fills line 2" reject. */
+    /** In the dead zone at 118 chars — the filter's "half-fills line 2" reject. */
     private static final String OFF_BAND =
             "Built a distributed ingestion service that cut the nightly batch turnaround time considerably for the whole data team.";
 
@@ -66,11 +66,11 @@ class BulletServiceRefitTest {
           + "slow downstream consumer could no longer stall the whole pipeline or silently drop "
           + "records during a partial outage window.";
 
-    /** 201 chars — one over the ceiling, so still off-band, but two lines instead of three. */
+    /** 233 chars — past the two-line ceiling, so still off-band, but two lines instead of three. */
     private static final String NEAR_MISS_REWRITE =
             "Engineered a distributed ingestion service replacing the nightly batch job, adding "
           + "backpressure, retry with jitter, and a dead-letter queue so a slow consumer cannot "
-          + "stall the pipeline or drop records.";
+          + "stall the pipeline or drop records during a partial outage window.";
 
     private Bullet bullet(String text) {
         Bullet b = new Bullet(proj, text, new String[]{"java"}, "backend");
@@ -192,7 +192,7 @@ class BulletServiceRefitTest {
 
     @Test
     void acceptsAnOffBandRewriteThatCostsFewerLines() {
-        // The point of the refit is page space. Rejecting a 201c/2-line rewrite reinstates a
+        // The point of the refit is page space. Rejecting a 233c/2-line rewrite reinstates a
         // 294c/3-line original, which is strictly worse by the measure that matters.
         Bullet b = bullet(THREE_LINER);
         given(b);

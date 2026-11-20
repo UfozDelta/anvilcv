@@ -104,6 +104,21 @@ class StoryGenerationTest {
         assertEquals(List.of("security"), r.unsupportedLenses());
     }
 
+    @Test
+    void validateDropsKeywordOnlyStories() {
+        BaseLlmClient.StoryJson keywordOnly = story("s9",
+                List.of("Median render time fell from 40ms to 12ms after moving to canvas"), List.of("frontend"));
+        keywordOnly.keywordOnly = true;
+        LlmClient.StoryResult r = BaseLlmClient.validateStories(List.of(
+                keywordOnly,
+                story("s10", List.of("Median render time fell from 40ms to 12ms after moving to canvas"),
+                        List.of("frontend"))), List.of("frontend"), SOURCE);
+
+        assertEquals(1, r.stories().size());
+        assertEquals("s10", r.stories().get(0).id());
+        assertFalse(r.stories().get(0).keywordOnly());
+    }
+
     private static final String STORIES_REPLY = """
             {"choices":[{"message":{"content":"{\\"stories\\":[{\\"id\\":\\"s1\\",\\"title\\":\\"Book resync\\",\\"evidence\\":[\\"Sequence-gap detection triggers a full resync\\"],\\"lenses\\":[\\"systems\\"]}]}"}}],
              "usage":{"prompt_tokens":10,"completion_tokens":5}}
@@ -194,6 +209,7 @@ class StoryGenerationTest {
         server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
                 .andExpect(content().string(containsString("failure prevented")))
                 .andExpect(content().string(containsString("No verb may open more than two")))
+                .andExpect(content().string(containsString("keyword-only wordings are discarded")))
                 .andRespond(withSuccess("""
                         {"choices":[{"message":{"content":"{\\"bullets\\":[]}"}}],
                          "usage":{"prompt_tokens":10,"completion_tokens":5}}
@@ -219,6 +235,8 @@ class StoryGenerationTest {
         server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
                 .andExpect(content().string(containsString("Venue failover drill")))
                 .andExpect(content().string(containsString("Pick up to 5 NEW STORIES")))
+                .andExpect(content().string(containsString("platform-changing work")))
+                .andExpect(content().string(containsString("keywordOnly")))
                 .andRespond(withSuccess(STORIES_REPLY, MediaType.APPLICATION_JSON));
         server.expect(ExpectedCount.once(), requestTo("http://localhost:8080/chat/completions"))
                 .andExpect(content().string(not(containsString("Venue failover drill"))))
