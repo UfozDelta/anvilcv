@@ -177,7 +177,9 @@ public class ApplicationRenderer {
             }
             sb.append("}\n");
         }
-        return sb.toString();
+        // The template puts {{EDUCATION_ITEMS}} on its own line. A trailing newline in the
+        // value would add a blank line (a LaTeX paragraph break) before \resumeSubHeadingListEnd.
+        return sb.toString().stripTrailing();
     }
 
     /** Render Experience section from selected EXPERIENCE-kind bullets, grouped by owning project. */
@@ -207,7 +209,7 @@ public class ApplicationRenderer {
             }
             sb.append("      \\resumeItemListEnd\n");
         }
-        return sb.toString();
+        return sb.toString().stripTrailing();
     }
 
     private String renderProjects(List<Bullet> selected, Map<UUID, Project> projectById,
@@ -235,9 +237,11 @@ public class ApplicationRenderer {
             for (Bullet b : g.getValue()) {
                 sb.append("          \\resumeItem{").append(escapeRich(b.getText())).append("}\n");
             }
-            sb.append("        \\resumeItemListEnd\n\n");
+            // No blank line between entries: in LaTeX a blank line is a paragraph break,
+            // which adds vertical space and can push the skills block onto a second page.
+            sb.append("        \\resumeItemListEnd\n");
         }
-        return sb.toString();
+        return sb.toString().stripTrailing();
     }
 
     /**
