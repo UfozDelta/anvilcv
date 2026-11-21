@@ -77,7 +77,7 @@ public class ApplicationRenderer {
                 Map.entry("SKILLS_FRAMEWORKS",selectedSkillValue(selectedSkills, "frameworks", p.getSkillsFrameworks())),
                 Map.entry("SKILLS_DATABASES", selectedSkillValue(selectedSkills, "databases", p.getSkillsDatabases())),
                 Map.entry("SKILLS_DEVOPS",    selectedSkillValue(selectedSkills, "devops", p.getSkillsDevops())),
-                Map.entry("SKILLS_INTERESTS", escapeRich(p.getSkillsInterests())),
+                Map.entry("SKILLS_INTERESTS", selectedSkillValue(selectedSkills, "interests", p.getSkillsInterests())),
                 Map.entry("SKILL_LABEL_LANGUAGES",  skillLabel(p, 0)),
                 Map.entry("SKILL_LABEL_FRAMEWORKS", skillLabel(p, 1)),
                 Map.entry("SKILL_LABEL_DATABASES",  skillLabel(p, 2)),
