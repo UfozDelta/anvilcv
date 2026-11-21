@@ -102,5 +102,6 @@ public final class AgentDtos {
             @Size(max = 200) String recruiterVerdict,
             @Size(max = 20) List<String> recruiterWeaknesses,
             @Size(max = 200) String recruiterThinnestRequirement,
-            Map<String, List<String>> selectedSkills) {}
+            Map<String, List<String>> selectedSkills,
+            @Size(max = 50) List<String> selectedCourses) {}
 }

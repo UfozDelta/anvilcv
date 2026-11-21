@@ -305,6 +305,9 @@ public class AgentBridgeService {
                 throw new IllegalStateException("Could not serialize selected skills", e);
             }
         }
+        if (req.selectedCourses() != null) {
+            a.setSelectedCourses(req.selectedCourses().toArray(new String[0]));
+        }
         return applications.save(a);
     }
 
