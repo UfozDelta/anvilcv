@@ -13,7 +13,7 @@ import type { GenerationConfig } from './api';
 export const CHARS_PER_WORD = 7.4;
 
 /** Mirrors `BulletTextRules.CHARS_PER_LINE` — rendered characters per LaTeX bullet line. */
-export const CHARS_PER_LINE = 105;
+export const CHARS_PER_LINE = 122;
 
 export type Fit = 'ONE_LINE' | 'TWO_LINE' | 'DEAD_ZONE' | 'TOO_LONG' | 'TOO_SHORT' | 'OFF';
 

@@ -110,7 +110,7 @@ public final class BulletSelector {
      * Technical Skills section headings). That mixed-kind layout previously assumed only
      * ~23 usable lines; 31 reflects the room the tightened template actually has.
      */
-    public static final int MAX_TOTAL_LINES = 31;
+    public static final int MAX_TOTAL_LINES = 34;
 
     private static final int MIN_EXPERIENCE_PROJECTS = 2;
     private static final int MIN_PROJECT_ENTRIES = 3;

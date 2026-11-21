@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { awkwardCount, CHARS_PER_LINE, CHARS_PER_WORD, charCount, estimatedLines, fitOf, needsRefit } from './bulletLength';
 import type { GenerationConfig } from './api';
 
-// The shipped backend defaults (V24, calibrated at CHARS_PER_WORD 7.4 measured over
-// the real corpus). In characters: 1 line 81-96, dead zone 104-163, 2 lines 170-200,
-// floor 67. The 200 ceiling is under 2 x CHARS_PER_LINE, so a kept bullet never
-// renders a third line.
+// A known V24 config, kept here to exercise the mirror's band logic. The shipped
+// defaults now come from V49 then V50 (13-17 / 18-22 / 23-32 at CHARS_PER_WORD 7.4,
+// CHARS_PER_LINE 122). This fixture deliberately uses older numbers so the tests
+// prove the math works against arbitrary config, not just today's defaults.
 const CFG: GenerationConfig = {
   wordFilterEnabled: true,
   singleLineLow: 11, singleLineHigh: 13,
@@ -32,7 +32,7 @@ describe('charCount', () => {
 
 describe('estimatedLines', () => {
   it('charges a full line for a partial one', () => {
-    expect(estimatedLines(of(106))).toBe(2);
+    expect(estimatedLines(of(CHARS_PER_LINE + 1))).toBe(2);
   });
   it('never returns zero for an empty bullet', () => {
     expect(estimatedLines('')).toBe(1);

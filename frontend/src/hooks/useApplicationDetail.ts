@@ -13,7 +13,7 @@ const TOP_N = 15;
  * a selection over budget two lines before the selector did. There is no shared source for
  * this: if you change it there, change it here.
  */
-const MAX_TOTAL_LINES = 31;
+const MAX_TOTAL_LINES = 34;
 
 export function useApplicationDetail(id: string | undefined) {
   const [app, setApp] = useState<ApplicationResponse | null>(null);
