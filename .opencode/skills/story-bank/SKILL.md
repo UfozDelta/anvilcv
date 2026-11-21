@@ -1,0 +1,652 @@
+---
+name: Story Bank Generation
+description: Find platform-changing stories, write candidate wordings across four angles, and judge them with the recruiter rubric. Use when generating bullets or more wordings.
+---
+
+## software-findStories
+
+=== system ===
+You are a JSON-only assistant. Respond with a single valid JSON object matching exactly this shape — no prose, no markdown fences:
+=== user ===
+## PROJECT SOURCE MATERIAL
+
+Project name: Ledger
+
+Project description:
+Settles payouts nightly.
+
+Architecture overview & evidence:
+Architecture notes.
+
+Tech stack: Java 21, PostgreSQL
+Your role: Owner
+
+What you owned:
+The settlement job
+
+Scale & impact: 4 regions
+
+Hardest problem solved:
+Idempotent retries
+
+Key technical decisions — and the failures they prevented:
+Chose batch over streaming
+
+Who it served & why it mattered: Finance team
+
+Security & compliance posture:
+SOC 2
+
+─────────────────────────────────────────────────────────────
+## TASK — pick the stories
+
+You are choosing what a resume should say about this project. Pick up to 8 NEW STORIES from
+the source material above: distinct pieces of work a hiring manager would want to ask
+about in an interview — a hard problem solved, a system built for real users, a design
+decision with a clear tradeoff, a measured result.
+
+For each story return:
+  - id: "s1", "s2", ...
+  - title: one plain line naming the work (not a resume bullet).
+  - evidence: 1 to 4 short quotes copied EXACTLY from the source material above that
+    prove the story, including every number a bullet about it could cite. Copy
+    character for character; do not paraphrase, merge or tidy. Only the source
+    material counts — not your own knowledge. Quotes not found in it are discarded.
+  - lenses: 1 to 3 of these lens slugs, and only these, best fit first: backend, data. Tag a lens only when a
+    reviewer for that role would genuinely care about this work. A requested lens that
+    no story fits should stay untagged — never stretch a story to cover it.
+  - keywordOnly: true only when the story rests on JD/skill keywords with no supporting
+    quote in the source material. Such stories are discarded, so prefer omitting them.
+
+Rules:
+  - Up to 8 new stories. Never repeat or split work listed as already in the bank.
+  - Prefer platform-changing work — a system, capability or design decision that
+    changed what the product could do — over isolated small fixes. A fix is a story
+    only when the source shows unusual scope or a real tradeoff.
+  - Aim for 3 or more stories in total, the bank's included, only if the source supports them; a small project may have fewer. Fewer or none is valid.
+  - Fewer, stronger stories beat more. Two stories about the same work are one story.
+  - Skip routine work every project has (CRUD screens, login, config, setup, a plain
+    test suite or CI) unless the source shows something unusual about it.
+  - Activity counts (commits, lines of code, files, tests, tables, migrations) are
+    never a story and never evidence of impact.
+
+Lens definitions:
+
+LENS: Backend & Data Architecture.
+Covers: services, APIs, data models and storage behind a product.
+A reviewer for this role looks for: design decisions and their tradeoffs, correctness
+under failure (consistency, idempotency, migrations), and performance at the scale
+the source states.
+
+LENS: Data Engineering.
+Covers: getting data in, cleaning it, transforming it and serving it for analysis.
+A reviewer for this role looks for: sources and volume, how data quality was enforced,
+and what the pipeline made possible downstream.
+
+
+
+## software-writeSlotCandidates
+
+=== system ===
+You are a JSON-only assistant. Respond with a single valid JSON object matching exactly this shape — no prose, no markdown fences:
+=== user ===
+## PROJECT SOURCE MATERIAL
+
+Project name: Ledger
+
+Project description:
+Settles payouts nightly.
+
+Architecture overview & evidence:
+Architecture notes.
+
+Tech stack: Java 21, PostgreSQL
+Your role: Owner
+
+What you owned:
+The settlement job
+
+Scale & impact: 4 regions
+
+Hardest problem solved:
+Idempotent retries
+
+Key technical decisions — and the failures they prevented:
+Chose batch over streaming
+
+Who it served & why it mattered: Finance team
+
+Security & compliance posture:
+SOC 2
+
+─────────────────────────────────────────────────────────────
+You are writing resume bullet points for a PROJECT from the STORY below.
+EVERY rule below is mandatory.
+
+─────────────────────────────────────────────────────────────
+## 1. LENGTH — line-filling discipline (CRITICAL)
+
+Each bullet must compile to EITHER exactly 1 full line OR exactly 2 full lines on the
+rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
+second line — that looks broken.
+
+Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
+(they compile to \textbf{} and take no width). Word counts are approximate guides;
+the character range is what actually decides whether a line fills.
+
+Targets:
+  • 1-line bullet: 96 to 104 characters (roughly 13 to 14 words).
+  • 2-line bullet: 170 to 229 characters (roughly 23 to 31 words).
+  • NEVER produce a bullet of 111-163 characters — that range half-fills line 2.
+
+Aim for about 70% 1-line and 30% 2-line bullets. Recruiters skim a page in seconds
+and dense multi-line bullets get skipped, so use the 2-line form only when the
+substance genuinely needs it — every 2-liner spends double the vertical space of a
+1-liner that lands just as hard.
+
+## 2. FORMAT — Google XYZ pattern
+
+Every bullet reads as "Accomplished X, as measured by Y, by doing Z":
+  [STRONG ACTION VERB] + [WHAT was built, X] + [HOW, Z] + [MEASURE, Y].
+Y is a result someone outside the codebase would notice — latency, cost, error or
+failure rate, users served, data volume handled, time saved — and only when the source
+material states it. When it does not, write X + Z and name the problem solved or the
+failure the design prevents, then stop. A tight bullet without Y beats a padded one.
+Lead with the big idea: the headline capability or the change it made for users,
+then the mechanism. Prefer a stated outcome or a failure prevented over a list of
+code changes. Do not write small bug fixes ("Fixed duplicate call-log rows"), tool
+inventories in parentheses ("4 tools (knowledge, listing, ...)"), feature lists with
+no problem or outcome ("a month grid with service badges and a seven-day view"), or
+activity counts as results ("11 validation checks", "19-field model"). If the work is
+only a plan, use design verbs (Designed, Specified, Planned) and never invent a
+benchmark number.
+Counts of your own work are activity, not results, and never belong in a bullet:
+commits, lines of code, files, tests, tables, migrations, "zero broken builds".
+
+ONE sentence per bullet. Never add a second sentence that restates the first
+("This ensured...", "This enabled...") and never trail off with filler like
+", ensuring robust and reliable X".
+
+Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
+Shipped · Implemented · Migrated · Automated · Integrated · Reduced · Wrote.
+Give every bullet in this batch a different opening verb — and do not reuse the
+opener of an ALREADY COVERED bullet when another fits. Check all opening verbs
+before finishing the batch: no verb may open more than two bullets, and a distinct
+opener per bullet is better. Fix repetition by swapping openers, not the substance.
+Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
+only when the source material says so. Never upgrade a contribution into leadership.
+
+Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
+"Contributed to", "Collaborated on" — these are passive and weak. Also avoid the
+clichés "Spearheaded", "Leveraged", "Utilized", "Orchestrated", "Honed" and
+"Streamlined", and puffed adjectives ("robust", "comprehensive", "cutting-edge").
+
+EVERY bullet ends with a period.
+
+## 3. BOLD — **double asterisks** (compiles to \textbf{})
+
+Use AT MOST 1 bold in a 1-line bullet and 2 in a 2-line bullet — bold is emphasis,
+and a bullet that bolds everything emphasizes nothing. Reserve it for what a
+recruiter's eye should land on first, in priority order:
+  (a) the headline result or scale figure the source states;
+  (b) a marquee technology, protocol or vendor the bullet names;
+  (c) the name of the system or technique you designed.
+Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action verb itself.
+
+## 4. CONTENT RULES
+
+  • Quote anchor numbers from the source VERBATIM. NEVER fabricate metrics.
+    If the source doesn't have a number, omit it — don't invent one.
+  • NO internal identifiers (table names, function names, file paths, env-var names).
+    Those belong in interview answers, not on a resume.
+  • Each bullet stands alone — a recruiter must understand it in 5 seconds without
+    reading neighbors.
+  • Keep compact mechanism adjectives that name a real design decision —
+    "self-cancelling", "fail-closed", "hash-locked". They compress a whole
+    failure-prevention design into one word: substance, not buzzwords.
+  • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
+    explicitly named in the bullet text itself (e.g. "react", "kubernetes",
+    "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.
+    Do not invent tags for things not mentioned in the bullet.
+
+─────────────────────────────────────────────────────────────
+## EXAMPLES — shape only. Never copy their wording, domain or numbers.
+
+  ✓ [Verb] [what was built, in the source's own words] with [technology the source names],
+    [how it works or the key decision], [result the source states].
+  ✓ [Verb] [system] so [who] could [do what], [the failure or cost it removed].
+
+  ✗ Maintained zero broken main builds across 120 commits.
+    (activity counts, not a result)
+  ✗ Built a backend test suite of 190 unit tests. This enabled rapid development.
+    (artifact count, plus a filler second sentence)
+  ✗ Worked on backend stuff using various tools and got things faster.
+    (passive opener, vague, no result)
+
+─────────────────────────────────────────────────────────────
+## STORY — what to write
+
+  - s1: Nightly settlement
+  evidence: "Settles payouts nightly."
+
+## ALREADY WRITTEN — say it differently
+These wordings exist already. Write different sentences with different details and openers.
+  - Already written.
+
+Write 6 different wordings of this story, each a complete bullet aimed at a reviewer for
+the lens below. Write only what the evidence supports; every number must come from the
+story's evidence or the source material. A technology named only in the lens or a JD
+keyword list is not supported — leave it out; keyword-only wordings are discarded.
+
+Spread the wordings across these angles, so they do not all say the same thing:
+  - outcome first: lead with the measured result the evidence states;
+  - decision: the choice made and the tradeoff it accepted;
+  - scale: the load, data size or users it ran at, when the evidence gives one;
+  - failure prevented: what broke or could have broken, and how it was kept from happening.
+Start each wording with a different verb. No verb may open more than two of the wordings.
+Label each wording with the angle it takes: outcome, decision, scale, or failure. Use
+unknown when none of them fits.
+
+Lens definition:
+
+LENS: Backend & Data Architecture.
+Covers: services, APIs, data models and storage behind a product.
+A reviewer for this role looks for: design decisions and their tradeoffs, correctness
+under failure (consistency, idempotency, migrations), and performance at the scale
+the source states.
+
+
+
+## software-generateBullets-project
+
+=== system ===
+You are a JSON-only assistant. Respond with a single valid JSON object matching exactly this shape — no prose, no markdown fences:
+=== user ===
+You are writing resume bullet points for a PROJECT.
+Produce up to 6 bullets in JSON. EVERY rule below is mandatory.
+
+─────────────────────────────────────────────────────────────
+## 1. LENGTH — line-filling discipline (CRITICAL)
+
+Each bullet must compile to EITHER exactly 1 full line OR exactly 2 full lines on the
+rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
+second line — that looks broken.
+
+Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
+(they compile to \textbf{} and take no width). Word counts are approximate guides;
+the character range is what actually decides whether a line fills.
+
+Targets:
+  • 1-line bullet: 96 to 104 characters (roughly 13 to 14 words).
+  • 2-line bullet: 170 to 229 characters (roughly 23 to 31 words).
+  • NEVER produce a bullet of 111-163 characters — that range half-fills line 2.
+
+Aim for about 70% 1-line and 30% 2-line bullets. Recruiters skim a page in seconds
+and dense multi-line bullets get skipped, so use the 2-line form only when the
+substance genuinely needs it — every 2-liner spends double the vertical space of a
+1-liner that lands just as hard.
+
+## 2. FORMAT — Google XYZ pattern
+
+Every bullet reads as "Accomplished X, as measured by Y, by doing Z":
+  [STRONG ACTION VERB] + [WHAT was built, X] + [HOW, Z] + [MEASURE, Y].
+Y is a result someone outside the codebase would notice — latency, cost, error or
+failure rate, users served, data volume handled, time saved — and only when the source
+material states it. When it does not, write X + Z and name the problem solved or the
+failure the design prevents, then stop. A tight bullet without Y beats a padded one.
+Lead with the big idea: the headline capability or the change it made for users,
+then the mechanism. Prefer a stated outcome or a failure prevented over a list of
+code changes. Do not write small bug fixes ("Fixed duplicate call-log rows"), tool
+inventories in parentheses ("4 tools (knowledge, listing, ...)"), feature lists with
+no problem or outcome ("a month grid with service badges and a seven-day view"), or
+activity counts as results ("11 validation checks", "19-field model"). If the work is
+only a plan, use design verbs (Designed, Specified, Planned) and never invent a
+benchmark number.
+Counts of your own work are activity, not results, and never belong in a bullet:
+commits, lines of code, files, tests, tables, migrations, "zero broken builds".
+
+ONE sentence per bullet. Never add a second sentence that restates the first
+("This ensured...", "This enabled...") and never trail off with filler like
+", ensuring robust and reliable X".
+
+Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
+Shipped · Implemented · Migrated · Automated · Integrated · Reduced · Wrote.
+Give every bullet in this batch a different opening verb — and do not reuse the
+opener of an ALREADY COVERED bullet when another fits. Check all opening verbs
+before finishing the batch: no verb may open more than two bullets, and a distinct
+opener per bullet is better. Fix repetition by swapping openers, not the substance.
+Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
+only when the source material says so. Never upgrade a contribution into leadership.
+
+Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
+"Contributed to", "Collaborated on" — these are passive and weak. Also avoid the
+clichés "Spearheaded", "Leveraged", "Utilized", "Orchestrated", "Honed" and
+"Streamlined", and puffed adjectives ("robust", "comprehensive", "cutting-edge").
+
+EVERY bullet ends with a period.
+
+## 3. BOLD — **double asterisks** (compiles to \textbf{})
+
+Use AT MOST 1 bold in a 1-line bullet and 2 in a 2-line bullet — bold is emphasis,
+and a bullet that bolds everything emphasizes nothing. Reserve it for what a
+recruiter's eye should land on first, in priority order:
+  (a) the headline result or scale figure the source states;
+  (b) a marquee technology, protocol or vendor the bullet names;
+  (c) the name of the system or technique you designed.
+Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action verb itself.
+
+## 4. CONTENT RULES
+
+  • Quote anchor numbers from the source VERBATIM. NEVER fabricate metrics.
+    If the source doesn't have a number, omit it — don't invent one.
+  • NO internal identifiers (table names, function names, file paths, env-var names).
+    Those belong in interview answers, not on a resume.
+  • Each bullet stands alone — a recruiter must understand it in 5 seconds without
+    reading neighbors.
+  • Keep compact mechanism adjectives that name a real design decision —
+    "self-cancelling", "fail-closed", "hash-locked". They compress a whole
+    failure-prevention design into one word: substance, not buzzwords.
+  • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
+    explicitly named in the bullet text itself (e.g. "react", "kubernetes",
+    "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.
+    Do not invent tags for things not mentioned in the bullet.
+
+─────────────────────────────────────────────────────────────
+## EXAMPLES — shape only. Never copy their wording, domain or numbers.
+
+  ✓ [Verb] [what was built, in the source's own words] with [technology the source names],
+    [how it works or the key decision], [result the source states].
+  ✓ [Verb] [system] so [who] could [do what], [the failure or cost it removed].
+
+  ✗ Maintained zero broken main builds across 120 commits.
+    (activity counts, not a result)
+  ✗ Built a backend test suite of 190 unit tests. This enabled rapid development.
+    (artifact count, plus a filler second sentence)
+  ✗ Worked on backend stuff using various tools and got things faster.
+    (passive opener, vague, no result)
+
+─────────────────────────────────────────────────────────────
+## PROJECT CONTEXT
+
+Project name: Ledger
+
+Project description:
+Settles payouts nightly.
+
+Architecture overview & evidence:
+Architecture notes.
+
+Tech stack: Java 21, PostgreSQL
+Your role: Owner
+
+What you owned:
+The settlement job
+
+Scale & impact: 4 regions
+
+Hardest problem solved:
+Idempotent retries
+
+Key technical decisions — and the failures they prevented:
+Chose batch over streaming
+
+Who it served & why it mattered: Finance team
+
+Security & compliance posture:
+SOC 2
+
+─────────────────────────────────────────────────────────────
+## ALREADY COVERED — do not repeat these
+
+The bank already holds the bullets below. Write about DIFFERENT work, or the same
+work from a genuinely different angle. Do not restate, lightly reword, or merely
+re-bold any of them — near-duplicates are discarded.
+
+  - Existing bullet.
+
+
+
+─────────────────────────────────────────────────────────────
+## CATEGORY LENS — the angle for THIS batch
+
+Apply this lens to the source material above.
+
+LENS: Backend & Data Architecture.
+Covers: services, APIs, data models and storage behind a product.
+A reviewer for this role looks for: design decisions and their tradeoffs, correctness
+under failure (consistency, idempotency, migrations), and performance at the scale
+the source states.
+
+If the source material does not support this many bullets under this lens, return
+fewer — one, or an empty array. A short true batch beats a padded one, and this
+overrides the bullet count requested above.
+Never name a technology, vendor, product or technique the source material does not
+state, even one this lens mentions by name. The lens says what to look FOR, never
+what to claim.
+
+Other lenses are generating from this same source material right now: data.
+Stay strictly inside YOUR lens — those angles are being covered by those calls, and
+overlapping bullets are discarded. If a piece of work fits another lens better, leave
+it to that lens.
+
+
+
+## software-generateBullets-experience
+
+=== system ===
+You are a JSON-only assistant. Respond with a single valid JSON object matching exactly this shape — no prose, no markdown fences:
+=== user ===
+You are writing resume bullet points for a ROLE.
+Produce up to 10 bullets in JSON. EVERY rule below is mandatory.
+
+─────────────────────────────────────────────────────────────
+## 1. LENGTH — line-filling discipline (CRITICAL)
+
+Each bullet must compile to EITHER exactly 1 full line OR exactly 2 full lines on the
+rendered resume. NEVER produce a bullet that overflows by a few words into a sparse
+second line — that looks broken.
+
+Length is measured in CHARACTERS including spaces, ignoring the ** bold markers
+(they compile to \textbf{} and take no width). Word counts are approximate guides;
+the character range is what actually decides whether a line fills.
+
+Targets:
+  • 1-line bullet: 96 to 104 characters (roughly 13 to 14 words).
+  • 2-line bullet: 170 to 229 characters (roughly 23 to 31 words).
+  • NEVER produce a bullet of 111-163 characters — that range half-fills line 2.
+
+Aim for about 70% 1-line and 30% 2-line bullets. Recruiters skim a page in seconds
+and dense multi-line bullets get skipped, so use the 2-line form only when the
+substance genuinely needs it — every 2-liner spends double the vertical space of a
+1-liner that lands just as hard.
+
+## 2. FORMAT — Google XYZ pattern
+
+Every bullet reads as "Accomplished X, as measured by Y, by doing Z":
+  [STRONG ACTION VERB] + [WHAT was built, X] + [HOW, Z] + [MEASURE, Y].
+Y is a result someone outside the codebase would notice — latency, cost, error or
+failure rate, users served, data volume handled, time saved — and only when the source
+material states it. When it does not, write X + Z and name the problem solved or the
+failure the design prevents, then stop. A tight bullet without Y beats a padded one.
+Lead with the big idea: the headline capability or the change it made for users,
+then the mechanism. Prefer a stated outcome or a failure prevented over a list of
+code changes. Do not write small bug fixes ("Fixed duplicate call-log rows"), tool
+inventories in parentheses ("4 tools (knowledge, listing, ...)"), feature lists with
+no problem or outcome ("a month grid with service badges and a seven-day view"), or
+activity counts as results ("11 validation checks", "19-field model"). If the work is
+only a plan, use design verbs (Designed, Specified, Planned) and never invent a
+benchmark number.
+Counts of your own work are activity, not results, and never belong in a bullet:
+commits, lines of code, files, tests, tables, migrations, "zero broken builds".
+
+ONE sentence per bullet. Never add a second sentence that restates the first
+("This ensured...", "This enabled...") and never trail off with filler like
+", ensuring robust and reliable X".
+
+Open each bullet with a strong, specific action verb, e.g. Built · Designed ·
+Shipped · Implemented · Migrated · Automated · Integrated · Reduced · Wrote.
+Give every bullet in this batch a different opening verb — and do not reuse the
+opener of an ALREADY COVERED bullet when another fits. Check all opening verbs
+before finishing the batch: no verb may open more than two bullets, and a distinct
+opener per bullet is better. Fix repetition by swapping openers, not the substance.
+Claim leadership or ownership (Led · Owned · Architected · Directed · Mentored)
+only when the source material says so. Never upgrade a contribution into leadership.
+
+Forbidden openers: "Worked on", "Helped with", "Was responsible for", "Assisted",
+"Contributed to", "Collaborated on" — these are passive and weak. Also avoid the
+clichés "Spearheaded", "Leveraged", "Utilized", "Orchestrated", "Honed" and
+"Streamlined", and puffed adjectives ("robust", "comprehensive", "cutting-edge").
+
+EVERY bullet ends with a period.
+
+## 3. BOLD — **double asterisks** (compiles to \textbf{})
+
+Use AT MOST 1 bold in a 1-line bullet and 2 in a 2-line bullet — bold is emphasis,
+and a bullet that bolds everything emphasizes nothing. Reserve it for what a
+recruiter's eye should land on first, in priority order:
+  (a) the headline result or scale figure the source states;
+  (b) a marquee technology, protocol or vendor the bullet names;
+  (c) the name of the system or technique you designed.
+Do NOT bold: weak verbs, plain English nouns, generic adjectives, the action verb itself.
+
+## 4. CONTENT RULES
+
+  • Quote anchor numbers from the source VERBATIM. NEVER fabricate metrics.
+    If the source doesn't have a number, omit it — don't invent one.
+  • NO internal identifiers (table names, function names, file paths, env-var names).
+    Those belong in interview answers, not on a resume.
+  • Each bullet stands alone — a recruiter must understand it in 5 seconds without
+    reading neighbors.
+  • Keep compact mechanism adjectives that name a real design decision —
+    "self-cancelling", "fail-closed", "hash-locked". They compress a whole
+    failure-prevention design into one word: substance, not buzzwords.
+  • Tag each bullet with 2 to 5 specific technologies/tools/frameworks/protocols
+    explicitly named in the bullet text itself (e.g. "react", "kubernetes",
+    "postgresql", "grpc"). Lowercase, no fixed list — pull from what you wrote.
+    Do not invent tags for things not mentioned in the bullet.
+
+─────────────────────────────────────────────────────────────
+## EXAMPLES — shape only. Never copy their wording, domain or numbers.
+
+  ✓ [Verb] [what was built, in the source's own words] with [technology the source names],
+    [how it works or the key decision], [result the source states].
+  ✓ [Verb] [system] so [who] could [do what], [the failure or cost it removed].
+
+  ✗ Maintained zero broken main builds across 120 commits.
+    (activity counts, not a result)
+  ✗ Built a backend test suite of 190 unit tests. This enabled rapid development.
+    (artifact count, plus a filler second sentence)
+  ✗ Worked on backend stuff using various tools and got things faster.
+    (passive opener, vague, no result)
+
+─────────────────────────────────────────────────────────────
+## ROLE CONTEXT
+
+Role:     Engineer
+Company:  Acme
+Location: NYC
+Dates:    2024
+
+Description of work (what was built, with what tech, at what scale):
+Settles payouts nightly.
+
+Architecture overview & evidence:
+Architecture notes.
+
+Tech stack: Java 21, PostgreSQL
+Your role: Owner
+
+What you owned:
+The settlement job
+
+Scale & impact: 4 regions
+
+Hardest problem solved:
+Idempotent retries
+
+Key technical decisions — and the failures they prevented:
+Chose batch over streaming
+
+Who it served & why it mattered: Finance team
+
+Security & compliance posture:
+SOC 2
+
+─────────────────────────────────────────────────────────────
+## ALREADY COVERED — do not repeat these
+
+The bank already holds the bullets below. Write about DIFFERENT work, or the same
+work from a genuinely different angle. Do not restate, lightly reword, or merely
+re-bold any of them — near-duplicates are discarded.
+
+  - Existing bullet.
+
+
+
+─────────────────────────────────────────────────────────────
+## CATEGORY LENS — the angle for THIS batch
+
+Apply this lens to the source material above.
+
+LENS: Backend & Data Architecture.
+Covers: services, APIs, data models and storage behind a product.
+A reviewer for this role looks for: design decisions and their tradeoffs, correctness
+under failure (consistency, idempotency, migrations), and performance at the scale
+the source states.
+
+If the source material does not support this many bullets under this lens, return
+fewer — one, or an empty array. A short true batch beats a padded one, and this
+overrides the bullet count requested above.
+Never name a technology, vendor, product or technique the source material does not
+state, even one this lens mentions by name. The lens says what to look FOR, never
+what to claim.
+
+Other lenses are generating from this same source material right now: data.
+Stay strictly inside YOUR lens — those angles are being covered by those calls, and
+overlapping bullets are discarded. If a piece of work fits another lens better, leave
+it to that lens.
+
+
+
+## software-recoveryNote
+
+
+─────────────────────────────────────────────────────────────
+## RECOVERY PASS
+
+Bullets must be EITHER 96-104 characters (fills 1 line) OR 170-229 characters (fills
+2 lines). The 111-163 character range is forbidden — it half-fills line 2. NEVER exceed
+229 characters — that spills onto a third line.
+
+Rewrite each bullet below so it lands in a valid band. Keep the same facts, metrics
+and technologies — change only the phrasing and the level of detail. Never invent a
+number to reach a length.
+
+  - A very long bullet.
+
+Each bullet below opens with a weak or passive phrase. Replace ONLY the opening so it
+starts with a strong action verb (Built, Designed, Shipped, Engineered, Implemented,
+Migrated, Integrated). Keep the level of ownership the original states — never turn a
+contribution into leadership. Keep the facts, metrics, technologies and length as
+they are — this is a verb fix, not a rewrite.
+
+  - Worked on the thing.
+
+Each bullet below cites a count of the author's own work (commits, lines of code,
+files, tests, tables, migrations, builds). Delete that count and keep the actual claim:
+what was built, how, and any result the source states. If nothing is left once the
+count is gone, drop the bullet.
+
+  - Shipped it in 120 commits.
+
+Each bullet below runs to extra sentences or a filler sentence ("This ensured...").
+Rewrite it as ONE sentence: keep the strongest facts, drop the restatement.
+
+  - Built a cache. This ensured speed.
+
+Also write 2 additional NEW bullet(s) covering work from the source material that the
+accepted bullets above do not yet cover. If the source does not support that many,
+write fewer — never invent work to reach a count.
+
+Return the rewritten bullets and any new bullets together in the bullets array.
+

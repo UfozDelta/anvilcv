@@ -1,0 +1,163 @@
+%-------------------------
+% Resume Template - ATS Optimized
+% Placeholders use {{NAME}}-style tokens, filled by LatexRenderer.
+% Section bodies (education, experience, projects) are inserted as raw LaTeX
+% via renderRaw — caller is responsible for escaping bullet text.
+%
+% Layout constants are calibrated for one page at 10.5pt. Do not change them
+% casually: see RESUME_SOP/template.tex for the measurements behind each value.
+%-------------------------
+
+\documentclass[letterpaper,10.5pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+% glyphtounicode is pdfTeX-only; XeTeX (tectonic) handles Unicode natively.
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\addtolength{\oddsidemargin}{-0.6in}
+\addtolength{\evensidemargin}{-0.6in}
+\addtolength{\textwidth}{1.2in}
+\addtolength{\topmargin}{-0.6in}
+\addtolength{\textheight}{1.2in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-6pt}]
+
+%-------------------------
+% Custom commands
+
+\newcommand{\resumeItem}[1]{
+  \item\normalsize{#1}
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\[-2pt]
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-2pt}
+}
+
+\newcommand{\resumeSubheadingUni}[5]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\[-2pt]
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}
+    \vspace{-1pt}
+    \small{#5}
+    \vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{2pt}
+}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=7pt]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[leftmargin=0.15in, itemsep=1.4pt, parsep=0pt, topsep=0pt, partopsep=0pt]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+% Self-measuring skills row: guarantees a category line never wraps, instead of trusting a
+% char-count estimate on the Java side. Measures its own rendered width with \sbox and
+% steps the font down (small -> footnotesize -> scriptsize) until it fits \linewidth, so
+% the check is against the exact glyph metrics XeTeX will actually use for this run.
+\newcommand{\skillrowtext}[2]{\textbf{#1}{: #2}}
+\newlength{\skillrowbox}
+\newcommand{\skillrow}[2]{%
+  \setbox0=\hbox{\small\skillrowtext{#1}{#2}}%
+  \skillrowbox=\wd0
+  \ifdim\skillrowbox>\linewidth
+    \setbox0=\hbox{\footnotesize\skillrowtext{#1}{#2}}%
+    \skillrowbox=\wd0
+    \ifdim\skillrowbox>\linewidth
+      \scriptsize\skillrowtext{#1}{#2}\\
+    \else
+      \footnotesize\skillrowtext{#1}{#2}\\
+    \fi
+  \else
+    \small\skillrowtext{#1}{#2}\\
+  \fi
+}
+
+%-------------------------------------------
+\begin{document}
+
+%----------HEADER----------
+%%SECTION:HEADER%%
+\begin{center}
+    \textbf{\Huge \scshape {{NAME}}} \\ \vspace{2pt}
+    \small {{PHONE}} \hspace{1pt}
+    \href{mailto:{{EMAIL}}}{\underline{ {{EMAIL}} }} \hspace{1pt}
+    \href{https://linkedin.com/in/{{LINKEDIN_HANDLE}}}{\underline{LinkedIn}} \hspace{1pt}
+    \href{https://github.com/{{GITHUB_HANDLE}}}{\underline{GitHub}}{{PORTFOLIO_LINK}}
+\end{center}
+%%ENDSECTION%%
+
+%-----------EDUCATION-----------
+%%SECTION:EDUCATION_ITEMS%%
+\section{Education}
+  \resumeSubHeadingListStart
+{{EDUCATION_ITEMS}}
+  \resumeSubHeadingListEnd
+%%ENDSECTION%%
+
+%-----------EXPERIENCE-----------
+%%SECTION:EXPERIENCE_ITEMS%%
+\section{Experience}
+  \resumeSubHeadingListStart
+{{EXPERIENCE_ITEMS}}
+  \resumeSubHeadingListEnd
+%%ENDSECTION%%
+
+%-----------PROJECTS-----------
+%%SECTION:PROJECT_ITEMS%%
+\vspace{-6pt}
+\section{Projects}
+    \resumeSubHeadingListStart
+{{PROJECT_ITEMS}}
+    \resumeSubHeadingListEnd
+%%ENDSECTION%%
+
+%-----------TECHNICAL SKILLS-----------
+%%SECTION:SKILLS_BLOCK%%
+\vspace{-7pt}
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}, topsep=0pt, parsep=0pt, itemsep=0pt]
+    \item{
+     \skillrow{{{SKILL_LABEL_LANGUAGES}}}{{{SKILLS_LANGUAGES}}}
+     \skillrow{{{SKILL_LABEL_FRAMEWORKS}}}{{{SKILLS_FRAMEWORKS}}}
+     \skillrow{{{SKILL_LABEL_DATABASES}}}{{{SKILLS_DATABASES}}}
+     \skillrow{{{SKILL_LABEL_DEVOPS}}}{{{SKILLS_DEVOPS}}}
+     \skillrow{{{SKILL_LABEL_INTERESTS}}}{{{SKILLS_INTERESTS}}}
+    }
+ \end{itemize}
+%%ENDSECTION%%
+
+\end{document}
