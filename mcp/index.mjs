@@ -88,6 +88,18 @@ server.registerTool('anvil_check_bullets', {
   }),
 }, async (req) => out(await post('/api/agent/checks/bullets', req)));
 
+server.registerTool('anvil_check_fit', {
+  description: 'Deterministic page-fit check: compiles the exact resume LaTeX and reports real page count, overfull boxes, and per-bullet measured lines. Use BEFORE saving an application to avoid 2-page PDFs.',
+  inputSchema: z.object({
+    bulletIds: z.array(z.string().uuid()).optional(),
+    bulletTexts: z.array(z.string()).optional(),
+    selectedSkills: z.record(z.array(z.string())).optional(),
+    selectedCourses: z.array(z.string()).optional(),
+    jdText: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
+  }),
+}, async (req) => out(await post('/api/agent/checks/fit', req)));
+
 server.registerTool('anvil_check_coverage', {
   description: 'Score a JD against rendered resume text: hard gates, gaps, and keywords (Covered/Thin/Missing)',
   inputSchema: z.object({

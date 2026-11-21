@@ -88,6 +88,27 @@ public final class AgentDtos {
             @Size(max = 20) List<String> fitStrengths,
             @Size(max = 20) List<String> fitGaps) {}
 
+    /** Draft inputs for a deterministic fit check — no application needs to exist yet. */
+    public record CheckFitRequest(
+            @Size(max = 200) List<UUID> bulletIds,
+            @Size(max = 50) List<String> bulletTexts,
+            Map<String, List<String>> selectedSkills,
+            @Size(max = 50) List<String> selectedCourses,
+            @Size(max = 30000) String jdText,
+            @Size(max = 200) List<String> keywords) {}
+
+    public record BulletFit(UUID bulletId, int estimatedLines, Integer measuredLines,
+                            Double lastLineFill, String decision) {}
+
+    public record FitReport(
+            boolean fitsOnePage,
+            Integer pageCount,
+            boolean overfullHbox,
+            int estimatedBulletLines,
+            int maxBulletLines,
+            List<BulletFit> bullets,
+            List<String> warnings) {}
+
     /** A ranking row in the shape the application UI expects. */
     public record RankEntry(UUID bulletId, int rank, @Size(max = 500) String why) {}
 

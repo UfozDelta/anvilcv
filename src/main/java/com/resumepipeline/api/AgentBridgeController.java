@@ -1,6 +1,8 @@
 package com.resumepipeline.api;
 
 import com.resumepipeline.api.dto.AgentDtos.BulletChecksResponse;
+import com.resumepipeline.api.dto.AgentDtos.CheckFitRequest;
+import com.resumepipeline.api.dto.AgentDtos.FitReport;
 import com.resumepipeline.api.dto.AgentDtos.BulletsResponse;
 import com.resumepipeline.api.dto.AgentDtos.CheckBulletsRequest;
 import com.resumepipeline.api.dto.AgentDtos.CheckCoverageRequest;
@@ -58,6 +60,11 @@ public class AgentBridgeController {
     public CoverageResponse checkCoverage(Authentication auth, @RequestBody @Valid CheckCoverageRequest req) {
         // No ownership needed: the agent scores its own draft JD/text pair.
         return service.checkCoverage(req);
+    }
+
+    @PostMapping("/checks/fit")
+    public FitReport checkFit(Authentication auth, @RequestBody @Valid CheckFitRequest req) {
+        return service.checkFit(AuthUtils.userId(auth), req);
     }
 
     @PostMapping("/applications")

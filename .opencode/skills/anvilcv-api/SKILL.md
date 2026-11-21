@@ -89,8 +89,17 @@ All paths are relative to `ANVIL_BASE_URL` (default `http://localhost:8080`).
 
 ## Agent bridge (dedicated tools exist)
 - `POST /api/agent/checks/bullets`, `POST /api/agent/checks/coverage`
+- `POST /api/agent/checks/fit` — **deterministic page-fit check**. Body:
+  `{bulletIds?, bulletTexts?, selectedSkills?, selectedCourses?, jdText?, keywords?}`.
+  Compiles the exact resume LaTeX (no save, no LLM) and returns
+  `{fitsOnePage, pageCount, overfullHbox, estimatedBulletLines, maxBulletLines, bullets:[{bulletId, estimatedLines, measuredLines, lastLineFill, decision}], warnings}`.
+  Use this BEFORE saving an application: if `fitsOnePage` is false or any `measuredLines > 2`,
+  drop a lower-priority entry rather than shipping a 2-page PDF.
 - `POST /api/agent/stories`, `POST /api/agent/stories/{storyId}/bullets`
 - `POST /api/agent/applications`
+- `PATCH /api/agent/applications/{id}` — patch `ranking`, `fitScore`/`fitVerdict`/`fitStrengths`/`fitGaps`,
+  `recruiterScore`/`recruiterVerdict`/`recruiterWeaknesses`/`recruiterThinnestRequirement`,
+  `selectedSkills`, `selectedCourses` (used for agent-driven scoring and layout fixes).
 
 ## Response/error conventions
 Errors are `{source, status, message}`: 400 validation, 402 quota, 404 request, 409 state,

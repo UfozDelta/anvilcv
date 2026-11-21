@@ -46,6 +46,7 @@ class AgentBridgeServiceTest {
     @Mock GenerationConfigService configService;
     @Mock ApplicationRenderer renderer;
     @Mock PdfCompiler compiler;
+    @Mock com.resumepipeline.bullet.BulletLineMeasurer lineMeasurer;
     @Mock QuotaService quota;
 
     AgentBridgeService service;
@@ -55,7 +56,7 @@ class AgentBridgeServiceTest {
     @BeforeEach
     void setUp() {
         service = new AgentBridgeService(stories, bullets, applications, projects, configService,
-                renderer, compiler, quota, new ObjectMapper());
+                renderer, compiler, lineMeasurer, quota, new ObjectMapper());
     }
 
     @Test

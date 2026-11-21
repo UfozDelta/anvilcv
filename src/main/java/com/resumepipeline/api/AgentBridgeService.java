@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumepipeline.api.dto.AgentDtos.AgentBullet;
 import com.resumepipeline.api.dto.AgentDtos.BulletCheck;
 import com.resumepipeline.api.dto.AgentDtos.BulletChecksResponse;
+import com.resumepipeline.api.dto.AgentDtos.BulletFit;
+import com.resumepipeline.api.dto.AgentDtos.CheckFitRequest;
+import com.resumepipeline.api.dto.AgentDtos.FitReport;
 import com.resumepipeline.api.dto.AgentDtos.CheckBulletsRequest;
 import com.resumepipeline.api.dto.AgentDtos.CheckCoverageRequest;
 import com.resumepipeline.api.dto.AgentDtos.CoverageItem;
@@ -17,8 +20,10 @@ import com.resumepipeline.api.dto.AgentDtos.UpdateAgentApplicationRequest;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRenderer;
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.application.BulletSelector;
 import com.resumepipeline.application.JdCoverage;
 import com.resumepipeline.bullet.Bullet;
+import com.resumepipeline.bullet.BulletLineMeasurer;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.BulletService;
 import com.resumepipeline.bullet.Story;
@@ -68,13 +73,15 @@ public class AgentBridgeService {
     private final GenerationConfigService configService;
     private final ApplicationRenderer renderer;
     private final PdfCompiler compiler;
+    private final BulletLineMeasurer lineMeasurer;
     private final QuotaService quota;
     private final ObjectMapper mapper;
 
     public AgentBridgeService(StoryRepository stories, BulletRepository bullets,
                               ApplicationRepository applications, ProjectService projects,
                               GenerationConfigService configService, ApplicationRenderer renderer,
-                              PdfCompiler compiler, QuotaService quota, ObjectMapper mapper) {
+                              PdfCompiler compiler, BulletLineMeasurer lineMeasurer,
+                              QuotaService quota, ObjectMapper mapper) {
         this.stories = stories;
         this.bullets = bullets;
         this.applications = applications;
@@ -82,6 +89,7 @@ public class AgentBridgeService {
         this.configService = configService;
         this.renderer = renderer;
         this.compiler = compiler;
+        this.lineMeasurer = lineMeasurer;
         this.quota = quota;
         this.mapper = mapper;
     }
@@ -169,6 +177,69 @@ public class AgentBridgeService {
                 BulletTextRules.singleLowChars(cfg), BulletTextRules.singleHighChars(cfg),
                 BulletTextRules.deadZoneLowChars(cfg), BulletTextRules.deadZoneHighChars(cfg),
                 BulletTextRules.doubleLowChars(cfg), BulletTextRules.doubleHighChars(cfg));
+    }
+
+    /**
+     * Deterministic, ground-truth fit check: compiles the exact resume the agent is about to
+     * persist and reports real page count, overfull boxes and per-bullet measured line counts
+     * on top of the cheap char-count estimate. No application is saved and no LLM is called.
+     */
+    public FitReport checkFit(UUID userId, CheckFitRequest req) {
+        UUID[] ids = req.bulletIds() == null ? new UUID[0] : req.bulletIds().toArray(UUID[]::new);
+        Map<UUID, Bullet> byId = bullets.findByIdsAndProjectUserId(ids, userId).stream()
+                .collect(Collectors.toMap(Bullet::getId, b -> b));
+        List<Bullet> selected = new ArrayList<>();
+        for (UUID id : ids) {
+            Bullet b = byId.get(id);
+            if (b == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown bullet: " + id);
+            selected.add(b);
+        }
+        // Draft text supplied by the agent (not yet saved) wins over the stored text.
+        List<String> texts = req.bulletTexts() == null ? List.of() : req.bulletTexts();
+        int n = Math.max(selected.size(), texts.size());
+        if (n == 0) throw new IllegalArgumentException("No bullets to check");
+
+        Map<UUID, Project> projectById = new LinkedHashMap<>();
+        for (Bullet b : selected) projectById.computeIfAbsent(b.getProjectId(), pid -> projects.get(userId, pid));
+        List<String> courses = req.selectedCourses() == null ? List.of() : req.selectedCourses();
+        Map<String, List<String>> skills = req.selectedSkills() == null ? Map.of() : req.selectedSkills();
+        List<String> keywords = req.keywords() == null ? List.of() : req.keywords();
+        String jd = req.jdText() == null ? "" : req.jdText();
+
+        String tex = renderer.render(userId, selected, projectById, courses, skills, keywords);
+        PdfCompiler.Result result = compiler.compile(tex);
+
+        List<BulletFit> fits = new ArrayList<>();
+        Map<String, BulletLineMeasurer.Measured> measured = lineMeasurer.measure(
+                java.util.stream.IntStream.range(0, n).boxed().collect(Collectors.toMap(
+                        i -> "b" + i,
+                        i -> i < texts.size() && !texts.get(i).isBlank()
+                                ? texts.get(i) : selected.get(i).getText())));
+        int estTotal = 0;
+        for (int i = 0; i < n; i++) {
+            String text = i < texts.size() && !texts.get(i).isBlank() ? texts.get(i) : selected.get(i).getText();
+            int est = BulletTextRules.estimatedLines(text);
+            estTotal += est;
+            BulletLineMeasurer.Measured m = measured.get("b" + i);
+            UUID bid = i < selected.size() ? selected.get(i).getId() : null;
+            fits.add(new BulletFit(bid, est, m == null ? null : m.lines(),
+                    m == null ? null : m.lastLineFill(),
+                    BulletTextRules.decide(BulletTextRules.charCount(text), configService.get(userId)).name()));
+        }
+
+        List<String> warnings = new ArrayList<>();
+        Integer pages = result.success() ? result.pageCount() : null;
+        boolean overfull = result.success() && result.overfullHbox();
+        if (!result.success()) warnings.add("Compile failed: " + result.error());
+        if (pages != null && pages > 1) warnings.add("PDF spills to " + pages + " pages — drop a lower-priority entry.");
+        if (overfull) warnings.add("Overfull hbox — a line is wider than its column; shorten it.");
+        if (estTotal > BulletSelector.MAX_TOTAL_LINES)
+            warnings.add("~" + estTotal + " estimated bullet lines exceed the " + BulletSelector.MAX_TOTAL_LINES + "-line budget.");
+        for (BulletFit f : fits) if (f.measuredLines() != null && f.measuredLines() > 2)
+            warnings.add("Bullet " + (f.bulletId() == null ? "?" : f.bulletId().toString().substring(0, 8))
+                    + " renders as " + f.measuredLines() + " lines.");
+        return new FitReport(pages != null && pages == 1 && !overfull, pages, overfull,
+                estTotal, BulletSelector.MAX_TOTAL_LINES, List.copyOf(fits), List.copyOf(warnings));
     }
 
     /** Score a JD against the text that will actually render (hard gates, gaps, keywords). */
