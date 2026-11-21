@@ -12,6 +12,8 @@ import com.resumepipeline.api.dto.AgentDtos.CoverageResponse;
 import com.resumepipeline.api.dto.AgentDtos.CreateAgentApplicationRequest;
 import com.resumepipeline.api.dto.AgentDtos.CreateBulletsRequest;
 import com.resumepipeline.api.dto.AgentDtos.CreateStoryRequest;
+import com.resumepipeline.api.dto.AgentDtos.RankEntry;
+import com.resumepipeline.api.dto.AgentDtos.UpdateAgentApplicationRequest;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRenderer;
 import com.resumepipeline.application.ApplicationRepository;
@@ -245,19 +247,49 @@ public class AgentBridgeService {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not serialize selected skills", e);
         }
-        a.setBulletRanking("[]");
+        // The application UI groups bullets by project from this JSON. Without it the page
+        // renders but shows "N of 0 included" and no per-entry controls work.
+        List<RankEntry> ranking = req.ranking() != null ? req.ranking()
+                : java.util.stream.IntStream.range(0, ids.length)
+                        .mapToObj(i -> new RankEntry(ids[i], i + 1, "Selected by the agent tailoring run."))
+                        .toList();
+        try {
+            a.setBulletRanking(mapper.writeValueAsString(ranking));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize ranking", e);
+        }
         a.setAtsMatched(matched.toArray(new String[0]));
         a.setAtsMissing(missing.toArray(new String[0]));
         a.setTexBlob(tex.getBytes(StandardCharsets.UTF_8));
         a.setPdfBlob(result.pdf());
         a.setTectonicLog(result.log());
         a.setPageCount(result.pageCount());
+        a.setFitScore(req.fitScore());
+        a.setFitVerdict(req.fitVerdict());
+        if (req.fitStrengths() != null) a.setFitStrengths(req.fitStrengths().toArray(new String[0]));
+        if (req.fitGaps() != null) a.setFitGaps(req.fitGaps().toArray(new String[0]));
         a.setPdfStale(false);
         a.setRecruiterStale(false);
 
         Application saved = applications.save(a);
         quota.recordTailor(userId, saved.getId());
         return saved;
+    }
+
+    /** Patch the agent's own fit assessment and ranking onto an existing application. */
+    public Application updateScoring(UUID userId, UUID appId, UpdateAgentApplicationRequest req) {
+        Application a = applications.findByUserIdAndId(userId, appId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown application: " + appId));
+        try {
+            if (req.ranking() != null) a.setBulletRanking(mapper.writeValueAsString(req.ranking()));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize ranking", e);
+        }
+        if (req.fitScore() != null) a.setFitScore(req.fitScore());
+        if (req.fitVerdict() != null) a.setFitVerdict(req.fitVerdict());
+        if (req.fitStrengths() != null) a.setFitStrengths(req.fitStrengths().toArray(new String[0]));
+        if (req.fitGaps() != null) a.setFitGaps(req.fitGaps().toArray(new String[0]));
+        return applications.save(a);
     }
 
     /** The text the template emits, shared by ATS and coverage scoring. */

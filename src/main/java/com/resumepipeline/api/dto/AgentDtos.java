@@ -81,5 +81,21 @@ public final class AgentDtos {
             @NotEmpty @Size(max = 200) List<UUID> selectedBulletIds,
             Map<String, List<String>> selectedSkills,
             @Size(max = 50) List<String> selectedCourses,
-            @Size(max = 20000) String coverLetter) {}
+            @Size(max = 20000) String coverLetter,
+            List<RankEntry> ranking,
+            Integer fitScore,
+            @Size(max = 200) String fitVerdict,
+            @Size(max = 20) List<String> fitStrengths,
+            @Size(max = 20) List<String> fitGaps) {}
+
+    /** A ranking row in the shape the application UI expects. */
+    public record RankEntry(UUID bulletId, int rank, @Size(max = 500) String why) {}
+
+    /** Patch scoring/ranking on an agent-created application after the agent has assessed it. */
+    public record UpdateAgentApplicationRequest(
+            List<RankEntry> ranking,
+            Integer fitScore,
+            @Size(max = 200) String fitVerdict,
+            @Size(max = 20) List<String> fitStrengths,
+            @Size(max = 20) List<String> fitGaps) {}
 }

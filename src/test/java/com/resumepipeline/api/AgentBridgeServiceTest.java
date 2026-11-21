@@ -178,7 +178,7 @@ class AgentBridgeServiceTest {
         Application saved = service.createApplication(userId, new CreateAgentApplicationRequest(
                 "Must have Kubernetes.", "https://example.com/job", "backend", "Acme", "Engineer",
                 List.of("Kubernetes"), List.of(bulletId), Map.of("languages", List.of("Java")),
-                List.of("OSU"), "Dear Acme,"));
+                List.of("OSU"), "Dear Acme,", null, null, null, null, null));
 
         assertNotNull(saved);
         assertArrayEquals(new byte[]{1, 2}, saved.getPdfBlob());
@@ -201,7 +201,7 @@ class AgentBridgeServiceTest {
 
         assertThrows(ResponseStatusException.class, () -> service.createApplication(userId,
                 new CreateAgentApplicationRequest("JD", null, null, null, null, List.of(),
-                        List.of(bulletId), Map.of(), List.of(), null)));
+                        List.of(bulletId), Map.of(), List.of(), null, null, null, null, null, null)));
         verify(applications, never()).save(any());
         verify(quota, never()).recordTailor(any(), any());
     }

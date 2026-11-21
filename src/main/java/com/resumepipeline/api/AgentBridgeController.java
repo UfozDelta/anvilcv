@@ -9,11 +9,13 @@ import com.resumepipeline.api.dto.AgentDtos.CreateAgentApplicationRequest;
 import com.resumepipeline.api.dto.AgentDtos.CreateBulletsRequest;
 import com.resumepipeline.api.dto.AgentDtos.CreateStoryRequest;
 import com.resumepipeline.api.dto.AgentDtos.StoryResponse;
+import com.resumepipeline.api.dto.AgentDtos.UpdateAgentApplicationRequest;
 import com.resumepipeline.api.dto.ApplicationDtos.ApplicationResponse;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.auth.AuthUtils;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -63,5 +65,11 @@ public class AgentBridgeController {
                                                  @RequestBody @Valid CreateAgentApplicationRequest req) {
         Application saved = service.createApplication(AuthUtils.userId(auth), req);
         return ApplicationResponse.from(saved);
+    }
+
+    @PatchMapping("/applications/{id}")
+    public ApplicationResponse updateScoring(Authentication auth, @PathVariable UUID id,
+                                             @RequestBody @Valid UpdateAgentApplicationRequest req) {
+        return ApplicationResponse.from(service.updateScoring(AuthUtils.userId(auth), id, req));
     }
 }
