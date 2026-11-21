@@ -298,6 +298,13 @@ public class AgentBridgeService {
         if (req.recruiterVerdict() != null) a.setRecruiterVerdict(req.recruiterVerdict());
         if (req.recruiterWeaknesses() != null) a.setRecruiterWeaknesses(req.recruiterWeaknesses().toArray(new String[0]));
         if (req.recruiterThinnestRequirement() != null) a.setRecruiterThinnestRequirement(req.recruiterThinnestRequirement());
+        if (req.selectedSkills() != null) {
+            try {
+                a.setSelectedSkills(mapper.writeValueAsString(req.selectedSkills()));
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("Could not serialize selected skills", e);
+            }
+        }
         return applications.save(a);
     }
 
