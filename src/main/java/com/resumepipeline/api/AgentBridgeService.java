@@ -234,7 +234,8 @@ public class AgentBridgeService {
         if (pages != null && pages > 1) warnings.add("PDF spills to " + pages + " pages — drop a lower-priority entry.");
         if (overfull) warnings.add("Overfull hbox — a line is wider than its column; shorten it.");
         if (estTotal > BulletSelector.MAX_TOTAL_LINES)
-            warnings.add("~" + estTotal + " estimated bullet lines exceed the " + BulletSelector.MAX_TOTAL_LINES + "-line budget.");
+            warnings.add("Heuristic only: ~" + estTotal + " estimated bullet lines exceed the "
+                    + BulletSelector.MAX_TOTAL_LINES + "-line budget — the real compile above is authoritative.");
         for (BulletFit f : fits) if (f.measuredLines() != null && f.measuredLines() > 2)
             warnings.add("Bullet " + (f.bulletId() == null ? "?" : f.bulletId().toString().substring(0, 8))
                     + " renders as " + f.measuredLines() + " lines.");
