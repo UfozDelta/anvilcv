@@ -289,6 +289,15 @@ public class AgentBridgeService {
         if (req.fitVerdict() != null) a.setFitVerdict(req.fitVerdict());
         if (req.fitStrengths() != null) a.setFitStrengths(req.fitStrengths().toArray(new String[0]));
         if (req.fitGaps() != null) a.setFitGaps(req.fitGaps().toArray(new String[0]));
+        // The agent can also supply the recruiter/page score when the server-side LLM is
+        // unavailable, so the page-score card is not left blank.
+        if (req.recruiterScore() != null) {
+            a.setRecruiterScore(req.recruiterScore());
+            a.setRecruiterStale(false);
+        }
+        if (req.recruiterVerdict() != null) a.setRecruiterVerdict(req.recruiterVerdict());
+        if (req.recruiterWeaknesses() != null) a.setRecruiterWeaknesses(req.recruiterWeaknesses().toArray(new String[0]));
+        if (req.recruiterThinnestRequirement() != null) a.setRecruiterThinnestRequirement(req.recruiterThinnestRequirement());
         return applications.save(a);
     }
 

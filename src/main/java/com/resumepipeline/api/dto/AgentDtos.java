@@ -97,5 +97,9 @@ public final class AgentDtos {
             Integer fitScore,
             @Size(max = 200) String fitVerdict,
             @Size(max = 20) List<String> fitStrengths,
-            @Size(max = 20) List<String> fitGaps) {}
+            @Size(max = 20) List<String> fitGaps,
+            Integer recruiterScore,
+            @Size(max = 200) String recruiterVerdict,
+            @Size(max = 20) List<String> recruiterWeaknesses,
+            @Size(max = 200) String recruiterThinnestRequirement) {}
 }
