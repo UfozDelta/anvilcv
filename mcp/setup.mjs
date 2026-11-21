@@ -27,7 +27,7 @@ if (!process.env.ANVIL_USERNAME || !process.env.ANVIL_PASSWORD) {
 }
 
 try {
-  const ping = await fetch(`${BASE}/api/ping`, { signal: AbortSignal.timeout(5000) });
+  const ping = await fetch(`${BASE}/api/public/stats`, { signal: AbortSignal.timeout(5000) });
   check(ping.ok, 'AnvilCV reachable', `${BASE} → ${ping.status}`);
 } catch (e) {
   check(false, 'AnvilCV reachable', `${BASE} — ${e.message}`);

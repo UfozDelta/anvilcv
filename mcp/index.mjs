@@ -31,7 +31,10 @@ async function api(path, opts = {}) {
   let r = await send();
   if (r.status === 401) { await login(); r = await send(); }
   if (!r.ok) throw new Error(`AnvilCV ${path}: ${r.status} ${await r.text()}`);
-  return r.status === 204 ? null : r.json();
+  if (r.status === 204) return null;
+  const text = await r.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return text; }
 }
 
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
