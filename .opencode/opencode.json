@@ -5,12 +5,7 @@
       "anvilcv": {
         "type": "local",
         "command": ["node", "mcp/index.mjs"],
-        "cwd": ".",
-        "environment": {
-          "ANVIL_BASE_URL": "http://localhost:8080",
-          "ANVIL_USERNAME": "{env:ANVIL_USERNAME}",
-          "ANVIL_PASSWORD": "{env:ANVIL_PASSWORD}"
-        }
+        "cwd": "."
       }
     }
   }

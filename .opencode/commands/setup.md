@@ -10,12 +10,14 @@ Set up the AnvilCV agent bridge and verify it end to end.
 !`node mcp/setup.mjs`
 
 2. If any check failed, fix it before continuing:
-   - Missing MCP dependencies → `cd mcp && npm install`
-   - Missing credentials → tell the user to set `ANVIL_USERNAME` and `ANVIL_PASSWORD` in the
-     environment **before starting OpenCode** (they are substituted into `.opencode/opencode.json`),
-     then run `/reload`.
-   - AnvilCV unreachable → start it with `SPRING_PROFILES_ACTIVE=local mvn spring-boot:run`
-     (needs the DB, `application-local.yml`, and tectonic for PDFs).
+   - Missing MCP dependencies → `cd mcp && npm ci`
+   - Missing credentials → tell the user to copy `mcp/.env.example` to `mcp/.env` (gitignored)
+     and fill in `ANVIL_BASE_URL`, `ANVIL_USERNAME`, `ANVIL_PASSWORD`. `ANVIL_BASE_URL` must be
+     the public HTTPS URL of the hosted app, not `localhost:8080`, when using the VPS.
+     Then run `/reload`.
+   - AnvilCV unreachable → check the tunnel URL / start it with
+     `SPRING_PROFILES_ACTIVE=local mvn spring-boot:run` (needs the DB, `application-local.yml`,
+     and tectonic for PDFs).
    Re-run the check after each fix.
 
 3. Load the `anvilcv-api` skill and call `anvil_status` and `anvil_projects` to confirm live data.

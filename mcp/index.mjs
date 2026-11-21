@@ -2,8 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
 import { writeFile } from 'node:fs/promises';
-
-const BASE = process.env.ANVIL_BASE_URL ?? 'http://localhost:8080';
+import { BASE } from './env.mjs';
 let cookie = '';
 
 async function login() {

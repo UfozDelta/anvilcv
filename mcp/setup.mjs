@@ -3,8 +3,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-
-const BASE = process.env.ANVIL_BASE_URL ?? 'http://localhost:8080';
+import { BASE } from './env.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const line = (ok, label, detail) =>
