@@ -20,6 +20,7 @@ import com.resumepipeline.api.dto.AgentDtos.UpdateAgentApplicationRequest;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRenderer;
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.application.ApplicationService;
 import com.resumepipeline.application.BulletSelector;
 import com.resumepipeline.application.JdCoverage;
 import com.resumepipeline.bullet.Bullet;
@@ -72,6 +73,7 @@ public class AgentBridgeService {
     private final ProjectService projects;
     private final GenerationConfigService configService;
     private final ApplicationRenderer renderer;
+    private final ApplicationService appService;
     private final PdfCompiler compiler;
     private final BulletLineMeasurer lineMeasurer;
     private final QuotaService quota;
@@ -80,14 +82,15 @@ public class AgentBridgeService {
     public AgentBridgeService(StoryRepository stories, BulletRepository bullets,
                               ApplicationRepository applications, ProjectService projects,
                               GenerationConfigService configService, ApplicationRenderer renderer,
-                              PdfCompiler compiler, BulletLineMeasurer lineMeasurer,
-                              QuotaService quota, ObjectMapper mapper) {
+                              ApplicationService appService, PdfCompiler compiler,
+                              BulletLineMeasurer lineMeasurer, QuotaService quota, ObjectMapper mapper) {
         this.stories = stories;
         this.bullets = bullets;
         this.applications = applications;
         this.projects = projects;
         this.configService = configService;
         this.renderer = renderer;
+        this.appService = appService;
         this.compiler = compiler;
         this.lineMeasurer = lineMeasurer;
         this.quota = quota;
@@ -202,8 +205,10 @@ public class AgentBridgeService {
         Map<UUID, Project> projectById = new LinkedHashMap<>();
         for (Bullet b : selected) projectById.computeIfAbsent(b.getProjectId(), pid -> projects.get(userId, pid));
         List<String> courses = req.selectedCourses() == null ? List.of() : req.selectedCourses();
-        Map<String, List<String>> skills = req.selectedSkills() == null ? Map.of() : req.selectedSkills();
         List<String> keywords = req.keywords() == null ? List.of() : req.keywords();
+        // Fill the agent's subset out of the profile before compiling, so the PDF checked here
+        // is the one that will be saved (same width-grounded pass as the normal tailor path).
+        Map<String, List<String>> skills = appService.filledSkills(userId, req.selectedSkills(), keywords);
         String jd = req.jdText() == null ? "" : req.jdText();
 
         String tex = renderer.render(userId, selected, projectById, courses, skills, keywords);
@@ -279,7 +284,7 @@ public class AgentBridgeService {
 
         List<String> keywords = req.keywords() == null ? List.of() : req.keywords();
         List<String> courses = req.selectedCourses() == null ? List.of() : req.selectedCourses();
-        Map<String, List<String>> skills = req.selectedSkills() == null ? Map.of() : req.selectedSkills();
+        Map<String, List<String>> skills = appService.filledSkills(userId, req.selectedSkills(), keywords);
 
         String tex = renderer.render(userId, ordered, projectById, courses, skills, keywords);
         String rendered = renderedText(ordered, skills, courses, projectById, keywords);

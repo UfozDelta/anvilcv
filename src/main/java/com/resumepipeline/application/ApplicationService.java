@@ -1027,6 +1027,24 @@ public class ApplicationService {
     }
 
     /**
+     * Fill an agent-supplied skill subset from the profile out to each row's natural width at
+     * {@code \small} (9pt), keyword-first. This is the same pass the generate pipeline uses
+     * (see {@link #stretchSkillsToWidth}), exposed so the agent bridge checks and saves the PDF
+     * that actually prints. Invented skills are dropped, as in the normal path.
+     */
+    public Map<String, List<String>> filledSkills(UUID userId, Map<String, List<String>> selectedSkills,
+                                                   List<String> keywords) {
+        com.resumepipeline.profile.Profile profile = profileService.get(userId);
+        Map<String, List<String>> raw = rawSkills(profile);
+        List<String> dropped = new ArrayList<>();
+        Map<String, List<String>> profileOnly =
+                BulletSelector.profileSkillsOnly(selectedSkills, raw, dropped);
+        Map<String, List<String>> floor = BulletSelector.fillSkills(profileOnly, raw);
+        return stretchSkillsToWidth(floor, raw, keywords == null ? List.of() : keywords,
+                com.resumepipeline.field.Field.orDefault(profileService.field(userId)));
+    }
+
+    /**
      * Grows each skill category past {@link BulletSelector#fillSkills}'s floor with more raw
      * profile skills, one at a time, stopping at the largest prefix that still renders within
      * {@link BulletSelector#MAX_SKILLS_FILL} of {@code \linewidth} at {@code \skillrow}'s

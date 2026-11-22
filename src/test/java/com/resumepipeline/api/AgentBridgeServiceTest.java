@@ -5,6 +5,7 @@ import com.resumepipeline.api.dto.AgentDtos.*;
 import com.resumepipeline.application.Application;
 import com.resumepipeline.application.ApplicationRenderer;
 import com.resumepipeline.application.ApplicationRepository;
+import com.resumepipeline.application.ApplicationService;
 import com.resumepipeline.bullet.Bullet;
 import com.resumepipeline.bullet.BulletRepository;
 import com.resumepipeline.bullet.BulletService;
@@ -45,6 +46,7 @@ class AgentBridgeServiceTest {
     @Mock ProjectService projects;
     @Mock GenerationConfigService configService;
     @Mock ApplicationRenderer renderer;
+    @Mock ApplicationService appService;
     @Mock PdfCompiler compiler;
     @Mock com.resumepipeline.bullet.BulletLineMeasurer lineMeasurer;
     @Mock QuotaService quota;
@@ -56,7 +58,7 @@ class AgentBridgeServiceTest {
     @BeforeEach
     void setUp() {
         service = new AgentBridgeService(stories, bullets, applications, projects, configService,
-                renderer, compiler, lineMeasurer, quota, new ObjectMapper());
+                renderer, appService, compiler, lineMeasurer, quota, new ObjectMapper());
     }
 
     @Test
@@ -166,12 +168,34 @@ class AgentBridgeServiceTest {
     }
 
     @Test
+    void checkFitCompilesTheFilledSkillsRow() {
+        UUID bulletId = UUID.randomUUID();
+        Bullet b = new Bullet(projectId, "Built a queue.", new String[0]);
+        ReflectionTestUtils.setField(b, "id", bulletId);
+        when(bullets.findByIdsAndProjectUserId(any(UUID[].class), eq(userId))).thenReturn(List.of(b));
+        when(projects.get(userId, projectId)).thenReturn(mock(Project.class));
+        when(configService.get(userId)).thenReturn(new GenerationConfig());
+        Map<String, List<String>> filled = Map.of("languages", List.of("Java", "Kotlin"));
+        when(appService.filledSkills(eq(userId), any(), any())).thenReturn(filled);
+        when(renderer.render(eq(userId), anyList(), any(), anyList(), any(), any()))
+                .thenReturn("\\documentclass{article}");
+        when(compiler.compile(anyString())).thenReturn(PdfCompiler.Result.success(new byte[]{1}, "log"));
+
+        service.checkFit(userId, new CheckFitRequest(List.of(bulletId), List.of(),
+                Map.of("languages", List.of("Java")), List.of(), "JD", List.of("Java")));
+
+        verify(renderer).render(eq(userId), anyList(), any(), anyList(), eq(filled), any());
+    }
+
+    @Test
     void createApplicationRendersCompilesPersistsAndRecordsQuota() {
         UUID bulletId = UUID.randomUUID();
         Bullet b = new Bullet(projectId, "Built a queue that cut latency.", new String[0]);
         ReflectionTestUtils.setField(b, "id", bulletId);
         when(bullets.findByIdsAndProjectUserId(any(UUID[].class), eq(userId))).thenReturn(List.of(b));
         when(projects.get(userId, projectId)).thenReturn(mock(Project.class));
+        Map<String, List<String>> filled = Map.of("languages", List.of("Java", "Kotlin"));
+        when(appService.filledSkills(eq(userId), any(), any())).thenReturn(filled);
         when(renderer.render(eq(userId), anyList(), any(), anyList(), any(), any())).thenReturn("\\documentclass{article}");
         when(compiler.compile(anyString())).thenReturn(PdfCompiler.Result.success(new byte[]{1, 2}, "one page"));
         when(applications.save(any(Application.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -186,6 +210,9 @@ class AgentBridgeServiceTest {
         assertTrue(new String(saved.getTexBlob()).startsWith("\\documentclass"));
         assertArrayEquals(new UUID[]{bulletId}, saved.getSelectedBulletIds());
         assertEquals(List.of("Kubernetes"), List.of(saved.getAtsMissing()));
+        // The filled row — not the agent's short subset — is what renders and is stored for rerenders.
+        verify(renderer).render(eq(userId), anyList(), any(), anyList(), eq(filled), any());
+        assertTrue(saved.getSelectedSkills().contains("Kotlin"));
         verify(quota).checkTailor(userId);
         verify(quota).recordTailor(eq(userId), any());
     }
@@ -197,6 +224,7 @@ class AgentBridgeServiceTest {
         ReflectionTestUtils.setField(b, "id", bulletId);
         when(bullets.findByIdsAndProjectUserId(any(UUID[].class), eq(userId))).thenReturn(List.of(b));
         when(projects.get(userId, projectId)).thenReturn(mock(Project.class));
+        when(appService.filledSkills(any(), any(), any())).thenReturn(Map.of());
         when(renderer.render(eq(userId), anyList(), any(), anyList(), any(), any())).thenReturn("\\documentclass{article}");
         when(compiler.compile(anyString())).thenReturn(PdfCompiler.Result.failure("tectonic exploded", "log"));
 

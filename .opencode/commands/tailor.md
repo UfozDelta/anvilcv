@@ -24,10 +24,11 @@ Tailor a resume for: $ARGUMENTS
    and per-bullet `measuredLines`. If `fitsOnePage` is false or any bullet measures >2 lines, drop a
    whole lower-priority entry (or swap in a shorter bullet) and re-check — never ship a 2-page PDF
    and never stretch the surviving bullets to fix a band.
-7. Print only a JD-relevant SKILL SUBSET: 7-8 items per row (all five rows honor `selectedSkills`,
-   including AI & Integrations). Keep the full set in the profile, but long rows trigger the
-   `\skillrow` auto-shrink and make the bottom of the page unreadable. Use the 7-course education
-   line for the same reason.
+7. Pass only JD-relevant skills you can back from the profile as `selectedSkills` — never invent
+   one. AnvilCV pads each of the four technical rows from the rest of your profile to the printed
+   line width at 9pt, JD keywords first, measuring the real width so `\skillrow` never shrinks;
+   the AI & Integrations row prints as supplied. Do NOT cap rows at 7-8 items yourself — that
+   leaves the page half empty. Keep the 7-course education line.
 8. Write the cover letter from the selected bullet evidence only.
 9. `anvil_save_application` with the ordered bullet ids, keywords, skills, courses and letter.
    AnvilCV renders the LaTeX, compiles the PDF, scores ATS and records quota. Verify the returned
