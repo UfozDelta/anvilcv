@@ -10,6 +10,7 @@ export function TopNav() {
           <Link to="/jobs">JOBS</Link>
           <Link to="/pricing">PRICING</Link>
           <Link to="/login" className="lx-nav__login">LOG IN</Link>
+          <Link to="/docs">DOCS</Link>
         </nav>
       </div>
     </header>

@@ -90,6 +90,38 @@ export function Landing({ How = HowItWorks }: { How?: React.ComponentType }) {
         </div>
       </section>
 
+      {/* ── AGENT BRIDGE ── */}
+      <section className="shell lx-section">
+        <SectionMark title="Your agent, on the tools" aside="MCP BRIDGE" />
+        <div className="lx-agent">
+          <div className="lx-agent__copy">
+            <h3 className="lp-display lx-h2">Already live<br />in your editor.</h3>
+            <p className="lx-body">
+              Drive AnvilCV from OpenCode with 16 MCP tools, ready-made commands and skills. Your
+              agent ranks bullets against the job and calls the shots; AnvilCV renders the LaTeX,
+              compiles the PDF and applies your quota. The result lands in the app like any other
+              application.
+            </p>
+            <p className="lp-label lp-muted lx-hint">↳ TECHNICAL? SET IT UP IN MINUTES</p>
+            <Link to="/docs" className="lp-btn lp-btn--acid lx-btn lx-agent__cta">READ THE SETUP GUIDE →</Link>
+          </div>
+          <div className="lx-agent__term" aria-hidden="true">
+            <div className="lx-agent__bar">
+              <span className="lx-agent__dot" /><span className="lx-agent__dot" /><span className="lx-agent__dot" />
+            </div>
+            <pre><span className="lx-term-dim">$ </span>/setup{'\n'}
+<span className="lx-term-ok">OK  </span>MCP dependencies{'\n'}
+<span className="lx-term-ok">OK  </span>Credentials in environment{'\n'}
+<span className="lx-term-ok">OK  </span>AnvilCV reachable{'\n'}
+<span className="lx-term-ok">OK  </span>Login · Session{'\n'}
+{'\n'}
+<span className="lx-term-dim">$ </span>/tailor{'\n'}
+<span className="lx-term-dim">→ </span>18 bullets ranked · 1 page{'\n'}
+<span className="lx-term-dim">→ </span>PDF compiled &amp; saved to AnvilCV</pre>
+          </div>
+        </div>
+      </section>
+
       {/* ── HIRING NOW: live from the job feed; hidden when the feed is empty ── */}
       {cards.length > 0 && (
         <section className="shell lx-section">

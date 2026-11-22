@@ -1,0 +1,217 @@
+/* Public documentation (/docs). Builds on landing.css + landing-page.css. */
+
+.dc-root { padding-bottom: 0; }
+
+/* ── Hero ── */
+.dc-hero { padding-top: 56px; padding-bottom: 8px; }
+.dc-title { font-size: clamp(42px, 6vw, 76px); margin: 12px 0 20px; }
+.dc-lede {
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--muted);
+  max-width: 64ch;
+  margin: 0 0 18px;
+}
+.dc-note {
+  border: 2px solid var(--ink);
+  border-left: 6px solid var(--acid);
+  padding: 16px 18px;
+  max-width: 64ch;
+  margin-top: 28px;
+}
+.dc-note p {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+/* ── Prerequisites ── */
+.dc-list { margin: 0; padding: 0; list-style: none; max-width: 76ch; }
+.dc-list li {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 12px 0;
+  border-top: 1px solid var(--ink);
+}
+.dc-list li:last-child { border-bottom: 1px solid var(--ink); }
+.dc-list strong { color: var(--ink); }
+
+/* ── Steps ── */
+.dc-steps { margin: 0; padding: 0; list-style: none; }
+.dc-step {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px 18px;
+  padding: 22px 0;
+  border-top: 2px solid var(--ink);
+}
+.dc-step:last-child { border-bottom: 2px solid var(--ink); }
+.dc-step__n {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 30px;
+  line-height: 1;
+}
+.dc-step h3 {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 2px 0 8px;
+}
+.dc-step p {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--muted);
+  margin: 0 0 6px;
+  max-width: 70ch;
+}
+.dc-step p.dc-step__fine { font-size: 12px; }
+.dc-code {
+  display: block;
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Cards ── */
+.dc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.dc-card { border: 2px solid var(--ink); padding: 18px; }
+.dc-card h3 {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+.dc-card p {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--muted);
+  margin: 0;
+}
+.dc-commands {
+  margin: 22px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.dc-commands strong { color: var(--ink); }
+
+.dc-root code:not(.dc-code) {
+  font-family: var(--mono);
+  font-size: 0.94em;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ── Contents ── */
+.dc-root section[id] { scroll-margin-top: 72px; }
+.dc-toc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 32px;
+  max-width: 76ch;
+}
+.dc-toc a {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  padding: 6px 10px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dc-toc a:hover { background: var(--acid); }
+}
+
+/* ── Subheadings ── */
+.dc-h3 {
+  font-family: var(--serif);
+  font-weight: 900;
+  font-size: clamp(26px, 3vw, 36px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+}
+.dc-h3--gap { margin-top: 44px; }
+
+/* ── Reference tables and fact lists ── */
+.dc-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.dc-table { width: 100%; border-collapse: collapse; border: 2px solid var(--ink); }
+.dc-table th, .dc-table td {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--ink);
+  vertical-align: top;
+}
+.dc-table th { background: var(--ink); color: var(--paper); text-transform: uppercase; letter-spacing: 0.12em; }
+.dc-facts { margin: 0; }
+.dc-fact {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.35fr) minmax(0, 0.65fr);
+  gap: 12px 24px;
+  padding: 12px 0;
+  border-top: 1px solid var(--ink);
+}
+.dc-fact:last-child { border-bottom: 1px solid var(--ink); }
+.dc-fact dt {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.dc-fact dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.dc-commands a { color: var(--ink); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+
+/* ── Colophon ── */
+.dc-colophon {
+  border-top: 1px solid var(--ink);
+  padding-top: 24px;
+  padding-bottom: 32px;
+}
+.dc-colophon p {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 8px 0 0;
+  max-width: 80ch;
+}
+.dc-colophon a { color: var(--ink); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+
+@media (max-width: 520px) {
+  .dc-hero { padding-top: 36px; }
+  .dc-step { grid-template-columns: 32px minmax(0, 1fr); gap: 6px 10px; }
+  .dc-step__n { font-size: 22px; }
+  .dc-fact { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .dc-toc a { font-size: 10px; }
+}
