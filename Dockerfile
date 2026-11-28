@@ -7,7 +7,7 @@ COPY src ./src
 RUN mvn package -DskipTests -q
 
 # ---- Runtime stage ----
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 WORKDIR /app
 
 # Install tectonic from GitHub releases (pinned, no install script)
